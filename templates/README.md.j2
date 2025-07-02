@@ -1,0 +1,16 @@
+# Ansible Collection für Traefik
+
+Diese Collection dient dem Deployment und der Verwaltung von Traefik als Docker-Service.
+
+## Konfiguration
+
+Die gesamte Konfiguration des Services wird zentral in der "Single Source of Truth" (SSoT) Datei verwaltet:
+
+`roles/deploy/defaults/main.yml`
+
+Änderungen an dieser Datei lösen über die CI/CD-Pipeline eine automatische Aktualisierung der generierten Konfigurationsdateien (z.B. `generated/docker-compose.yml`) aus.
+
+## Deployment
+
+Ein Deployment wird durch das Erstellen eines neuen Git-Tags (z.B. `v1.0.1`) ausgelöst.
+Dies triggert die Downstream-Pipeline im `infra-stack`-Repository, welche die Rolle auf den Zielsystemen ausführt.

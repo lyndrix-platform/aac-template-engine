@@ -1,9 +1,0 @@
-services:
-  - name: docker-proxy
-    category: default-host-services
-    service_dir: default-host-services/docker-proxy
-    vars_file: ./default-host-services/docker-proxy/templates/vars.yml
-  - name: it-tools
-    category: docker-service-stack
-    service_dir: docker-service-stack/it-tools
-    vars_file: ./docker-service-stack/it-tools/templates/vars.yml

@@ -1,0 +1,102 @@
+# docker-compose.yml.j2
+version: "3.8"
+services:
+  {{ combined_vars.container_prefix }}:
+    image: {{ combined_vars.image }}
+    container_name: {{ combined_vars.container_prefix }}
+    restart: {{ combined_vars.default_restart_policy }}
+    ports:
+      # The HTTP port
+      - "80:80"
+      # The Web UI (enabled by --api.insecure=true)
+      - "8080:8080"
+      # The HTTPS port
+      - "443:443"
+
+    env_file: stack.env
+
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - "{{ combined_vars.docker_service_dir }}/config/traefik.yml:/traefik.yml"
+      - "{{ combined_vars.docker_service_dir }}/config/traefik-dynamic.yml:/traefik-dynamic.yml"
+      - "{{ combined_vars.docker_service_dir }}/letsencrypt:/letsencrypt"
+    networks:
+      - services-exposed
+      - localhost_interconnect
+      - services-secured
+      - {{ combined_vars.service_name }}_internal
+      
+#  traefik-certs-dumper:
+#    image: ldez/traefik-certs-dumper:latest
+#    volumes:
+#      - {{ combined_vars.docker_service_dir }}/letsencrypt:/letsencrypt
+#      - {{ combined_vars.docker_service_dir }}/letsencrypt/acme-certs:/output
+#    entrypoint: >
+#      sh -c '
+#        while [ ! -s /letsencrypt/acme-staging.json ]; do
+#          sleep 1
+#        done
+#        && traefik-certs-dumper file
+#          --source /letsencrypt/acme-staging.json
+#          --dest /output
+#          --version v2
+#          --crt-ext .crt
+#          --key-ext .key
+#          --domain-subdir
+#          --watch'
+
+networks:
+  services-secured:
+    external: true
+  services-exposed:
+    external: true
+  localhost_interconnect:
+    driver: bridge
+    internal: true
+    name: localhost_interconnect
+  {{ combined_vars.service_name }}_internal:
+    name: {{ combined_vars.service_name }}_internal
+    driver: bridge
+    internal: true
+---
+# ACHTUNG: Diese Datei wird automatisch generiert.
+# Änderungen direkt hier werden bei der nächsten Ausführung der CI-Pipeline überschrieben.
+# Quelle: roles/deploy/templates/docker-compose.yml.j2
+# SSoT:   roles/deploy/defaults/main.yml
+
+services:
+  {{ traefik_service_name }}:
+    image: "{{ traefik_image }}"
+    container_name: "{{ traefik_service_name }}"
+    restart: "{{ traefik_restart_policy }}"
+    ports:
+      - "{{ traefik_web_port }}:80"
+      - "{{ traefik_websecure_port }}:443"
+{% if traefik_dashboard_enabled %}
+      - "{{ traefik_dashboard_port }}:8080"
+{% endif %}
+    volumes:
+      - "{{ traefik_docker_socket_path }}:/var/run/docker.sock:ro"
+      - "{{ traefik_data_path }}:/data"
+      - "{{ traefik_log_path }}:/log"
+      - "{{ traefik_config_path }}:/etc/traefik"
+    networks:
+      - "{{ traefik_network_name }}"
+    labels:
+      # --- Traefik Basiskonfiguration ---
+      - "traefik.enable=true"
+{% if traefik_dashboard_enabled %}
+      # --- Dashboard Routing ---
+      - "traefik.http.routers.traefik-dashboard.rule=Host(`traefik.deine-domain.de`)" # Domain anpassen!
+      - "traefik.http.routers.traefik-dashboard.service=api@internal"
+      - "traefik.http.routers.traefik-dashboard.entrypoints=websecure"
+      - "traefik.http.routers.traefik-dashboard.tls.certresolver=letsencrypt"
+      # Hier könnte man noch eine Middleware für Authentifizierung einfügen
+{% endif %}
+{% for key, value in traefik_extra_labels.items() %}
+      - "{{ key }}={{ value }}"
+{% endfor %}
+
+networks:
+  {{ traefik_network_name }}:
+    external: true

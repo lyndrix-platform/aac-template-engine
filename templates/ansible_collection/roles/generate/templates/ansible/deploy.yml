@@ -1,0 +1,3 @@
+- name: Debug-Ausgabe für Traefik-Deployment
+  ansible.builtin.debug:
+    msg: "DEBUG WORKED IN TRAEFIK DEPLOYMENT"

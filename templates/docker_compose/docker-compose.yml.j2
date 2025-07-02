@@ -1,0 +1,74 @@
+services:
+  {{ service.name }}:
+    image: "${SERVICE_IMAGE_NAME}:${SERVICE_IMAGE_TAG}"
+    container_name: ${SERVICE_NAME}
+    hostname: ${SERVICE_HOSTNAME}
+    restart: ${SERVICE_RESTART_POLICY}
+    env_file: 
+      - .env
+      - stack.env
+    ports:
+{% for p in ports %}
+      - "{{ p.port }}:{{ p.port }}"
+{% endfor %}
+    volumes:
+      - "{{ deployments.docker_compose.docker_socket_path }}:/var/run/docker.sock:ro"
+{% for v in volumes %}
+      - "${DEFAULT_DOCKER_DIR}/${SERVICE_NAME,,}/{{ v.name }}:{{ v.path }}"
+{% endfor %}
+    networks:
+{% for net_name in deployments.docker_compose.networks_to_join %}
+      - {{ net_name }}
+{% endfor %}
+    security_opt:
+{% for opt in deployments.docker_compose.security_opts %}
+      - {{ opt }}
+{% endfor %}
+    logging:
+      driver: "{{ deployments.docker_compose.logging.driver }}"
+      options:
+        max-size: "{{ deployments.docker_compose.logging.options['max-size'] }}"
+        max-file: "{{ deployments.docker_compose.logging.options['max-file'] }}"
+    labels:
+      # === Traefik Labels ===
+{% if config.routing_enabled %}
+      - "traefik.enable=true"
+      - "traefik.docker.network=${DEFAULT_NETWORK_SECURED}"
+      - "traefik.http.routers.${SERVICE_NAME}.rule=Host(`${SERVICE_NAME}.${SERVICE_DOMAIN_NAME}`)" 
+      - "traefik.http.routers.${SERVICE_NAME}.entrypoints={{ config.entrypoint }}"
+      - "traefik.http.routers.${SERVICE_NAME}.tls=true"
+      - "traefik.http.routers.${SERVICE_NAME}.tls.certresolver={{ config.cert_resolver }}"
+      - "traefik.http.services.${SERVICE_NAME}.loadbalancer.server.port={{ (ports | selectattr('name', 'equalto', 'dashboard') | first).port }}"
+{% endif %}
+
+      # === AutoDNS Labels ===
+{% if config.integrations.autodns.enabled %}
+      - "auto-dns.customDNS.${SERVICE_NAME}=true"
+{% if config.integrations.autodns.create_wildcard %}
+      - "auto-dns.createWildcard.${SERVICE_NAME}=true"
+{% endif %}
+      - "auto-dns.customDOMAIN.${SERVICE_NAME}=${SERVICE_DOMAIN_NAME}"
+      - "auto-dns.customHost.${SERVICE_NAME}=${SERVICE_NAME}"
+{% endif %}
+
+      # === Homepage Labels ===
+{% if config.integrations.homepage.enabled %}
+      - "homepage.group=${SERVICE_CATEGORY}"
+      - "homepage.name=${SERVICE_NAME} ${SERVICE_HOSTNAME}"
+      - "homepage.href=https://${SERVICE_NAME}.${SERVICE_DOMAIN_NAME}"
+      - "homepage.icon=${SERVICE_ICON}"
+      - "homepage.description=${SERVICE_DESCRIPTION}"
+{% if deployments.docker_compose.dot_env.HOMEPAGE_WIDGET_TYPE is defined %}
+      - "homepage.widget.type=${HOMEPAGE_WIDGET_TYPE}"
+      - "homepage.widget.slug=${HOMEPAGE_WIDGET_SLUG}"
+      - "homepage.widget.url=https://${SERVICE_NAME}.${SERVICE_DOMAIN_NAME}"
+      - "homepage.showStats=true"
+{% endif %}
+{% endif %}
+
+networks:
+{% for net_name, net_def in deployments.docker_compose.network_definitions.items() %}
+  {{ net_name }}:
+    external: {{ net_def.external }}
+    name: "${DEFAULT_NETWORK_{{ net_name | upper }}}"
+{% endfor %}

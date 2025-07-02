@@ -1,0 +1,29 @@
+service: traefik
+image: traefik:v3.4
+container_prefix: traefik
+
+default_internal_service_dns_name: "traefik-test"
+default_secured_service_dns_name: "traefik-test"
+
+default_extra_env_vars:
+  - name: TZ
+    value: "Europe/Berlin"
+  - name: IONOS_API_KEY
+    value: "REDACTED"
+
+volume_dirs:
+  - letsencrypt
+  - html
+
+
+config_files:
+  - config/traefik.yml
+  - config/traefik-dynamic.yml
+
+expose_service: true
+secure_service: true 
+
+networks:
+  - services-exposed
+  - localhost_interconnect
+  - services-secured
