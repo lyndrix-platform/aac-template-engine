@@ -12,72 +12,53 @@ stages:
 - commit
 
 
-- build
-- test
-- deploy
-- review
-- dast
-- staging
-- canary
-- production
-- incremental rollout 10%
-- incremental rollout 25%
-- incremental rollout 50%
-- incremental rollout 100%
-- performance
-- cleanup
-sast:
-  stage: test
-include:
-- template: Auto-DevOps.gitlab-ci.yml
-
-
-collect_services:
-  stage: collect
-  image: alpine:latest
-  tags: [docker]
-  before_script:
-    - apk add --no-cache curl bash jq
-    - wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
-    - chmod +x /usr/local/bin/yq
-  script:
-    - bash .gitlab-ci/scripts/shell/generate-services.yml.sh
-  artifacts:
-    paths:
-      - .gitlab-ci/services.yml
-    expire_in: 1h
-
-parse_services:
-  stage: parse
-  image: python:3.10
-  tags: [docker]
-  dependencies:
-    - collect_services
-  before_script:
-    - pip install --user --quiet jinja-cli.yml]
-    - export PATH="$PATH:$HOME/.local/bin"
-  script:
-    - python3 .gitlab-ci/scripts/python/render-services.py
-  artifacts:
-    paths:
-      - "*/*/compose/"
-    expire_in: 1h
-
-commit_all_services:
-  stage: commit
-  image: alpine:latest
-  tags: [docker]
-  needs:
-    - job: parse_services
-      artifacts: true
-  before_script:
-    - apk add --no-cache git
-    - git config user.name "CI Bot"
-    - git config user.email "ci@example.com"
-  script:
-    - git add */*/compose || echo "Nothing to add"
-    - git commit -m "🚀 Auto-render all services [ci skip]" || echo "Nothing to commit"
-    - git push "https://oauth2:${CI_GITLAB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git" HEAD:main
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
-      when: on_success
+#ollect_services:
+# stage: collect
+# image: alpine:latest
+# tags: [docker]
+# before_script:
+#   - apk add --no-cache curl bash jq
+#   - wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+#   - chmod +x /usr/local/bin/yq
+# script:
+#   - bash .gitlab-ci/scripts/shell/generate-services.yml.sh
+# artifacts:
+#   paths:
+#     - .gitlab-ci/services.yml
+#   expire_in: 1h
+#
+#arse_services:
+# stage: parse
+# image: python:3.10
+# tags: [docker]
+# dependencies:
+#   - collect_services
+# before_script:
+#   - pip install --user --quiet jinja-cli.yml]
+#   - export PATH="$PATH:$HOME/.local/bin"
+# script:
+#   - python3 .gitlab-ci/scripts/python/render-services.py
+# artifacts:
+#   paths:
+#     - "*/*/compose/"
+#   expire_in: 1h
+#
+#ommit_all_services:
+# stage: commit
+# image: alpine:latest
+# tags: [docker]
+# needs:
+#   - job: parse_services
+#     artifacts: true
+# before_script:
+#   - apk add --no-cache git
+#   - git config user.name "CI Bot"
+#   - git config user.email "ci@example.com"
+# script:
+#   - git add */*/compose || echo "Nothing to add"
+#   - git commit -m "🚀 Auto-render all services [ci skip]" || echo "Nothing to commit"
+#   - git push "https://oauth2:${CI_GITLAB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git" HEAD:main
+# rules:
+#   - if: '$CI_COMMIT_BRANCH == "main"'
+#     when: on_success
+#
