@@ -45,10 +45,10 @@ generate-docker-compose:
   extends: .generate-job
   variables:
     DEPLOYMENT_TYPE: docker_compose
-  rules:
-    - if: '$CI_COMMIT_BRANCH != "main" && $CI_COMMIT_BRANCH != "test"'
   tags:
     - docker
+  rules:
+    - if: '$CI_COMMIT_BRANCH != "main" && $CI_COMMIT_BRANCH != "test"'
 validate-docker-compose:
   stage: validate
   image: docker:latest
@@ -75,6 +75,8 @@ commit-generated-files:
   image: alpine:latest
   needs:
     - validate-docker-compose
+  tags:
+    - docker
   before_script:
     - apk add --no-cache git
     - git config --global user.email "ci-bot@${CI_SERVER_HOST}"
@@ -94,11 +96,12 @@ commit-generated-files:
       fi
   rules:
     - if: '$CI_COMMIT_BRANCH != "main" && $CI_COMMIT_BRANCH != "test"'
-  tags:
-    - docker
 promote-to-test:
   stage: test
   image: alpine:latest
+  tags:
+    - docker
+
   needs:
     - commit-generated-files
   when: manual
@@ -111,8 +114,7 @@ promote-to-test:
     - git push -f origin HEAD:test
   rules:
     - if: '$CI_COMMIT_BRANCH != "main" && $CI_COMMIT_BRANCH != "test"'
-  tags:
-    - docker
+
 trigger-production-deployment:
   stage: release
   trigger:
@@ -125,5 +127,4 @@ trigger-production-deployment:
     SERVICE_REPO_URL: $CI_PROJECT_URL
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
-  tags:
-    - docker
+
