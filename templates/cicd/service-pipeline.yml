@@ -12,6 +12,11 @@
 # Required CI/CD variables in the service project's settings:
 # - GIT_PUSH_TOKEN: A GitLab Project Access Token with the 'write_repository' scope.
 #                   This is required for the pipeline to commit generated files back to the repo.
+default:
+  # Ensure all jobs run on a runner with the 'docker' tag.
+  # This is important if you have specific runners (e.g., Windows or Linux with Docker).
+  tags:
+    - docker
 
 workflow:
   rules:
@@ -39,14 +44,11 @@ stages:
     paths:
       - deployments/
     expire_in: 1 hour
-  tags:
-    - docker  
 generate-docker-compose:
   extends: .generate-job
   variables:
     DEPLOYMENT_TYPE: docker_compose
-  tags:
-    - docker
+
   rules:
     - if: '$CI_COMMIT_BRANCH != "main" && $CI_COMMIT_BRANCH != "test"'
 validate-docker-compose:
@@ -68,8 +70,7 @@ validate-docker-compose:
       fi
   rules:
     - if: '$CI_COMMIT_BRANCH != "main" && $CI_COMMIT_BRANCH != "test"'
-  tags:
-    - docker
+
 commit-generated-files:
   stage: commit
   image: alpine:latest
@@ -99,8 +100,6 @@ commit-generated-files:
 promote-to-test:
   stage: test
   image: alpine:latest
-  tags:
-    - docker
 
   needs:
     - commit-generated-files
