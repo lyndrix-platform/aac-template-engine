@@ -17,7 +17,8 @@ build-pipeline-image:
   tags:
     - docker
   before_script:
-    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    # Use --password-stdin for a more secure login, preventing the password from appearing in logs or process lists.
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
   script:
     - docker build -t "$CI_REGISTRY_IMAGE/pipeline-tools:latest" .
     - docker push "$CI_REGISTRY_IMAGE/pipeline-tools:latest"
