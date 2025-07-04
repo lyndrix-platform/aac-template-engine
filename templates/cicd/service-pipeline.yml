@@ -33,6 +33,8 @@ stages:
   stage: generate
   image: python:3.9-slim
   before_script:
+    # The python:slim image doesn't include git, so we need to install it.
+    - apt-get update && apt-get install -y --no-install-recommends git
     - pip install pyyaml jinja2
     # Clone the template engine to get the generation script.
     # This assumes the template engine repo is private and requires a token.
@@ -126,4 +128,3 @@ trigger-production-deployment:
     SERVICE_REPO_URL: $CI_PROJECT_URL
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
-
