@@ -16,6 +16,10 @@ build-pipeline-image:
     - docker:dind
   tags:
     - docker
+  variables:
+    # This tells the Docker client how to connect to the dind service securely.
+    # It can help prevent connection issues.
+    DOCKER_TLS_CERTDIR: "/certs"
   before_script:
     # Use --password-stdin for a more secure login, preventing the password from appearing in logs or process lists.
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
