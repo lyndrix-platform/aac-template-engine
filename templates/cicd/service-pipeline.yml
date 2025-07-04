@@ -39,14 +39,16 @@ stages:
     paths:
       - deployments/
     expire_in: 1 hour
-
+  tags:
+    - docker  
 generate-docker-compose:
   extends: .generate-job
   variables:
     DEPLOYMENT_TYPE: docker_compose
   rules:
     - if: '$CI_COMMIT_BRANCH != "main" && $CI_COMMIT_BRANCH != "test"'
-
+  tags:
+    - docker
 validate-docker-compose:
   stage: validate
   image: docker:latest
@@ -66,7 +68,8 @@ validate-docker-compose:
       fi
   rules:
     - if: '$CI_COMMIT_BRANCH != "main" && $CI_COMMIT_BRANCH != "test"'
-
+  tags:
+    - docker
 commit-generated-files:
   stage: commit
   image: alpine:latest
@@ -91,7 +94,8 @@ commit-generated-files:
       fi
   rules:
     - if: '$CI_COMMIT_BRANCH != "main" && $CI_COMMIT_BRANCH != "test"'
-
+  tags:
+    - docker
 promote-to-test:
   stage: test
   image: alpine:latest
@@ -107,7 +111,8 @@ promote-to-test:
     - git push -f origin HEAD:test
   rules:
     - if: '$CI_COMMIT_BRANCH != "main" && $CI_COMMIT_BRANCH != "test"'
-
+  tags:
+    - docker
 trigger-production-deployment:
   stage: release
   trigger:
@@ -120,3 +125,5 @@ trigger-production-deployment:
     SERVICE_REPO_URL: $CI_PROJECT_URL
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
+  tags:
+    - docker
