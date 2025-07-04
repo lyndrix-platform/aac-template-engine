@@ -1,2 +1,2 @@
-PyYAML
-Jinja2
+pyyaml
+jinja2

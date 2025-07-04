@@ -31,17 +31,12 @@ stages:
 
 .generate-job:
   stage: generate
-  image: python:3.9-slim
-  before_script:
-    # The python:slim image doesn't include git, so we need to install it.
-    - apt-get update && apt-get install -y --no-install-recommends git
-    - pip install pyyaml jinja2
-    # Clone the template engine to get the generation script.
-    # This assumes the template engine repo is private and requires a token.
-    - git clone "https://gitlab-ci-token:${GIT_PUSH_TOKEN}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
+  # Use the pre-built image from the template engine's registry.
+  # This image contains the generation script and all its dependencies.
+  image: ${CI_REGISTRY}/aac-application-definitions/aac-template-engine/pipeline-tools:latest
   script:
     - echo "Generating '$DEPLOYMENT_TYPE' deployment..."
-    - python aac-template-engine/scripts/generate_manifest.py --ssot-file service.yml --deployment-type $DEPLOYMENT_TYPE
+    - python /app/scripts/generate_manifest.py --ssot-file service.yml --deployment-type $DEPLOYMENT_TYPE
   artifacts:
     paths:
       - deployments/
