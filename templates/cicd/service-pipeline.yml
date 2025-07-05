@@ -111,7 +111,7 @@ commit-generated-files:
   image: alpine:latest
   needs:
     - validate-docker-compose
-    - validate-kubernetes
+#    - validate-kubernetes
   before_script:
     - apk add --no-cache git
     - git config --global user.email "ci-bot@${CI_SERVER_HOST}"
