@@ -174,6 +174,25 @@ promote-to-test:
   rules:
     - if: '$CI_COMMIT_BRANCH != "main" && $CI_COMMIT_BRANCH != "test"' # Keep this rule to only allow promotion from feature branches
     
+
+promote-to-produdction:
+  stage: test
+  image: alpine:latest
+
+  needs:
+    - commit-generated-files
+  when: manual
+  before_script:
+    - apk add --no-cache git
+    - git remote set-url origin "https://gitlab-ci-token:${GIT_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+  script:
+    - echo "Promoting branch '$CI_COMMIT_BRANCH' to 'main' branch."
+    - git fetch origin
+    - git push -f origin HEAD:main
+  rules:
+    - if: '$CI_COMMIT_BRANCH != "main" && $CI_COMMIT_BRANCH != "test"'
+    
+
 trigger-production-deployment:
   stage: release
   trigger:
@@ -182,7 +201,7 @@ trigger-production-deployment:
     strategy: depend
   variables:
     SERVICE_NAME: $CI_PROJECT_NAME
-    SERVICE_VERSION: $CI_COMMIT_TAG # Assumes you tag releases on main
+    SERVICE_VERSION: $CI_COMMIT_TAG
     SERVICE_REPO_URL: $CI_PROJECT_URL
   rules:
-    - if: $CI_COMMIT_TAG # Trigger deployment only when a tag is created
+    - if: $CI_COMMIT_TAG
