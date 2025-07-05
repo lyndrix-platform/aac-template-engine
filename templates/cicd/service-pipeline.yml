@@ -41,7 +41,7 @@ stages:
     - pip install PyYAML Jinja2
     # Clone the template engine repository to get access to the generation script and templates.
     # This requires a token with 'read_repository' scope, defined as a CI/CD variable GIT_PUSH_TOKEN.
-    - git clone "https://gitlab-ci-token:${GIT_PUSH_TOKEN}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
+    - git clone "https://gitlab-ci-token:${GIT_GROUP_TOKEN}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
     # The script expects the 'templates' directory to be in the current working directory.
     - cp -r aac-template-engine/templates .
   script:
