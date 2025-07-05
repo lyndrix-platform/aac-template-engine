@@ -15,7 +15,9 @@ build-pipeline-image:
   services:
     - docker:dind
   tags:
+    # This job requires Docker-in-Docker, so it must run on a privileged runner.
     - docker
+    - privileged
   variables:
     # This tells the Docker client how to connect to the dind service securely.
     # It can help prevent connection issues.

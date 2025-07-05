@@ -17,6 +17,7 @@ default:
   # This is important if you have specific runners (e.g., Windows or Linux with Docker).
   tags:
     - docker
+    - standard
 
 workflow:
   rules:
@@ -55,6 +56,9 @@ validate-docker-compose:
     - docker:dind
   needs:
     - generate-docker-compose
+  tags:
+    - docker
+    - privileged
   script:
     - |
       if [ -f "deployments/docker_compose/docker-compose.yml" ]; then
@@ -73,8 +77,6 @@ commit-generated-files:
   image: alpine:latest
   needs:
     - validate-docker-compose
-  tags:
-    - docker
   before_script:
     - apk add --no-cache git
     - git config --global user.email "ci-bot@${CI_SERVER_HOST}"
