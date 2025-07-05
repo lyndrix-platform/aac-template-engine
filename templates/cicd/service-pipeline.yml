@@ -41,7 +41,7 @@ stages:
     - pip install PyYAML Jinja2
     # Clone the template engine repository to get access to the generation script and templates.
     # This requires a token with 'read_repository' scope, defined as a CI/CD variable GIT_PUSH_TOKEN.
-    - git clone "https://gitlab-ci-token:${GIT_GROUP_TOKEN}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
+    - git clone "https://gitlab-ci-token:${GIT_PUSH_TOKEN}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
     # The script expects the 'templates' directory to be in the current working directory.
     - cp -r aac-template-engine/templates .
   script:
@@ -57,6 +57,13 @@ generate-docker-compose:
   variables:
     DEPLOYMENT_TYPE: docker_compose
 
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+
+generate-kubernetes:
+  extends: .generate-job
+  variables:
+    DEPLOYMENT_TYPE: kubernetes
   rules:
     - if: '$CI_COMMIT_BRANCH'
 
@@ -80,16 +87,36 @@ validate-docker-compose:
   rules:
     - if: '$CI_COMMIT_BRANCH'
     
+validate-kubernetes:
+  stage: validate
+  image:
+    name: bitnami/kubectl:latest
+    entrypoint: [""]
+  needs:
+    - generate-kubernetes
+  script:
+    - |
+      if [ -f "deployments/kubernetes/kubernetes.yml" ]; then
+        echo "Validating generated kubernetes.yml syntax..."
+        kubectl apply --dry-run=client -f deployments/kubernetes/kubernetes.yml
+      else
+        echo "No kubernetes.yml found to validate."
+        exit 1
+      fi
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+
 commit-generated-files:
   stage: commit
   image: alpine:latest
   needs:
     - validate-docker-compose
+    - validate-kubernetes
   before_script:
     - apk add --no-cache git
     - git config --global user.email "ci-bot@${CI_SERVER_HOST}"
     - git config --global user.name "GitLab CI Bot"
-    - git remote set-url origin "https://gitlab-ci-token:${GIT_GROUP_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+    - git remote set-url origin "https://gitlab-ci-token:${GIT_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
   script:
     - git fetch
     - git checkout $CI_COMMIT_BRANCH
