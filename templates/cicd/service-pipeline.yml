@@ -19,8 +19,9 @@ default:
     - docker
 
 workflow:
-  rules:
+  rules: # Allow pipelines to run for branch pushes and tag pushes
     - if: $CI_COMMIT_BRANCH
+    - if: $CI_COMMIT_TAG
 
 stages:
   - generate
@@ -47,7 +48,8 @@ generate-docker-compose:
     DEPLOYMENT_TYPE: docker_compose
 
   rules:
-    - if: '$CI_COMMIT_BRANCH != "main" && $CI_COMMIT_BRANCH != "test"'
+    - if: '$CI_COMMIT_BRANCH'
+
 validate-docker-compose:
   stage: validate
   image: docker:latest
@@ -66,8 +68,8 @@ validate-docker-compose:
         exit 1
       fi
   rules:
-    - if: '$CI_COMMIT_BRANCH != "main" && $CI_COMMIT_BRANCH != "test"'
-
+    - if: '$CI_COMMIT_BRANCH'
+    
 commit-generated-files:
   stage: commit
   image: alpine:latest
@@ -91,7 +93,8 @@ commit-generated-files:
         echo "Committed and pushed generated deployment files."
       fi
   rules:
-    - if: '$CI_COMMIT_BRANCH != "main" && $CI_COMMIT_BRANCH != "test"'
+    - if: '$CI_COMMIT_BRANCH'
+
 promote-to-test:
   stage: test
   image: alpine:latest
@@ -107,8 +110,8 @@ promote-to-test:
     - git fetch origin
     - git push -f origin HEAD:test
   rules:
-    - if: '$CI_COMMIT_BRANCH != "main" && $CI_COMMIT_BRANCH != "test"'
-
+    - if: '$CI_COMMIT_BRANCH != "main" && $CI_COMMIT_BRANCH != "test"' # Keep this rule to only allow promotion from feature branches
+    
 trigger-production-deployment:
   stage: release
   trigger:
@@ -120,4 +123,4 @@ trigger-production-deployment:
     SERVICE_VERSION: $CI_COMMIT_TAG # Assumes you tag releases on main
     SERVICE_REPO_URL: $CI_PROJECT_URL
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: $CI_COMMIT_TAG # Trigger deployment only when a tag is created
