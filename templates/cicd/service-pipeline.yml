@@ -132,16 +132,23 @@ commit-generated-files:
     - git config --global user.name "GitLab CI Bot"
     - git remote set-url origin "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
   script:
-    - git fetch
-    - git checkout $CI_COMMIT_BRANCH
-    - git add deployments/
     - |
-      if git diff --staged --quiet; then
-        echo "No changes in deployment files to commit."
-      else
+      git fetch
+      git checkout $CI_COMMIT_BRANCH
+
+      # Pull the latest changes from the remote branch, rebasing our local checkout on top.
+      # This prevents the "non-fast-forward" error if other commits were pushed while the pipeline was running.
+      git pull --rebase origin $CI_COMMIT_BRANCH
+
+      # Now that the branch is up-to-date, we can safely add our generated files.
+      git add deployments/
+
+      if ! git diff --staged --quiet; then
         git commit -m "ci: Auto-generate deployment manifests [skip ci]"
         git push origin HEAD:$CI_COMMIT_BRANCH
         echo "Committed and pushed generated deployment files."
+      else
+        echo "No changes in deployment files to commit."
       fi
   rules:
     - if: '$CI_COMMIT_BRANCH'
