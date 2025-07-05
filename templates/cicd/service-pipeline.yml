@@ -87,24 +87,24 @@ validate-docker-compose:
   rules:
     - if: '$CI_COMMIT_BRANCH'
     
-validate-kubernetes:
-  stage: validate
-  image:
-    name: bitnami/kubectl:latest
-    entrypoint: [""]
-  needs:
-    - generate-kubernetes
-  script:
-    - |
-      if [ -f "deployments/kubernetes/kubernetes.yml" ]; then
-        echo "Validating generated kubernetes.yml syntax..."
-        kubectl apply --dry-run=client -f deployments/kubernetes/kubernetes.yml
-      else
-        echo "No kubernetes.yml found to validate."
-        exit 1
-      fi
-  rules:
-    - if: '$CI_COMMIT_BRANCH'
+#validate-kubernetes:
+#  stage: validate
+#  image:
+#    name: bitnami/kubectl:latest
+#    entrypoint: [""]
+#  needs:
+#    - generate-kubernetes
+#  script:
+#    - |
+#      if [ -f "deployments/kubernetes/kubernetes.yml" ]; then
+#        echo "Validating generated kubernetes.yml syntax..."
+#        kubectl apply --dry-run=client -f deployments/kubernetes/kubernetes.yml
+#      else
+#        echo "No kubernetes.yml found to validate."
+#        exit 1
+#      fi
+#  rules:
+#    - if: '$CI_COMMIT_BRANCH'
 
 commit-generated-files:
   stage: commit

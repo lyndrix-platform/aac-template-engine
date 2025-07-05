@@ -14,7 +14,7 @@ services:
     volumes:
       - "{{ deployments.docker_compose.docker_socket_path }}:/var/run/docker.sock:ro"
 {% for v in volumes %}
-      - "${DEFAULT_DOCKER_DIR}/${SERVICE_NAME,,}/{{ v.name }}:{{ v.path }}"
+      - "${DEFAULT_DOCKER_DIR}/${SERVICE_NAME_LOWERCASE}/{{ v.name }}:{{ v.path }}"
 {% endfor %}
     networks:
 {% for net_name in deployments.docker_compose.networks_to_join %}
