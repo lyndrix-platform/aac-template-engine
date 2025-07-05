@@ -17,7 +17,6 @@ default:
   # This is important if you have specific runners (e.g., Windows or Linux with Docker).
   tags:
     - docker
-    - standard
 
 workflow:
   rules:
@@ -56,9 +55,6 @@ validate-docker-compose:
     - docker:dind
   needs:
     - generate-docker-compose
-  tags:
-    - docker
-    - privileged
   script:
     - |
       if [ -f "deployments/docker_compose/docker-compose.yml" ]; then
