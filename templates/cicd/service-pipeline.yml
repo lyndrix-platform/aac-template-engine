@@ -98,6 +98,25 @@ validate-docker-compose:
   rules:
     - if: '$CI_COMMIT_BRANCH'
     
+validate-committed-config-on-main:
+  stage: validate
+  image: docker:latest
+  services:
+    - docker:dind
+  script:
+    - |
+      if [ -f "deployments/docker_compose/docker-compose.yml" ]; then
+        echo "Validating committed docker-compose.yml on main branch..."
+        apk add --no-cache docker-compose
+        docker-compose -f deployments/docker_compose/docker-compose.yml config
+      else
+        echo "No docker-compose.yml found on main branch to validate. Skipping."
+      fi
+  rules:
+    # This job provides an extra validation layer, ensuring that whatever is
+    # committed to the main branch is syntactically correct.
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
 #validate-kubernetes:
 #  stage: validate
 #  image:
@@ -143,7 +162,8 @@ commit-generated-files:
       git pull --rebase origin $CI_COMMIT_BRANCH
 
       # Apply the stashed changes (our generated files) on top of the updated branch.
-      git stash pop
+      # The '|| echo' prevents the job from failing if no stash was created (e.g., if there were no generated files to stash).
+      git stash pop || echo "No stash found to pop, continuing..."
 
       # Check if there are any actual changes to commit within the deployments directory.
       if git status --porcelain deployments/ | grep .; then
