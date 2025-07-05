@@ -67,6 +67,17 @@ generate-kubernetes:
   rules:
     - if: '$CI_COMMIT_BRANCH'
 
+generate-custom-files:
+  extends: .generate-job
+  script:
+    - echo "Processing custom files from custom_templates/files/..."
+    - python aac-template-engine/scripts/generate_manifest.py --ssot-file service.yml --process-files
+  rules:
+    # This job only runs if the service repository contains custom files to process.
+    - if: '$CI_COMMIT_BRANCH'
+      exists:
+        - custom_templates/files/**/*
+
 validate-docker-compose:
   stage: validate
   image: docker:latest
@@ -111,6 +122,9 @@ commit-generated-files:
   image: alpine:latest
   needs:
     - validate-docker-compose
+    # This dependency is optional because the job only runs if custom_templates/files exists.
+    - job: generate-custom-files
+      optional: true
 #    - validate-kubernetes
   before_script:
     - apk add --no-cache git
