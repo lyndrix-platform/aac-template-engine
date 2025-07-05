@@ -11,9 +11,10 @@ stages:
 
 build-pipeline-image:
   stage: build
-  image: docker:latest
+  image: docker:24.0.5
   services:
-    - docker:dind
+    - name: docker:24.0.5-dind
+      alias: docker
   tags:
     # This job requires Docker-in-Docker, so it must run on a privileged runner.
     - docker
@@ -26,10 +27,16 @@ build-pipeline-image:
   before_script:
     # Use --password-stdin for a more secure login, preventing the password from appearing in logs or process lists.
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    # Attempt to pull the latest version of the image to use for layer caching.
+    # The '|| true' prevents the job from failing if the image doesn't exist yet (e.g., on the first run).
+    - docker pull "$CI_REGISTRY_IMAGE/pipeline-tools:latest" || true
     
   script:
-    - docker build -t "$CI_REGISTRY_IMAGE/pipeline-tools:latest" .
-    - docker push "$CI_REGISTRY_IMAGE/pipeline-tools:latest"
+    # Build the image, using the pulled image as a cache for faster builds.
+    # Tag the image with both 'latest' and the specific commit SHA for better traceability.
+    - docker build --cache-from "$CI_REGISTRY_IMAGE/pipeline-tools:latest" -t "$CI_REGISTRY_IMAGE/pipeline-tools:latest" -t "$CI_REGISTRY_IMAGE/pipeline-tools:$CI_COMMIT_SHA" .
+    # Push all tags to the registry.
+    - docker push --all-tags "$CI_REGISTRY_IMAGE/pipeline-tools"
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       changes:
