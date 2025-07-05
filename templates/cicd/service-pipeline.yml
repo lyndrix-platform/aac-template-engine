@@ -35,6 +35,8 @@ stages:
   # Use a standard Python image and install dependencies on the fly.
   image: python:3.9-slim
   before_script:
+    # The python:slim image is Debian-based and doesn't include git.
+    - apt-get update && apt-get install -y --no-install-recommends git
     # Install Python dependencies for the generation script
     - pip install PyYAML Jinja2
     # Clone the template engine repository to get access to the generation script and templates.
@@ -87,7 +89,7 @@ commit-generated-files:
     - apk add --no-cache git
     - git config --global user.email "ci-bot@${CI_SERVER_HOST}"
     - git config --global user.name "GitLab CI Bot"
-    - git remote set-url origin "https://gitlab-ci-token:${GIT_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+    - git remote set-url origin "https://gitlab-ci-token:${GIT_GROUP_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
   script:
     - git fetch
     - git checkout $CI_COMMIT_BRANCH
