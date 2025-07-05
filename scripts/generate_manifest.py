@@ -80,7 +80,7 @@ def process_custom_files(data, env):
     """
     print("\n--- Processing Custom Files ---")
     custom_files_dir = "custom_templates/files"
-    output_base_dir = "deployments"
+    output_base_dir = "deployments/files"
 
     if not os.path.isdir(custom_files_dir):
         print(f"Verzeichnis für benutzerdefinierte Dateien '{custom_files_dir}' nicht gefunden. Überspringe.")
