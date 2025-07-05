@@ -32,12 +32,20 @@ stages:
 
 .generate-job:
   stage: generate
-  # Use the pre-built image from the template engine's registry.
-  # This image contains the generation script and all its dependencies.
-  image: ${CI_REGISTRY}/aac-application-definitions/aac-template-engine/pipeline-tools:latest
+  # Use a standard Python image and install dependencies on the fly.
+  image: python:3.9-slim
+  before_script:
+    # Install Python dependencies for the generation script
+    - pip install PyYAML Jinja2
+    # Clone the template engine repository to get access to the generation script and templates.
+    # This requires a token with 'read_repository' scope, defined as a CI/CD variable GIT_PUSH_TOKEN.
+    - git clone "https://gitlab-ci-token:${GIT_PUSH_TOKEN}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
+    # The script expects the 'templates' directory to be in the current working directory.
+    - cp -r aac-template-engine/templates .
   script:
     - echo "Generating '$DEPLOYMENT_TYPE' deployment..."
-    - python /app/scripts/generate_manifest.py --ssot-file service.yml --deployment-type $DEPLOYMENT_TYPE
+    # Run the script from its location in the cloned repo. It will read service.yml from the CWD.
+    - python aac-template-engine/scripts/generate_manifest.py --ssot-file service.yml --deployment-type $DEPLOYMENT_TYPE
   artifacts:
     paths:
       - deployments/
@@ -79,7 +87,7 @@ commit-generated-files:
     - apk add --no-cache git
     - git config --global user.email "ci-bot@${CI_SERVER_HOST}"
     - git config --global user.name "GitLab CI Bot"
-    - git remote set-url origin "https://gitlab-ci-token:${GIT_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+    - git remote set-url origin "https://gitlab-ci-token:${GIT_GROUP_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
   script:
     - git fetch
     - git checkout $CI_COMMIT_BRANCH
