@@ -133,17 +133,21 @@ commit-generated-files:
     - git remote set-url origin "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
   script:
     - |
-      git fetch
-      git checkout $CI_COMMIT_BRANCH
+      # The workspace contains artifacts (the 'deployments' dir) which are untracked by git.
+      # To prevent 'git checkout' from failing, we add and stash these files first.
+      git add deployments/
+      git stash
 
-      # Pull the latest changes from the remote branch, rebasing our local checkout on top.
-      # This prevents the "non-fast-forward" error if other commits were pushed while the pipeline was running.
+      # Now that the working directory is clean, we can safely check out the branch and pull the latest changes.
+      git checkout $CI_COMMIT_BRANCH
       git pull --rebase origin $CI_COMMIT_BRANCH
 
-      # Now that the branch is up-to-date, we can safely add our generated files.
-      git add deployments/
+      # Apply the stashed changes (our generated files) on top of the updated branch.
+      git stash pop
 
-      if ! git diff --staged --quiet; then
+      # Check if there are any actual changes to commit within the deployments directory.
+      if git status --porcelain deployments/ | grep .; then
+        git add deployments/ # Stage the changes explicitly
         git commit -m "ci: Auto-generate deployment manifests [skip ci]"
         git push origin HEAD:$CI_COMMIT_BRANCH
         echo "Committed and pushed generated deployment files."
