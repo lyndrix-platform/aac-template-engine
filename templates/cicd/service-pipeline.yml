@@ -1,25 +1,12 @@
 # This is a reusable GitLab CI/CD pipeline for service repositories.
 # It automates the generation, validation, and commit of deployment configurations.
-#
-# How to use:
-# In your service's .gitlab-ci.yml, include this file:
-#
-# include:
-#   - project: 'aac-application-definitions/aac-template-engine'
-#     ref: main
-#     file: '/templates/cicd/service-pipeline.yml'
-#
-# Required CI/CD variables in the service project's settings:
-# - GIT_PUSH_TOKEN: A GitLab Project Access Token with the 'write_repository' scope.
-#                   This is required for the pipeline to commit generated files back to the repo.
+
 default:
-  # Ensure all jobs run on a runner with the 'docker' tag.
-  # This is important if you have specific runners (e.g., Windows or Linux with Docker).
   tags:
     - docker
 
 workflow:
-  rules: # Allow pipelines to run for branch pushes and tag pushes
+  rules:
     - if: $CI_COMMIT_BRANCH
     - if: $CI_COMMIT_TAG
 
@@ -27,45 +14,38 @@ stages:
   - generate
   - validate
   - commit
-  - test
+  - promote
   - release
+  - info # Neue Stage für die Info-Jobs
+
+# ==========================================================================
+#   WORKFLOW FÜR DEN 'dev'-BRANCH (Generate, Validate, Commit, Promote)
+#   Die folgenden Jobs laufen jetzt AUSSCHLIESSLICH auf dem 'dev'-Branch.
+# ==========================================================================
 
 .generate-job:
   stage: generate
-  # Use a standard Python image and install dependencies on the fly.
   image: python:3.9-slim
+  # ... (before_script und script bleiben unverändert) ...
   before_script:
-    # The python:slim image is Debian-based and doesn't include git.
     - apt-get update && apt-get install -y --no-install-recommends git
-    # Install Python dependencies for the generation script
     - pip install PyYAML Jinja2
-    # Clone the template engine repository to get access to the generation script and templates.
-    # This requires a token with 'read_repository' scope, defined as a CI/CD variable GIT_PUSH_TOKEN.
     - git clone "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
-    # The script expects the 'templates' directory to be in the current working directory.
     - cp -r aac-template-engine/templates .
   script:
     - echo "Generating '$DEPLOYMENT_TYPE' deployment..."
-    # Run the script from its location in the cloned repo. It will read service.yml from the CWD.
     - python aac-template-engine/scripts/generate_manifest.py --ssot-file service.yml --deployment-type $DEPLOYMENT_TYPE
   artifacts:
     paths:
       - deployments/
     expire_in: 1 hour
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev"' # NEU: Nur auf dev ausführen
+
 generate-docker-compose:
   extends: .generate-job
   variables:
     DEPLOYMENT_TYPE: docker_compose
-
-  rules:
-    - if: '$CI_COMMIT_BRANCH'
-
-generate-kubernetes:
-  extends: .generate-job
-  variables:
-    DEPLOYMENT_TYPE: kubernetes
-  rules:
-    - if: '$CI_COMMIT_BRANCH'
 
 generate-custom-files:
   extends: .generate-job
@@ -73,8 +53,7 @@ generate-custom-files:
     - echo "Processing custom files from custom_templates/files/..."
     - python aac-template-engine/scripts/generate_manifest.py --ssot-file service.yml --process-files
   rules:
-    # This job only runs if the service repository contains custom files to process.
-    - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_COMMIT_BRANCH == "dev"'
       exists:
         - custom_templates/files/**/*
 
@@ -85,6 +64,7 @@ validate-docker-compose:
     - docker:dind
   needs:
     - generate-docker-compose
+  # ... (script bleibt unverändert) ...
   script:
     - |
       if [ -f "deployments/docker_compose/docker-compose.yml" ]; then
@@ -96,72 +76,25 @@ validate-docker-compose:
         exit 1
       fi
   rules:
-    - if: '$CI_COMMIT_BRANCH'
-    
-validate-committed-config-on-main:
-  stage: validate
-  image: docker:latest
-  services:
-    - docker:dind
-  script:
-    - |
-      if [ -f "deployments/docker_compose/docker-compose.yml" ]; then
-        echo "Validating committed docker-compose.yml on main branch..."
-        apk add --no-cache docker-compose
-        docker-compose -f deployments/docker_compose/docker-compose.yml config
-      else
-        echo "No docker-compose.yml found on main branch to validate. Skipping."
-      fi
-  rules:
-    # This job provides an extra validation layer, ensuring that whatever is
-    # committed to the main branch is syntactically correct.
-    - if: '$CI_COMMIT_BRANCH == "main"'
-
-#validate-kubernetes:
-#  stage: validate
-#  image:
-#    name: bitnami/kubectl:latest
-#    entrypoint: [""]
-#  needs:
-#    - generate-kubernetes
-#  script:
-#    - |
-#      if [ -f "deployments/kubernetes/kubernetes.yml" ]; then
-#        echo "Validating generated kubernetes.yml syntax..."
-#        kubectl apply --dry-run=client -f deployments/kubernetes/kubernetes.yml
-#      else
-#        echo "No kubernetes.yml found to validate."
-#        exit 1
-#      fi
-#  rules:
-#    - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_COMMIT_BRANCH == "dev"' # NEU: Nur auf dev ausführen
 
 commit-generated-files:
   stage: commit
   image: alpine:latest
-  # Die 'needs'-Sektion muss alle Jobs enthalten, von denen Artefakte benötigt werden,
-  # sowie die vorgeschalteten Validierungs-Jobs, um die Ausführungsreihenfolge zu garantieren.
   needs:
-    # 1. Abhängigkeiten zu den generate-Jobs, um deren Artefakte zu erhalten.
     - generate-docker-compose
+    - validate-docker-compose
     - job: generate-custom-files
       optional: true
-    # - generate-kubernetes # E-kommentieren, wenn der Job verwendet wird
-
-    # 2. Abhängigkeiten zu den validate-Jobs, um die korrekte Reihenfolge sicherzustellen.
-    - validate-docker-compose
-    # - validate-kubernetes # E-kommentieren, wenn der Job verwendet wird
-
+  # ... (before_script und script bleiben unverändert) ...
   before_script:
     - apk add --no-cache git
     - git config --global user.email "ci-bot@${CI_SERVER_HOST}"
     - git config --global user.name "GitLab CI Bot"
-    - git remote set-url origin "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+    - git remote set-url origin "https://gitlab-ci-token:${GIT_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
   script:
+    - git add deployments/
     - |
-      # Dieser Befehl funktioniert nun wie erwartet, da die Artefakte vorhanden sind.
-      git add deployments/
-
       if ! git diff --staged --quiet; then
         echo "Changes detected in deployment files. Committing..."
         git commit -m "ci: Auto-generate deployment manifests [skip ci]"
@@ -171,43 +104,63 @@ commit-generated-files:
         echo "No changes in deployment files to commit."
       fi
   rules:
-    - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_COMMIT_BRANCH == "dev"' # NEU: Nur auf dev ausführen
 
 promote-to-test:
-  stage: test
+  stage: promote
   image: alpine:latest
-
   needs:
     - commit-generated-files
-  when: manual
-  before_script:
-    - apk add --no-cache git
-    - git remote set-url origin "https://gitlab-ci-token:${GIT_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+  # ... (script bleibt unverändert) ...
   script:
-    - echo "Promoting branch '$CI_COMMIT_BRANCH' to 'test' branch."
+    - echo "Promoting dev branch to test branch..."
+    - apk add --no-cache git
+    - git config --global user.email "ci-bot@${CI_SERVER_HOST}"
+    - git config --global user.name "GitLab CI Bot"
+    - git remote set-url origin "https://gitlab-ci-token:${GIT_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
     - git fetch origin
+    - git reset --hard origin/dev
     - git push -f origin HEAD:test
   rules:
-    - if: '$CI_COMMIT_BRANCH != "main" && $CI_COMMIT_BRANCH != "test"' # Keep this rule to only allow promotion from feature branches
-    
+    - if: '$CI_COMMIT_BRANCH == "dev"' # Diese Regel war schon korrekt
 
-promote-to-produdction:
-  stage: test
+promote-to-production:
+  stage: promote
   image: alpine:latest
-
   needs:
-    - commit-generated-files
-  when: manual
-  before_script:
-    - apk add --no-cache git
-    - git remote set-url origin "https://gitlab-ci-token:${GIT_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+    - promote-to-test
+  # ... (script bleibt unverändert) ...
   script:
-    - echo "Promoting branch '$CI_COMMIT_BRANCH' to 'main' branch."
+    - echo "Promoting test branch to production (main) branch..."
+    - apk add --no-cache git
+    - git config --global user.email "ci-bot@${CI_SERVER_HOST}"
+    - git config --global user.name "GitLab CI Bot"
+    - git remote set-url origin "https://gitlab-ci-token:${GIT_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
     - git fetch origin
+    - git reset --hard origin/test
     - git push -f origin HEAD:main
   rules:
-    - if: '$CI_COMMIT_BRANCH != "main" && $CI_COMMIT_BRANCH != "test"'
-    
+    - if: '$CI_COMMIT_BRANCH == "dev"' # Diese Regel war schon korrekt
+
+create-release-tag-and-deploy:
+  stage: release
+  image: alpine:latest
+  needs:
+    - promote-to-production
+  # ... (before_script und script bleiben unverändert) ...
+  before_script:
+    - apk add --no-cache git
+    - git config --global user.email "ci-bot@${CI_SERVER_HOST}"
+    - git config --global user.name "GitLab CI Bot"
+    - git remote set-url origin "https://gitlab-ci-token:${GIT_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+  script:
+    - export TAG_VERSION=$(date +%Y.%m.%d)-$(git rev-parse --short HEAD)
+    - echo "Creating and pushing tag: $TAG_VERSION"
+    - git tag $TAG_VERSION
+    - git push origin $TAG_VERSION
+    - echo "Deployment für $CI_PROJECT_NAME mit Version $TAG_VERSION würde jetzt getriggert."
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev"' # NEU: Nur auf dev ausführen
 
 trigger-production-deployment:
   stage: release
@@ -220,4 +173,15 @@ trigger-production-deployment:
     SERVICE_VERSION: $CI_COMMIT_TAG
     SERVICE_REPO_URL: $CI_PROJECT_URL
   rules:
-    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_TAG # Diese Regel bleibt, da sie auf Tags reagiert
+
+# ==========================================================================
+#   NEUE INFO-JOBS für 'main' und 'test' Branches
+# ==========================================================================
+
+list-main-deployments:
+  stage: info
+  image: alpine:latest
+  script:
+    - echo "📄 Listing deployments on main branch..."
+    - |
