@@ -139,12 +139,19 @@ validate-committed-config-on-main:
 commit-generated-files:
   stage: commit
   image: alpine:latest
+  # Die 'needs'-Sektion muss alle Jobs enthalten, von denen Artefakte benötigt werden,
+  # sowie die vorgeschalteten Validierungs-Jobs, um die Ausführungsreihenfolge zu garantieren.
   needs:
-    - validate-docker-compose
-    # This dependency is optional because the job only runs if custom_templates/files exists.
+    # 1. Abhängigkeiten zu den generate-Jobs, um deren Artefakte zu erhalten.
+    - generate-docker-compose
     - job: generate-custom-files
       optional: true
-#    - validate-kubernetes
+    # - generate-kubernetes # E-kommentieren, wenn der Job verwendet wird
+
+    # 2. Abhängigkeiten zu den validate-Jobs, um die korrekte Reihenfolge sicherzustellen.
+    - validate-docker-compose
+    # - validate-kubernetes # E-kommentieren, wenn der Job verwendet wird
+
   before_script:
     - apk add --no-cache git
     - git config --global user.email "ci-bot@${CI_SERVER_HOST}"
@@ -152,13 +159,9 @@ commit-generated-files:
     - git remote set-url origin "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
   script:
     - |
-      # Add all changes within the deployments directory to the staging area.
-      # This includes new files, modified files, and deleted files.
-      # This command won't fail if the directory doesn't exist.
+      # Dieser Befehl funktioniert nun wie erwartet, da die Artefakte vorhanden sind.
       git add deployments/
 
-      # Check if there are any staged changes.
-      # 'git diff --staged --quiet' exits with 1 if there are changes, 0 if not.
       if ! git diff --staged --quiet; then
         echo "Changes detected in deployment files. Committing..."
         git commit -m "ci: Auto-generate deployment manifests [skip ci]"
