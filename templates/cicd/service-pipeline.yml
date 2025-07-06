@@ -185,3 +185,24 @@ list-main-deployments:
   script:
     - echo "📄 Listing deployments on main branch..."
     - |
+      if [ -d "deployments" ]; then
+        ls -R deployments
+      else
+        echo "No deployments directory found."
+      fi
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+list-test-deployments:
+  stage: info
+  image: alpine:latest
+  script:
+    - echo "🧪 Listing deployments on test branch..."
+    - |
+      if [ -d "deployments" ]; then
+        ls -R deployments
+      else
+        echo "No deployments directory found."
+      fi
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "test"'

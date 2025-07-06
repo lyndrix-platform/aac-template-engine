@@ -17,7 +17,8 @@ stages:
   # The script creates the 'deployments' directory, which we clean up after the job.
   after_script:
     - rm -rf deployments
-
+  tags:
+    - docker
 test-docker-compose-generation:
   extends: .test-template
   script:
@@ -33,7 +34,8 @@ test-docker-compose-generation:
     - grep 'container_name "my-demo-app"' deployments/docker_compose/docker-compose.yml
     - grep 'SERVICE_NAME_LOWERCASE="my-demo-app"' deployments/docker_compose/.env
     - echo "✅ Docker Compose generation test passed."
-
+  tags:
+    - docker
 test-custom-files-generation:
   extends: .test-template
   script:
@@ -48,3 +50,5 @@ test-custom-files-generation:
     # 2. Check content of the rendered file
     - grep 'hostname = My-Demo-App' deployments/files/config/settings.conf
     - echo "✅ Custom files generation test passed."
+  tags:
+    - docker
