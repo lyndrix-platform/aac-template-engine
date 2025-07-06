@@ -3,6 +3,48 @@
 # Secret Detection customization: https://docs.gitlab.com/ee/user/application_security/secret_detection/pipeline/#customization
 # Dependency Scanning customization: https://docs.gitlab.com/ee/user/application_security/dependency_scanning/#customizing-the-dependency-scanning-settings
 # Container Scanning customization: https://docs.gitlab.com/ee/user/application_security/container_scanning/#customizing-the-container-scanning-settings
-# Note that environment variables can be set in several places
+# Note that environment variables can be set in several places.
 # See https://docs.gitlab.com/ee/ci/variables/#cicd-variable-precedence
 
+stages:
+  - test
+
+.test-template:
+  stage: test
+  image: python:3.9-slim
+  before_script:
+    - pip install PyYAML Jinja2
+  # The script creates the 'deployments' directory, which we clean up after the job.
+  after_script:
+    - rm -rf deployments
+
+test-docker-compose-generation:
+  extends: .test-template
+  script:
+    - echo "Testing docker-compose generation..."
+    # We need to copy the test templates to the location the script expects them
+    - cp -r tests/templates .
+    - python scripts/generate_manifest.py --ssot-file tests/demo-service.yml --deployment-type docker_compose
+    - echo "Verifying generated files..."
+    # 1. Check if files were created
+    - test -f deployments/docker_compose/docker-compose.yml || (echo "docker-compose.yml not found!" && exit 1)
+    - test -f deployments/docker_compose/.env || (echo ".env file not found!" && exit 1)
+    # 2. Check content for correct variable rendering (including filter)
+    - grep 'container_name "my-demo-app"' deployments/docker_compose/docker-compose.yml
+    - grep 'SERVICE_NAME_LOWERCASE="my-demo-app"' deployments/docker_compose/.env
+    - echo "✅ Docker Compose generation test passed."
+
+test-custom-files-generation:
+  extends: .test-template
+  script:
+    - echo "Testing custom files generation..."
+    # We need to copy the test templates to the location the script expects them
+    - cp -r tests/custom_templates .
+    - python scripts/generate_manifest.py --ssot-file tests/demo-service.yml --process-files
+    - echo "Verifying generated files..."
+    # 1. Check if rendered and copied files exist in the correct structure
+    - test -f deployments/files/config/settings.conf || (echo "Rendered settings.conf not found!" && exit 1)
+    - test -f deployments/files/data/static.txt || (echo "Copied static.txt not found!" && exit 1)
+    # 2. Check content of the rendered file
+    - grep 'hostname = My-Demo-App' deployments/files/config/settings.conf
+    - echo "✅ Custom files generation test passed."
