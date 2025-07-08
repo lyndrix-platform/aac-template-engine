@@ -4,6 +4,12 @@ services:
     container_name: ${SERVICE_NAME}
     hostname: ${SERVICE_HOSTNAME}
     restart: ${SERVICE_RESTART_POLICY}
+    {% if deployments.docker_compose.command is defined and deployments.docker_compose.command %}
+    command:
+      {% for cmd_item in deployments.docker_compose.command %}
+      - "{{ cmd_item }}"
+      {% endfor %}
+    {% endif %}
     env_file: 
       - .env
       - stack.env
