@@ -1,0 +1,23 @@
+---
+- name: "Stelle Verzeichnisse für {{ service.name }} sicher"
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "1000" # oder den passenden User
+    group: "1000" # oder die passende Gruppe
+    mode: '0755'
+  loop: "{{ volumes | map(attribute='name') | list }}"
+  vars:
+    item: "{{ deployments.docker_compose.host_base_path }}/{{ item }}"
+
+- name: "Stelle sicher, dass das externe Docker-Netzwerk '{{ deployments.docker_compose.network_name }}' existiert"
+  community.docker.docker_network:
+    name: "{{ deployments.docker_compose.network_name }}"
+    state: present
+
+- name: "Deploye {{ service.name }} via Docker Compose Template"
+  community.docker.docker_compose_v2:
+    project_name: "{{ service.name }}"
+    definition: "{{ lookup('template', 'docker-compose.yml.j2') | from_yaml }}"
+    state: present
+    pull: always # Stellt sicher, dass immer das neueste Image verwendet wird

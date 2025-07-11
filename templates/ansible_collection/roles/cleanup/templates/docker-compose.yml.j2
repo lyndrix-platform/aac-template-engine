@@ -1,0 +1,74 @@
+---
+# ACHTUNG: Diese Datei wird automatisch generiert.
+# Änderungen direkt hier werden bei der nächsten Ausführung der CI-Pipeline überschrieben.
+# Quelle: service.yml
+
+services:
+  {{ service.name }}:
+    image: "{{ service.image_repo }}:{{ service.image_tag }}"
+    container_name: {{ service.name }}
+    hostname: {{ service.hostname }}
+    restart: {{ deployments.docker_compose.restart_policy }}
+    env_file:
+      - stack.env
+    ports:
+{% for p in ports %}
+      - "{{ p.port }}:{{ p.port }}"
+{% endfor %}
+    volumes:
+      - "{{ deployments.docker_compose.docker_socket_path }}:/var/run/docker.sock:ro"
+{% for v in volumes %}
+      - "{{ deployments.docker_compose.host_base_path }}/{{ service.name | lower }}/{{ v.name }}:{{ v.path }}"
+{% endif %}
+    networks:
+      - secured
+    security_opt:
+{% for opt in deployments.docker_compose.security_opts %}
+      - {{ opt }}
+{% endfor %}
+    logging:
+      driver: "{{ deployments.docker_compose.logging.driver }}"
+      options:
+        max-size: "{{ deployments.docker_compose.logging.options['max-size'] }}"
+        max-file: "{{ deployments.docker_compose.logging.options['max-file'] }}"
+    labels:
+      # === Traefik Labels ===
+{% if config.routing_enabled %}
+      - "traefik.enable=true"
+      - "traefik.docker.network={{ deployments.docker_compose.network_secured }}"
+      - "traefik.http.routers.{{ service.name }}.rule=Host(`{{ service.name }}.{{ config.domain_name }}`)"
+      - "traefik.http.routers.{{ service.name }}.entrypoints={{ config.entrypoint }}"
+      - "traefik.http.routers.{{ service.name }}.tls=true"
+      - "traefik.http.routers.{{ service.name }}.tls.certresolver={{ config.cert_resolver }}"
+      - "traefik.http.services.{{ service.name }}.loadbalancer.server.port={{ (ports | selectattr('name', 'equalto', 'dashboard') | first).port }}"
+{% endif %}
+
+      # === AutoDNS Labels ===
+{% if config.integrations.autodns.enabled %}
+      - "auto-dns.customDNS.{{ service.name }}=true"
+{% if config.integrations.autodns.create_wildcard %}
+      - "auto-dns.createWildcard.{{ service.name }}=true"
+{% endif %}
+      - "auto-dns.customDOMAIN.{{ service.name }}={{ config.domain_name }}"
+      - "auto-dns.customHost.{{ service.name }}={{ service.name }}"
+{% endif %}
+
+      # === Homepage Labels ===
+{% if config.integrations.homepage.enabled %}
+      - "homepage.group={{ service.category }}"
+      - "homepage.name={{ service.name }} {{ service.hostname }}"
+      - "homepage.href=https://{{ service.name }}.{{ config.domain_name }}"
+      - "homepage.icon={{ service.icon }}"
+      - "homepage.description={{ service.description }}"
+{% endif %}
+
+networks:
+  secured:
+    external:
+      name: {{ deployments.docker_compose.network_secured }}
+  exposed:
+    external:
+      name: {{ deployments.docker_compose.network_exposed }}
+  interconnect:
+    external:
+      name: {{ deployments.docker_compose.network_interconnect }}

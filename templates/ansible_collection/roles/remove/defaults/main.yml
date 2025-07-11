@@ -1,0 +1,4 @@
+---
+# Lade die zentrale SSoT-Datei aus dem Root-Verzeichnis des Repositorys.
+# Der `vars_files`-Mechanismus ist hier nicht verfügbar, daher verwenden wir `lookup`.
+"{{ lookup('file', '../../../../service.yml') | from_yaml }}"
