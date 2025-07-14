@@ -5,29 +5,43 @@ import shutil
 import yaml
 from jinja2 import Environment, FileSystemLoader, BaseLoader
 
+# ----------------- START: REPLACEMENT FUNCTION -----------------
 def load_and_prerender_ssot(ssot_file_path):
     """
-    Loads the SSoT file and pre-renders it multiple times to resolve nested variables.
+    Loads the SSoT YAML file and recursively renders Jinja expressions within it,
+    preserving all initial values (including Ansible overrides).
     """
     print(f"Lade SSoT-Daten aus: {ssot_file_path}")
     with open(ssot_file_path, 'r', encoding='utf-8') as f:
-        raw_ssot_content = f.read()
+        # 1. Load the YAML into a dictionary ONCE. This dictionary contains
+        #    the correct, merged overrides from Ansible.
+        ssot_data = yaml.safe_load(f)
 
-    # Render the SSoT file multiple times to resolve nested variables.
+    # Use the raw file content as the initial template string
+    with open(ssot_file_path, 'r', encoding='utf-8') as f:
+        rendered_content = f.read()
+
     env = Environment(loader=BaseLoader())
-    rendered_ssot_content = raw_ssot_content
+
+    # The rendering loop now always uses the full, initially-loaded ssot_data as context.
+    # This ensures that Ansible overrides are not lost between passes.
     for i in range(5):  # Max 5 passes to avoid infinite loops
-        previous_content = rendered_ssot_content
+        previous_content = rendered_content
         template = env.from_string(previous_content)
-        data_for_render = yaml.safe_load(previous_content)
-        rendered_ssot_content = template.render(data_for_render)
-        if previous_content == rendered_ssot_content:
+        
+        # 2. ALWAYS render with the complete data dictionary loaded in step 1.
+        rendered_content = template.render(ssot_data)
+
+        if previous_content == rendered_content:
             print(f"SSoT-Variablen nach {i+1} Durchlauf(en) stabil.")
             break
     else:
         print("WARNUNG: SSoT-Variablen wurden nach 5 Durchläufen nicht stabil.", file=sys.stderr)
 
-    return yaml.safe_load(rendered_ssot_content)
+    # 3. Return the final, fully rendered data as a dictionary.
+    return yaml.safe_load(rendered_content)
+# ----------------- END: REPLACEMENT FUNCTION -----------------
+
 
 def process_deployment_templates(deployment_type, data, env):
     """
@@ -152,4 +166,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
