@@ -3,47 +3,13 @@ import os
 import sys
 import shutil
 import yaml
-from jinja2 import Environment, FileSystemLoader, BaseLoader
+from jinja2 import Environment, FileSystemLoader
 
-def load_and_prerender_ssot(ssot_file_path):
-    """
-    Loads the SSoT YAML file and recursively renders Jinja expressions within it,
-    preserving all initial values (including Ansible overrides).
-    """
-    print(f"Lade SSoT-Daten aus: {ssot_file_path}")
-    
-    # 1. Load the YAML into a dictionary ONCE. This dictionary contains
-    #    the correct, merged overrides from Ansible.
-    with open(ssot_file_path, 'r', encoding='utf-8') as f:
-        ssot_data = yaml.safe_load(f)
-
-    # 2. Convert the loaded data back into a clean YAML string. THIS string
-    #    will be our template, ensuring we only work with the merged data.
-    rendered_content = yaml.dump(ssot_data)
-
-    env = Environment(loader=BaseLoader())
-
-    # The rendering loop now always uses the full, initially-loaded ssot_data as context.
-    # This ensures that Ansible overrides are not lost between passes.
-    for i in range(5):  # Max 5 passes to avoid infinite loops
-        previous_content = rendered_content
-        template = env.from_string(previous_content)
-        
-        # 3. ALWAYS render with the complete data dictionary loaded in step 1.
-        rendered_content = template.render(ssot_data)
-
-        if previous_content == rendered_content:
-            print(f"SSoT-Variablen nach {i+1} Durchlauf(en) stabil.")
-            break
-    else:
-        print("WARNUNG: SSoT-Variablen wurden nach 5 Durchläufen nicht stabil.", file=sys.stderr)
-
-    # 4. Return the final, fully rendered data as a dictionary.
-    return yaml.safe_load(rendered_content)
+# The complex load_and_prerender_ssot function has been completely removed.
 
 def process_deployment_templates(deployment_type, data, env):
     """
-    Handles generation for a specific deployment type, using custom templates if they exist.
+    Handles generation for a specific deployment type.
     """
     print(f"\n--- Processing Templates for Deployment-Type: {deployment_type} ---")
     
@@ -63,31 +29,21 @@ def process_deployment_templates(deployment_type, data, env):
 
     os.makedirs(output_dir, exist_ok=True)
     
-    template_files = []
     for root, _, files in os.walk(template_dir):
         for file in files:
             if file.endswith(".j2"):
-                template_files.append(os.path.join(root, file))
-    
-    print(f"Gefundene Templates zum Generieren: {[os.path.basename(f) for f in template_files]}")
-
-    if not template_files:
-        print(f"Keine .j2-Templates im Verzeichnis gefunden: {template_dir}")
-        return
-    
-    for template_path in template_files:
-        template = env.get_template(template_path)
-        rendered_content = template.render(data)
-        output_filename = os.path.basename(template_path)[:-3]  # Remove .j2
-        output_filepath = os.path.join(output_dir, output_filename)
-        with open(output_filepath, 'w', encoding='utf-8') as f:
-            f.write(rendered_content)
-        print(f"Erfolgreich generiert: {output_filepath}")
+                template_path = os.path.join(root, file)
+                template = env.get_template(template_path)
+                rendered_content = template.render(data)
+                output_filename = os.path.basename(template_path)[:-3]
+                output_filepath = os.path.join(output_dir, output_filename)
+                with open(output_filepath, 'w', encoding='utf-8') as f:
+                    f.write(rendered_content)
+                print(f"Erfolgreich generiert: {output_filepath}")
 
 def process_custom_files(data, env):
     """
     Processes the custom_templates/files directory.
-    Renders .j2 files and copies all other files, preserving structure.
     """
     print("\n--- Processing Custom Files ---")
     custom_files_dir = "custom_templates/files"
@@ -100,14 +56,12 @@ def process_custom_files(data, env):
     for root, _, files in os.walk(custom_files_dir):
         for filename in files:
             source_path = os.path.join(root, filename)
-            
             relative_path = os.path.relpath(source_path, custom_files_dir)
             dest_path_with_ext = os.path.join(output_base_dir, relative_path)
-
             os.makedirs(os.path.dirname(dest_path_with_ext), exist_ok=True)
 
             if filename.endswith(".j2"):
-                dest_path = dest_path_with_ext[:-3] # Remove .j2 extension
+                dest_path = dest_path_with_ext[:-3]
                 print(f"Rendere '{source_path}' -> '{dest_path}'")
                 template = env.get_template(source_path)
                 rendered_content = template.render(data)
@@ -119,30 +73,22 @@ def process_custom_files(data, env):
 
 def main():
     """
-    Generates deployment manifests and files from a central SSoT file.
+    Generates deployment manifests from a fully-rendered SSoT file.
     """
-    parser = argparse.ArgumentParser(description="Generiert Deployment-Manifeste und Dateien aus einer SSoT-Datei.")
-    parser.add_argument('--ssot-file', required=True, help="Pfad zur zentralen SSoT YAML-Datei.")
+    parser = argparse.ArgumentParser(description="Generiert Deployment-Manifeste aus einer SSoT-Datei.")
+    parser.add_argument('--ssot-file', required=True, help="Pfad zur zentralen, bereits gerenderten SSoT YAML-Datei.")
     
     action_group = parser.add_mutually_exclusive_group(required=True)
-    action_group.add_argument('--deployment-type', help="Der zu generierende Deployment-Typ (z.B. docker_compose).")
-    action_group.add_argument('--process-files', action='store_true', help="Nur benutzerdefinierte Dateien aus 'custom_templates/files' verarbeiten.")
-
-    parser.add_argument(
-        '--skip-prerender',
-        action='store_true',
-        help="Überspringt den Jinja-Vor-Rendering-Schritt. Nützlich, wenn die SSoT-Datei bereits vollständig gerendert ist."
-    )
+    action_group.add_argument('--deployment-type', help="Der zu generierende Deployment-Typ.")
+    action_group.add_argument('--process-files', action='store_true', help="Nur benutzerdefinierte Dateien verarbeiten.")
 
     args = parser.parse_args()
 
     try:
-        if args.skip_prerender:
-            print(f"Lade SSoT-Daten aus: {args.ssot_file} (Pre-Rendering übersprungen)")
-            with open(args.ssot_file, 'r', encoding='utf-8') as f:
-                data = yaml.safe_load(f)
-        else:
-            data = load_and_prerender_ssot(args.ssot_file)
+        # The pre-render logic is gone. We simply load the file.
+        print(f"Lade finale SSoT-Daten aus: {args.ssot_file}")
+        with open(args.ssot_file, 'r', encoding='utf-8') as f:
+            data = yaml.safe_load(f)
 
         env = Environment(loader=FileSystemLoader('.'), trim_blocks=True, lstrip_blocks=True)
         
