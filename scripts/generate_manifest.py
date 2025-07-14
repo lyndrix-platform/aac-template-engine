@@ -5,21 +5,21 @@ import shutil
 import yaml
 from jinja2 import Environment, FileSystemLoader, BaseLoader
 
-# ----------------- START: REPLACEMENT FUNCTION -----------------
 def load_and_prerender_ssot(ssot_file_path):
     """
     Loads the SSoT YAML file and recursively renders Jinja expressions within it,
     preserving all initial values (including Ansible overrides).
     """
     print(f"Lade SSoT-Daten aus: {ssot_file_path}")
+    
+    # 1. Load the YAML into a dictionary ONCE. This dictionary contains
+    #    the correct, merged overrides from Ansible.
     with open(ssot_file_path, 'r', encoding='utf-8') as f:
-        # 1. Load the YAML into a dictionary ONCE. This dictionary contains
-        #    the correct, merged overrides from Ansible.
         ssot_data = yaml.safe_load(f)
 
-    # Use the raw file content as the initial template string
-    with open(ssot_file_path, 'r', encoding='utf-8') as f:
-        rendered_content = f.read()
+    # 2. Convert the loaded data back into a clean YAML string. THIS string
+    #    will be our template, ensuring we only work with the merged data.
+    rendered_content = yaml.dump(ssot_data)
 
     env = Environment(loader=BaseLoader())
 
@@ -29,7 +29,7 @@ def load_and_prerender_ssot(ssot_file_path):
         previous_content = rendered_content
         template = env.from_string(previous_content)
         
-        # 2. ALWAYS render with the complete data dictionary loaded in step 1.
+        # 3. ALWAYS render with the complete data dictionary loaded in step 1.
         rendered_content = template.render(ssot_data)
 
         if previous_content == rendered_content:
@@ -38,10 +38,8 @@ def load_and_prerender_ssot(ssot_file_path):
     else:
         print("WARNUNG: SSoT-Variablen wurden nach 5 Durchläufen nicht stabil.", file=sys.stderr)
 
-    # 3. Return the final, fully rendered data as a dictionary.
+    # 4. Return the final, fully rendered data as a dictionary.
     return yaml.safe_load(rendered_content)
-# ----------------- END: REPLACEMENT FUNCTION -----------------
-
 
 def process_deployment_templates(deployment_type, data, env):
     """
@@ -49,7 +47,6 @@ def process_deployment_templates(deployment_type, data, env):
     """
     print(f"\n--- Processing Templates for Deployment-Type: {deployment_type} ---")
     
-    # Check for a custom template directory and prioritize it
     custom_template_dir = f"custom_templates/{deployment_type}"
     if os.path.isdir(custom_template_dir):
         print(f"Benutzerdefiniertes Template-Verzeichnis gefunden: '{custom_template_dir}'")
@@ -104,15 +101,12 @@ def process_custom_files(data, env):
         for filename in files:
             source_path = os.path.join(root, filename)
             
-            # Calculate the relative path to preserve the directory structure
             relative_path = os.path.relpath(source_path, custom_files_dir)
             dest_path_with_ext = os.path.join(output_base_dir, relative_path)
 
-            # Ensure the destination directory exists
             os.makedirs(os.path.dirname(dest_path_with_ext), exist_ok=True)
 
             if filename.endswith(".j2"):
-                # Render Jinja2 template
                 dest_path = dest_path_with_ext[:-3] # Remove .j2 extension
                 print(f"Rendere '{source_path}' -> '{dest_path}'")
                 template = env.get_template(source_path)
@@ -120,7 +114,6 @@ def process_custom_files(data, env):
                 with open(dest_path, 'w', encoding='utf-8') as f:
                     f.write(rendered_content)
             else:
-                # Copy any other file
                 print(f"Kopiere '{source_path}' -> '{dest_path_with_ext}'")
                 shutil.copy2(source_path, dest_path_with_ext)
 
@@ -151,7 +144,6 @@ def main():
         else:
             data = load_and_prerender_ssot(args.ssot_file)
 
-        # The FileSystemLoader should look from the root of the project
         env = Environment(loader=FileSystemLoader('.'), trim_blocks=True, lstrip_blocks=True)
         
         if args.deployment_type:
