@@ -121,10 +121,22 @@ def main():
     action_group.add_argument('--deployment-type', help="Der zu generierende Deployment-Typ (z.B. docker_compose).")
     action_group.add_argument('--process-files', action='store_true', help="Nur benutzerdefinierte Dateien aus 'custom_templates/files' verarbeiten.")
 
+    parser.add_argument(
+        '--skip-prerender',
+        action='store_true',
+        help="Überspringt den Jinja-Vor-Rendering-Schritt. Nützlich, wenn die SSoT-Datei bereits vollständig gerendert ist."
+    )
+
     args = parser.parse_args()
 
     try:
-        data = load_and_prerender_ssot(args.ssot_file)
+        if args.skip_prerender:
+            print(f"Lade SSoT-Daten aus: {args.ssot_file} (Pre-Rendering übersprungen)")
+            with open(args.ssot_file, 'r', encoding='utf-8') as f:
+                data = yaml.safe_load(f)
+        else:
+            data = load_and_prerender_ssot(args.ssot_file)
+
         # The FileSystemLoader should look from the root of the project
         env = Environment(loader=FileSystemLoader('.'), trim_blocks=True, lstrip_blocks=True)
         
