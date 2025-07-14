@@ -6,9 +6,6 @@ import yaml
 import json
 from jinja2 import Environment, FileSystemLoader
 
-# ==============================================================================
-# DEBUG-HELFERFUNKTION
-# ==============================================================================
 def print_debug_header(title):
     """Druckt eine gut sichtbare Überschrift für Debug-Abschnitte."""
     print("\n" + "="*80)
@@ -19,20 +16,14 @@ def print_debug_data(variable_name, data):
     """Druckt den Inhalt einer Variablen formatiert als JSON."""
     print(f"\n--- Inhalt von: {variable_name} ---")
     try:
-        # JSON ist oft besser lesbar für komplexe, verschachtelte Strukturen
         print(json.dumps(data, indent=4, ensure_ascii=False))
     except TypeError:
-        # Fallback, falls die Daten nicht JSON-serialisierbar sind
         print(data)
     print("--- Ende des Inhalts ---\n")
 
-# ==============================================================================
-# HAUPTFUNKTIONEN
-# ==============================================================================
-
 def process_deployment_templates(deployment_type, data, env):
     """
-    Verarbeitet Templates für einen bestimmten Deployment-Typ und gibt Debug-Infos aus.
+    Verarbeitet Templates für einen bestimmten Deployment-Typ.
     """
     print_debug_header(f"Verarbeite Templates für Deployment-Typ: {deployment_type}")
     
@@ -64,15 +55,14 @@ def process_deployment_templates(deployment_type, data, env):
                 
                 try:
                     template = env.get_template(template_path)
+                    # The 'data' dictionary now contains the full context for rendering
                     rendered_content = template.render(data)
                     
-                    # Debug-Ausgabe des gerenderten Inhalts
                     print(f"DEBUG: Ziel-Datei: {output_filepath}")
                     print("--- Gerenderter Inhalt (vor dem Schreiben) ---")
                     print(rendered_content)
                     print("--- Ende des gerenderten Inhalts ---\n")
 
-                    # Schreiben der Datei
                     with open(output_filepath, 'w', encoding='utf-8') as f:
                         f.write(rendered_content)
                     print(f"INFO: Erfolgreich generiert: {output_filepath}")
@@ -83,7 +73,7 @@ def process_deployment_templates(deployment_type, data, env):
 
 def process_custom_files(data, env):
     """
-    Verarbeitet benutzerdefinierte Dateien und gibt Debug-Infos aus.
+    Verarbeitet benutzerdefinierte Dateien.
     """
     print_debug_header("Verarbeite benutzerdefinierte Dateien")
     custom_files_dir = "custom_templates/files"
@@ -104,7 +94,6 @@ def process_custom_files(data, env):
                 dest_path = dest_path_with_ext[:-3]
                 print_debug_header(f"Rendere benutzerdefiniertes Template: {source_path}")
                 print(f"DEBUG: Ziel-Datei: {dest_path}")
-
                 try:
                     template = env.get_template(source_path)
                     rendered_content = template.render(data)
@@ -127,10 +116,12 @@ def process_custom_files(data, env):
 
 def main():
     """
-    Generiert Deployment-Manifeste aus einer SSoT-Datei und gibt umfassende Debug-Infos aus.
+    Generiert Deployment-Manifeste aus einem JSON-String.
     """
     parser = argparse.ArgumentParser(description="Generiert Deployment-Manifeste aus einer SSoT-Datei.")
-    parser.add_argument('--ssot-file', required=True, help="Pfad zur zentralen, bereits gerenderten SSoT YAML-Datei.")
+    
+    # Modified to accept a JSON string instead of a file path
+    parser.add_argument('--ssot-json', required=True, help="Der zentrale SSoT als JSON-String.")
     
     action_group = parser.add_mutually_exclusive_group(required=True)
     action_group.add_argument('--deployment-type', help="Der zu generierende Deployment-Typ.")
@@ -142,17 +133,19 @@ def main():
     print(f"Argumente: {vars(args)}")
 
     try:
-        print(f"\nINFO: Lade finale SSoT-Daten aus: {args.ssot_file}")
-        with open(args.ssot_file, 'r', encoding='utf-8') as f:
-            data = yaml.safe_load(f)
+        print(f"\nINFO: Lade finale SSoT-Daten aus JSON-Argument.")
+        # Load data directly from the JSON string argument
+        data = json.loads(args.ssot_json)
 
-        # Dies ist der wichtigste Debug-Schritt:
-        # Zeigt den exakten Datenstand, den das Skript von Ansible erhalten hat.
-        print_debug_header("Vollständige SSoT-Daten nach dem Laden aus der YAML-Datei")
+        print_debug_header("Vollständige SSoT-Daten nach dem Parsen des JSON")
         print_debug_data("data", data)
 
         env = Environment(loader=FileSystemLoader('.'), trim_blocks=True, lstrip_blocks=True)
         
+        # The Python script's Jinja engine needs the full data context to resolve nested variables
+        # like '{{ service.name }}' inside the templates.
+        env.globals.update(data)
+
         if args.deployment_type:
             process_deployment_templates(args.deployment_type, data, env)
         
