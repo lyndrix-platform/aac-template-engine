@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Deployment Manifest Generator - v5 (Simple File Renderer)
+Deployment Manifest Generator - v5 (Simple JSON Renderer)
 
 This script's ONLY job is to render Jinja2 templates. It takes a
-fully-rendered SSoT file (in YAML format) and uses it as the context
-to generate deployment files. It performs NO data merging or recursive rendering.
+fully-rendered SSoT as a JSON string and uses it as the context
+to generate deployment files. It performs NO data merging or file loading.
 """
 import os
 import sys
-import yaml
+import json
 import argparse
 import shutil
 from jinja2 import Environment, FileSystemLoader
@@ -43,8 +43,8 @@ def process_templates(directory: str, output_base: str, context: dict, env: Envi
 
 def main():
     """Main execution function."""
-    parser = argparse.ArgumentParser(description="Generates deployment manifests from a final SSoT file.")
-    parser.add_argument('--ssot-file', required=True, help="Path to the final, pre-rendered SSoT YAML file.")
+    parser = argparse.ArgumentParser(description="Generates deployment manifests from a JSON SSoT string.")
+    parser.add_argument('--ssot-json', required=True, help="The complete, pre-rendered SSoT as a JSON string.")
     
     action_group = parser.add_mutually_exclusive_group(required=True)
     action_group.add_argument('--deployment-type', help="The deployment type to generate (e.g., 'docker_compose').")
@@ -53,20 +53,19 @@ def main():
     args = parser.parse_args()
 
     try:
-        # --- Step 1: Load the final SSoT data directly from the provided file ---
-        print(f"INFO: Loading final SSoT from file: {args.ssot_file}", file=sys.stderr)
-        with open(args.ssot_file, 'r', encoding='utf-8') as f:
-            data = yaml.safe_load(f)
+        # --- Step 1: Load the final SSoT data directly from the JSON string ---
+        data = json.loads(args.ssot_json)
         
         # --- DEBUG: Print the exact data being used for rendering ---
         print("--- SCRIPT: Using the following data for rendering ---", file=sys.stderr)
-        print(yaml.dump(data.get("deployments", {}).get("docker_compose", {}).get("stack_env")), file=sys.stderr)
+        print(json.dumps(data.get("deployments", {}).get("docker_compose", {}).get("stack_env"), indent=4), file=sys.stderr)
         print("----------------------------------------------------", file=sys.stderr)
 
         if not data:
-            raise ValueError("SSoT data is empty after loading from file.")
+            raise ValueError("SSoT data is empty after loading from JSON.")
 
         # --- Step 2: Process templates ---
+        # The loader should search from the current working directory.
         env = Environment(loader=FileSystemLoader('.'), trim_blocks=True, lstrip_blocks=True)
 
         if args.deployment_type:
