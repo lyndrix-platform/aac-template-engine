@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Deployment Manifest Generator - v4 (Simple Renderer)
+Deployment Manifest Generator - v5 (Simple File Renderer)
 
-This script's only job is to render Jinja2 templates. It takes a
+This script's ONLY job is to render Jinja2 templates. It takes a
 fully-rendered SSoT file (in YAML format) and uses it as the context
 to generate deployment files. It performs NO data merging or recursive rendering.
 """
@@ -53,13 +53,18 @@ def main():
     args = parser.parse_args()
 
     try:
-        # --- Step 1: Load the final SSoT data directly ---
+        # --- Step 1: Load the final SSoT data directly from the provided file ---
         print(f"INFO: Loading final SSoT from file: {args.ssot_file}", file=sys.stderr)
         with open(args.ssot_file, 'r', encoding='utf-8') as f:
             data = yaml.safe_load(f)
+        
+        # --- DEBUG: Print the exact data being used for rendering ---
+        print("--- SCRIPT: Using the following data for rendering ---", file=sys.stderr)
+        print(yaml.dump(data.get("deployments", {}).get("docker_compose", {}).get("stack_env")), file=sys.stderr)
+        print("----------------------------------------------------", file=sys.stderr)
 
         if not data:
-            raise ValueError("SSoT data is empty after loading.")
+            raise ValueError("SSoT data is empty after loading from file.")
 
         # --- Step 2: Process templates ---
         env = Environment(loader=FileSystemLoader('.'), trim_blocks=True, lstrip_blocks=True)
