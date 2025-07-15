@@ -1,50 +1,67 @@
 #!/usr/bin/env python3
 """
-Deployment Manifest Generator - v5 (Simple JSON Renderer)
+Deployment Manifest Generator - v7 (Override-Aware Renderer)
 
-This script's ONLY job is to render Jinja2 templates. It takes a
-fully-rendered SSoT as a JSON string and uses it as the context
-to generate deployment files. It performs NO data merging or file loading.
+This script generates deployment configurations from a Single Source of Truth (SSoT).
+It intelligently uses templates from the service's own 'custom_templates' directory
+if they exist, otherwise it falls back to the default templates provided by the
+'--template-path' argument.
 """
 import os
 import sys
 import json
 import argparse
 import shutil
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Environment, FileSystemLoader, ChoiceLoader
 
-def process_templates(directory: str, output_base: str, context: dict, env: Environment):
-    """Generic function to find and render .j2 templates or copy other files."""
-    if not os.path.isdir(directory):
-        print(f"INFO: Template directory not found, skipping: {directory}", file=sys.stderr)
+def process_templates(template_paths: list, output_base: str, context: dict):
+    """
+    Finds all unique .j2 templates across a list of directories,
+    and renders them using a loader that respects override priority.
+    """
+    # Create a loader that checks for templates in the provided paths, in order.
+    # e.g., it will look in the service repo's custom path first, then the engine path.
+    env = Environment(
+        loader=ChoiceLoader([FileSystemLoader(path) for path in template_paths if os.path.isdir(path)]),
+        trim_blocks=True,
+        lstrip_blocks=True
+    )
+
+    # Gather all unique template filenames from all template paths.
+    all_templates = set()
+    for path in template_paths:
+        if os.path.isdir(path):
+            for root, _, files in os.walk(path):
+                for file in files:
+                    if file.endswith(".j2"):
+                        # Store the path relative to its template directory
+                        all_templates.add(os.path.relpath(os.path.join(root, file), path))
+
+    if not all_templates:
+        print(f"INFO: No templates found in any of the paths: {template_paths}", file=sys.stderr)
         return
 
-    for root, _, files in os.walk(directory):
-        for file in files:
-            source_path = os.path.join(root, file)
-            relative_path = os.path.relpath(source_path, directory)
-            output_path_raw = os.path.join(output_base, relative_path)
-            os.makedirs(os.path.dirname(output_path_raw), exist_ok=True)
-            
-            if file.endswith(".j2"):
-                output_path = output_path_raw[:-3]
-                print(f"INFO: Rendering template '{source_path}' to '{output_path}'")
-                try:
-                    # The loader path is relative to the script's execution directory
-                    template = env.get_template(source_path)
-                    rendered_content = template.render(context)
-                    with open(output_path, 'w', encoding='utf-8') as f:
-                        f.write(rendered_content)
-                except Exception as e:
-                    print(f"ERROR: Failed to render {source_path}: {e}", file=sys.stderr)
-            else:
-                print(f"INFO: Copying file '{source_path}' to '{output_path_raw}'")
-                shutil.copy2(source_path, output_path_raw)
+    # Render each unique template. The ChoiceLoader will find the correct one.
+    for template_file in all_templates:
+        output_path_raw = os.path.join(output_base, template_file)
+        output_path = output_path_raw[:-3] # Remove .j2 extension
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+        print(f"INFO: Rendering '{template_file}' to '{output_path}'")
+        try:
+            template = env.get_template(template_file)
+            rendered_content = template.render(context)
+            with open(output_path, 'w', encoding='utf-8') as f:
+                f.write(rendered_content)
+        except Exception as e:
+            print(f"ERROR: Failed to render {template_file}: {e}", file=sys.stderr)
+
 
 def main():
     """Main execution function."""
     parser = argparse.ArgumentParser(description="Generates deployment manifests from a JSON SSoT string.")
     parser.add_argument('--ssot-json', required=True, help="The complete, pre-rendered SSoT as a JSON string.")
+    parser.add_argument('--template-path', required=True, help="The absolute path to the main template engine directory.")
     
     action_group = parser.add_mutually_exclusive_group(required=True)
     action_group.add_argument('--deployment-type', help="The deployment type to generate (e.g., 'docker_compose').")
@@ -53,7 +70,6 @@ def main():
     args = parser.parse_args()
 
     try:
-        # --- Step 1: Load the final SSoT data directly from the JSON string ---
         data = json.loads(args.ssot_json)
         
         # --- DEBUG: Print the exact data being used for rendering ---
@@ -64,22 +80,29 @@ def main():
         if not data:
             raise ValueError("SSoT data is empty after loading from JSON.")
 
-        # --- Step 2: Process templates ---
-        # The loader should search from the current working directory.
-        env = Environment(loader=FileSystemLoader('.'), trim_blocks=True, lstrip_blocks=True)
+        # --- Define template paths with override priority ---
+        # The script is run from the service repo, so '.' is the service repo root.
+        service_repo_path = os.getcwd() 
+        template_engine_path = args.template_path
 
         if args.deployment_type:
             deployment_type = args.deployment_type
-            template_dir = f"templates/{deployment_type}"
-            output_dir = f"deployments/{deployment_type}"
-            print(f"INFO: Generating for deployment type '{deployment_type}'...", file=sys.stderr)
-            process_templates(template_dir, output_dir, data, env)
+            # Priority: 1. Service Repo, 2. Template Engine
+            template_paths = [
+                os.path.join(service_repo_path, 'custom_templates', deployment_type),
+                os.path.join(template_engine_path, 'templates', deployment_type)
+            ]
+            output_dir = os.path.join("deployments", deployment_type)
+            process_templates(template_paths, output_dir, data)
 
         if args.process_files:
-            files_dir = "custom_templates/files"
-            output_dir = "deployments/files"
-            print("INFO: Processing custom files...", file=sys.stderr)
-            process_templates(files_dir, output_dir, data, env)
+            # Priority: 1. Service Repo, 2. Template Engine
+            template_paths = [
+                os.path.join(service_repo_path, 'custom_templates', 'files'),
+                os.path.join(template_engine_path, 'templates', 'files')
+            ]
+            output_dir = os.path.join("deployments", "files")
+            process_templates(template_paths, output_dir, data)
 
         print("INFO: Script finished successfully.")
 
