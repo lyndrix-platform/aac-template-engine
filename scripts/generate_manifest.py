@@ -138,7 +138,7 @@ def main():
         data = json.loads(args.ssot_json)
 
         print_debug_header("Vollständige SSoT-Daten nach dem Parsen des JSON")
-        print_debug_data("data", data)
+        print_debug_data("final_ssot_vars", data)
 
         env = Environment(loader=FileSystemLoader('.'), trim_blocks=True, lstrip_blocks=True)
         
