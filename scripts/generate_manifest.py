@@ -48,7 +48,7 @@ def process_deployment_templates(deployment_type, data, env):
         for file in files:
             if file.endswith(".j2"):
                 template_path = os.path.join(root, file)
-                output_filename = os.path.basename(template_path)[:-3]
+                output_filename = file[:-3] #os.path.basename(template_path)[:-3]
                 output_filepath = os.path.join(output_dir, output_filename)
 
                 print_debug_header(f"Rendere Template: {template_path}")
