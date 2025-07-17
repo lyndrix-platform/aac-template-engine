@@ -1,3 +1,4 @@
+
 # You can override the included template(s) by including variable overrides
 # SAST customization: https://docs.gitlab.com/ee/user/application_security/sast/#customizing-the-sast-settings
 # Secret Detection customization: https://docs.gitlab.com/ee/user/application_security/secret_detection/pipeline/#customization
@@ -9,6 +10,7 @@
 stages:
   - test
 
+
 .test-template:
   stage: test
   image: python:3.9-slim
@@ -17,38 +19,59 @@ stages:
   # The script creates the 'deployments' directory, which we clean up after the job.
   after_script:
     - rm -rf deployments
+    - rm -rf .yamale_output.txt
   tags:
     - docker
+
 test-docker-compose-generation:
   extends: .test-template
   script:
     - echo "Testing docker-compose generation..."
     # We need to copy the test templates to the location the script expects them
     - cp -r tests/templates .
-    - python scripts/generate_manifest.py --ssot-json "$(cat tests/demo-service.yml)" --template-path . --deployment-type docker_compose
+    - DEMO_SERVICE_CONTENT=$(cat tests/demo-service.yml)
+    - python scripts/generate_manifest.py --ssot-json "$DEMO_SERVICE_CONTENT" --template-path . --deployment-type docker_compose || exit 1
     - echo "Verifying generated files..."
     # 1. Check if files were created
     - test -f deployments/docker_compose/docker-compose.yml || (echo "docker-compose.yml not found!" && exit 1)
     - test -f deployments/docker_compose/.env || (echo ".env file not found!" && exit 1)
     # 2. Check content for correct variable rendering (including filter)
     - grep 'container_name "my-demo-app"' deployments/docker_compose/docker-compose.yml
+    - grep 'image: "demo/app:latest"' deployments/docker_compose/docker-compose.yml
     - grep 'SERVICE_NAME_LOWERCASE="my-demo-app"' deployments/docker_compose/.env
+    - grep 'RESTART_POLICY="unless-stopped"' deployments/docker_compose/.env
     - echo "✅ Docker Compose generation test passed."
   tags:
     - docker
+
 test-custom-files-generation:
   extends: .test-template
   script:
     - echo "Testing custom files generation..."
     # We need to copy the test templates to the location the script expects them
     - cp -r tests/custom_templates .
-    - python scripts/generate_manifest.py --ssot-json "$(cat tests/demo-service.yml)" --template-path . --process-files
+    - DEMO_SERVICE_CONTENT=$(cat tests/demo-service.yml)
+    - python scripts/generate_manifest.py --ssot-json "$DEMO_SERVICE_CONTENT" --template-path . --process-files || exit 1
     - echo "Verifying generated files..."
     # 1. Check if rendered and copied files exist in the correct structure
     - test -f deployments/files/config/settings.conf || (echo "Rendered settings.conf not found!" && exit 1)
     - test -f deployments/files/data/static.txt || (echo "Copied static.txt not found!" && exit 1)
     # 2. Check content of the rendered file
     - grep 'hostname = My-Demo-App' deployments/files/config/settings.conf
+    - grep 'some_setting = value-a' deployments/files/config/settings.conf
     - echo "✅ Custom files generation test passed."
+  tags:
+    - docker
+
+
+validate-schema:
+  stage: test
+  image: python:3.9-slim
+  before_script:
+    - pip install yamale PyYAML
+  script:
+    - echo "Validating YAML schema..."
+    - python -c "import yamale; yamale_schema = yamale.make_schema('tests/demo-service.yml'); yamale_data = yamale.make_data('tests/demo-service.yml'); yamale.validate(yamale_schema, yamale_data)" || (cat .yamale_output.txt && exit 1)
+    - echo "Schema validation successful!"
   tags:
     - docker
