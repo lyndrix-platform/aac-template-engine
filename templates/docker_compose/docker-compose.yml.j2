@@ -30,11 +30,14 @@ services:
 {% for opt in deployments.docker_compose.security_opts %}
       - {{ opt }}
 {% endfor %}
+{% if data.service.logging %}
     logging:
-      driver: "{{ deployments.docker_compose.logging.driver }}"
-      options:
-        max-size: "{{ deployments.docker_compose.logging.options['max-size'] }}"
-        max-file: "{{ deployments.docker_compose.logging.options['max-file'] }}"
+      driver: {{ data.service.logging.driver }}
+{% endif %}
+
+
+
+
     labels:
       # === Traefik Labels ===
 {% if config.routing_enabled %}
