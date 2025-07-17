@@ -34,7 +34,7 @@ stages:
     - cp -r aac-template-engine/templates .
   script:
     - echo "Generating '$DEPLOYMENT_TYPE' deployment..."
-    - python aac-template-engine/scripts/generate_manifest.py --ssot-file service.yml --deployment-type $DEPLOYMENT_TYPE
+    - python aac-template-engine/scripts/generate_manifest.py --ssot-json "$(cat service.yml)" --template-path aac-template-engine --deployment-type $DEPLOYMENT_TYPE
   artifacts:
     paths:
       - deployments/
@@ -50,8 +50,8 @@ generate-docker-compose:
 generate-custom-files:
   extends: .generate-job
   script:
-    - echo "Processing custom files from custom_templates/files/..."
-    - python aac-template-engine/scripts/generate_manifest.py --ssot-file service.yml --process-files
+    - echo "Processing custom files..."
+    - python aac-template-engine/scripts/generate_manifest.py --ssot-json "$(cat service.yml)" --template-path aac-template-engine --process-files
   rules:
     - if: '$CI_COMMIT_BRANCH == "dev"'
       exists:
