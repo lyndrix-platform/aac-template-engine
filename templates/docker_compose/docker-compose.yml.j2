@@ -30,9 +30,9 @@ services:
 {% for opt in deployments.docker_compose.security_opts %}
       - {{ opt }}
 {% endfor %}
-{% if data.service.logging %}
+{% if deployments.docker_compose.logging %}
     logging:
-      driver: {{ data.service.logging.driver }}
+      driver: {{ deployments.docker_compose.logging.driver }}
 {% endif %}
 
 
