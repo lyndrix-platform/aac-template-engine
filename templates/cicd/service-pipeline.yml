@@ -33,8 +33,9 @@ stages:
     - git clone "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
     - cp -r aac-template-engine/templates .
   script:
+    - SSOT_JSON=$(python -c 'import sys, yaml, json; print(json.dumps(yaml.safe_load(sys.stdin)))' < service.yml)
     - echo "Generating '$DEPLOYMENT_TYPE' deployment..."
-    - python aac-template-engine/scripts/generate_manifest.py --ssot-json "$(cat service.yml)" --template-path aac-template-engine --deployment-type "$DEPLOYMENT_TYPE" || exit 1
+    - python aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --deployment-type "$DEPLOYMENT_TYPE" || exit 1
 
   artifacts:
     paths:
@@ -51,8 +52,9 @@ generate-docker-compose:
 generate-custom-files:
   extends: .generate-job
   script:
+    - SSOT_JSON=$(python -c 'import sys, yaml, json; print(json.dumps(yaml.safe_load(sys.stdin)))' < service.yml)
     - echo "Processing custom files..."
-    - python aac-template-engine/scripts/generate_manifest.py --ssot-json "$(cat service.yml)" --template-path aac-template-engine --process-files || exit 1
+    - python aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --process-files || exit 1
   rules:
     - if: '$CI_COMMIT_BRANCH == "dev"'
       exists:
