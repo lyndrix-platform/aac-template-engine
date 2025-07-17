@@ -25,7 +25,7 @@ test-docker-compose-generation:
     - echo "Testing docker-compose generation..."
     # We need to copy the test templates to the location the script expects them
     - cp -r tests/templates .
-    - python scripts/generate_manifest.py --ssot-file tests/demo-service.yml --deployment-type docker_compose
+    - python scripts/generate_manifest.py --ssot-json "$(cat tests/demo-service.yml)" --template-path . --deployment-type docker_compose
     - echo "Verifying generated files..."
     # 1. Check if files were created
     - test -f deployments/docker_compose/docker-compose.yml || (echo "docker-compose.yml not found!" && exit 1)
@@ -42,7 +42,7 @@ test-custom-files-generation:
     - echo "Testing custom files generation..."
     # We need to copy the test templates to the location the script expects them
     - cp -r tests/custom_templates .
-    - python scripts/generate_manifest.py --ssot-file tests/demo-service.yml --process-files
+    - python scripts/generate_manifest.py --ssot-json "$(cat tests/demo-service.yml)" --template-path . --process-files
     - echo "Verifying generated files..."
     # 1. Check if rendered and copied files exist in the correct structure
     - test -f deployments/files/config/settings.conf || (echo "Rendered settings.conf not found!" && exit 1)
