@@ -34,7 +34,8 @@ stages:
     - cp -r aac-template-engine/templates .
   script:
     - echo "Generating '$DEPLOYMENT_TYPE' deployment..."
-    - python aac-template-engine/scripts/generate_manifest.py --ssot-json "$(cat service.yml)" --template-path aac-template-engine --deployment-type "$DEPLOYMENT_TYPE"
+    - python aac-template-engine/scripts/generate_manifest.py --ssot-json "$(cat service.yml)" --template-path aac-template-engine --deployment-type "$DEPLOYMENT_TYPE" || exit 1
+
   artifacts:
     paths:
       - deployments/
@@ -51,7 +52,7 @@ generate-custom-files:
   extends: .generate-job
   script:
     - echo "Processing custom files..."
-    - python aac-template-engine/scripts/generate_manifest.py --ssot-json "$(cat service.yml)" --template-path aac-template-engine --process-files
+    - python aac-template-engine/scripts/generate_manifest.py --ssot-json "$(cat service.yml)" --template-path aac-template-engine --process-files || exit 1
   rules:
     - if: '$CI_COMMIT_BRANCH == "dev"'
       exists:
