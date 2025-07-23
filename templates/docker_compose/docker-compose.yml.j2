@@ -47,7 +47,10 @@ services:
       - "traefik.http.routers.${SERVICE_NAME}.entrypoints={{ config.entrypoint }}"
       - "traefik.http.routers.${SERVICE_NAME}.tls=true"
       - "traefik.http.routers.${SERVICE_NAME}.tls.certresolver={{ config.cert_resolver }}"
-      - "traefik.http.services.${SERVICE_NAME}.loadbalancer.server.port={{ (ports | selectattr('name', 'equalto', 'dashboard') | first).port }}"
+{% set dashboard_port = (ports | selectattr('name', 'equalto', 'dashboard') | list | first) %}
+{% set web_port = (ports | selectattr('name', 'equalto', 'web') | list | first) %}
+{% set service_port = dashboard_port.port if dashboard_port else (web_port.port if web_port else (ports | first).port) %}
+      - "traefik.http.services.${SERVICE_NAME}.loadbalancer.server.port={{ service_port }}"
 {% endif %}
 
       # === AutoDNS Labels ===

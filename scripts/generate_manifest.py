@@ -55,6 +55,7 @@ def process_templates(template_paths: list, output_base: str, context: dict):
                 f.write(rendered_content)
         except Exception as e:
             print(f"ERROR: Failed to render {template_file}: {e}", file=sys.stderr)
+            sys.exit(1)
 
 
 def main():
