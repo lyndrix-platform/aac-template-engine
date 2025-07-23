@@ -17,11 +17,15 @@ services:
 {% for p in ports %}
       - "{{ p.port }}:{{ p.port }}"
 {% endfor %}
+{% if (deployments.docker_compose.docker_socket_access) or (volumes | length > 0) %}
     volumes:
-      - "{{ deployments.docker_compose.docker_socket_path }}:/var/run/docker.sock:ro"
+{% if deployments.docker_compose.docker_socket_access %}
+      - "{{ deployments.docker_compose.docker_socket_path | default('/var/run/docker.sock') }}:/var/run/docker.sock:ro"
+{% endif %}
 {% for v in volumes %}
       - "${DEFAULT_DOCKER_DIR}/${SERVICE_NAME_LOWERCASE}/{{ v.name }}:{{ v.path }}"
 {% endfor %}
+{% endif %}
     networks:
 {% for net_name in deployments.docker_compose.networks_to_join %}
       - {{ net_name }}

@@ -10,6 +10,8 @@
 stages:
   - test
 
+## ADD SOME JOBS TO TEST ANSIBLE Deployment as well..
+
 
 .test-template:
   stage: test
