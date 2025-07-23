@@ -81,22 +81,26 @@ validate-docker-compose:
   rules:
     - if: '$CI_COMMIT_BRANCH == "dev"' # NEU: Nur auf dev ausführen
 
+.git-auth-setup:
+  before_script:
+    - apk add --no-cache git
+    - git config --global user.email "ci-bot@${CI_SERVER_HOST}"
+    - git config --global user.name "GitLab CI Bot"
+    # Use the 'store' credential helper for robust, non-interactive authentication
+    - git config --global credential.helper 'store'
+    - echo "https://gitlab-ci-token:${GIT_PUSH_TOKEN}@${CI_SERVER_HOST}" > ~/.git-credentials
+    # Set the remote URL without credentials; the helper will provide them
+    - git remote set-url origin "https://${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+
 commit-generated-files:
   stage: commit
   image: alpine:latest
+  extends: .git-auth-setup
   needs:
     - generate-docker-compose
     - validate-docker-compose
     - job: generate-custom-files
       optional: true
-  # ... (before_script und script bleiben unverändert) ...
-  before_script:
-    - apk add --no-cache git
-    - git config --global user.email "ci-bot@${CI_SERVER_HOST}"
-    - git config --global user.name "GitLab CI Bot"
-    # Use .netrc for secure, clean authentication instead of embedding the token in the URL
-    - echo "machine ${CI_SERVER_HOST} login gitlab-ci-token password ${GIT_PUSH_TOKEN}" > ~/.netrc
-    - git remote set-url origin "https://${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
   script:
     - git add deployments/
     - |
@@ -114,15 +118,11 @@ commit-generated-files:
 promote-to-test:
   stage: promote
   image: alpine:latest
+  extends: .git-auth-setup
   needs:
     - commit-generated-files
-  # ... (script bleibt unverändert) ...
   script:
     - echo "Promoting dev branch to test branch..."
-    - apk add --no-cache git
-    - git config --global user.email "ci-bot@${CI_SERVER_HOST}"
-    - git config --global user.name "GitLab CI Bot"
-    - git remote set-url origin "https://gitlab-ci-token:${GIT_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
     - git fetch origin
     - git reset --hard origin/dev
     - git push -f origin HEAD:test
@@ -132,15 +132,11 @@ promote-to-test:
 promote-to-production:
   stage: promote
   image: alpine:latest
+  extends: .git-auth-setup
   needs:
     - promote-to-test
-  # ... (script bleibt unverändert) ...
   script:
     - echo "Promoting test branch to production (main) branch..."
-    - apk add --no-cache git
-    - git config --global user.email "ci-bot@${CI_SERVER_HOST}"
-    - git config --global user.name "GitLab CI Bot"
-    - git remote set-url origin "https://gitlab-ci-token:${GIT_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
     - git fetch origin
     - git reset --hard origin/test
     - git push -f origin HEAD:main
