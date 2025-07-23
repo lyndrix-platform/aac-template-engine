@@ -14,6 +14,26 @@ import argparse
 import shutil
 from jinja2 import Environment, FileSystemLoader, ChoiceLoader
 
+def render_ssot_recursively(data: dict) -> dict:
+    """
+    Recursively renders Jinja2 templates within the SSoT data structure.
+    This mimics Ansible's `lookup('template', ...)` behavior, ensuring that
+    data passed from any source is fully resolved before being used.
+    """
+    # Convert the dict to a JSON string, which we'll treat as a template.
+    template_string = json.dumps(data)
+
+    # Create a Jinja2 environment and template object from the string.
+    # We don't need a loader as we are loading from a string.
+    env = Environment(trim_blocks=True, lstrip_blocks=True)
+    template = env.from_string(template_string)
+
+    # Render the template using the data itself as the context.
+    rendered_string = template.render(data)
+
+    # Convert the rendered JSON string back to a Python dict.
+    return json.loads(rendered_string)
+
 def process_templates(template_paths: list, output_base: str, context: dict):
     """
     Finds all unique .j2 templates across a list of directories,
@@ -71,8 +91,13 @@ def main():
     args = parser.parse_args()
 
     try:
-        data = json.loads(args.ssot_json)
-        
+        initial_data = json.loads(args.ssot_json)
+
+        # Resolve any Jinja2 templates within the SSoT data itself.
+        # This makes the script idempotent and compatible with both Ansible (pre-rendered)
+        # and raw CI (un-rendered) data sources.
+        data = render_ssot_recursively(initial_data)
+
         # --- DEBUG: Print the exact data being used for rendering ---
         print("--- SCRIPT: Using the following data for rendering ---", file=sys.stderr)
         print(json.dumps(data.get("deployments", {}).get("docker_compose", {}).get("stack_env"), indent=4), file=sys.stderr)
