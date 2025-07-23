@@ -94,7 +94,9 @@ commit-generated-files:
     - apk add --no-cache git
     - git config --global user.email "ci-bot@${CI_SERVER_HOST}"
     - git config --global user.name "GitLab CI Bot"
-    - git remote set-url origin "https://gitlab-ci-token:${GIT_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+    # Use .netrc for secure, clean authentication instead of embedding the token in the URL
+    - echo "machine ${CI_SERVER_HOST} login gitlab-ci-token password ${GIT_PUSH_TOKEN}" > ~/.netrc
+    - git remote set-url origin "https://${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
   script:
     - git add deployments/
     - |
