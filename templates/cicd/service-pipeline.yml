@@ -88,7 +88,7 @@ validate-docker-compose:
     - git config --global user.name "GitLab CI Bot"
     # Use the 'store' credential helper for robust, non-interactive authentication
     - git config --global credential.helper 'store'
-    - echo "https://gitlab-ci-token:${GIT_PUSH_TOKEN}@${CI_SERVER_HOST}" > ~/.git-credentials
+    - echo "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}" > ~/.git-credentials
     # Set the remote URL without credentials; the helper will provide them
     - git remote set-url origin "https://${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
 
@@ -152,7 +152,7 @@ promote-to-production:
 #    - apk add --no-cache git
 #    - git config --global user.email "ci-bot@${CI_SERVER_HOST}"
 #    - git config --global user.name "GitLab CI Bot"
-#    - git remote set-url origin "https://gitlab-ci-token:${GIT_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+#    - git remote set-url origin "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
 #  script:
 #    - export TAG_VERSION=$(date +%Y.%m.%d)-$(git rev-parse --short HEAD)
 #    - echo "Creating and pushing tag: $TAG_VERSION"
