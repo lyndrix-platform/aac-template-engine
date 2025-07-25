@@ -20,19 +20,34 @@ def render_ssot_recursively(data: dict) -> dict:
     This mimics Ansible's `lookup('template', ...)` behavior, ensuring that
     data passed from any source is fully resolved before being used.
     """
-    # Convert the dict to a JSON string, which we'll treat as a template.
-    template_string = json.dumps(data)
-
-    # Create a Jinja2 environment and template object from the string.
-    # We don't need a loader as we are loading from a string.
+    # Create a Jinja2 environment.
     env = Environment(trim_blocks=True, lstrip_blocks=True)
-    template = env.from_string(template_string)
 
-    # Render the template using the data itself as the context.
-    rendered_string = template.render(data)
+    # Convert the initial dict to a JSON string.
+    previous_render = ""
+    current_render = json.dumps(data)
 
-    # Convert the rendered JSON string back to a Python dict.
-    return json.loads(rendered_string)
+    # Loop to allow for multi-pass rendering, e.g., {{ a }} -> {{ b }} -> c.
+    # This is necessary for nested templates like `{{ dependencies.database.name }}`
+    # which itself contains `{{ service.name }}`.
+    # We'll loop up to 10 times or until the output stabilizes.
+    for _ in range(10):
+        if previous_render == current_render:
+            # No more changes, rendering is stable.
+            break
+
+        previous_render = current_render
+
+        # The context for rendering is the last rendered version of the data.
+        context = json.loads(previous_render)
+        template = env.from_string(previous_render)
+        current_render = template.render(context)
+    else:
+        # This 'else' belongs to the 'for' loop. It runs if the loop finished without a `break`.
+        print("WARNING: Recursive rendering did not stabilize after 10 passes. Check for circular references in service.yml.", file=sys.stderr)
+
+    # Convert the final rendered JSON string back to a Python dict.
+    return json.loads(current_render)
 
 def process_templates(template_paths: list, output_base: str, context: dict):
     """
