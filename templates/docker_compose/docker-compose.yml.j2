@@ -1,90 +1,176 @@
+version: "3.8"
+
 services:
-  {{ service.name }}:
-    image: "${SERVICE_IMAGE_NAME}:${SERVICE_IMAGE_TAG}"
-    container_name: ${SERVICE_NAME}
-    hostname: ${SERVICE_HOSTNAME}
-    restart: ${SERVICE_RESTART_POLICY}
-    {% if deployments.docker_compose.command is defined and deployments.docker_compose.command %}
+  # --- Main Application Service ---
+  {{ service.name | lower }}:
+    image: "{{ service.image_repo }}:{{ service.image_tag }}"
+    container_name: "{{ service.name | lower }}"
+    hostname: "{{ service.hostname | default(service.name) }}"
+    restart: "{{ deployments.docker_compose.restart_policy | default('always') }}"
+
+    {% if deployments.docker_compose.command is defined %}
     command:
       {% for cmd_item in deployments.docker_compose.command %}
       - "{{ cmd_item }}"
       {% endfor %}
     {% endif %}
+
     env_file: 
       - .env
       - stack.env
+
+    {% if deployments.docker_compose.depends_on is defined %}
+    depends_on:
+      {% for dep in deployments.docker_compose.depends_on %}
+      {{ dep.service }}:
+        condition: {{ dep.condition }}
+      {% endfor %}
+    {% endif %}
+
+    {% if ports is defined and ports %}
     ports:
-{% for p in ports %}
+      {% for p in ports %}
       - "{{ p.port }}:{{ p.port }}"
-{% endfor %}
-{% if (deployments.docker_compose.docker_socket_access) or (volumes | length > 0) %}
+      {% endfor %}
+    {% endif %}
+
+    {% if volumes is defined and volumes %}
     volumes:
-{% if deployments.docker_compose.docker_socket_access %}
-      - "{{ deployments.docker_compose.docker_socket_path | default('/var/run/docker.sock') }}:/var/run/docker.sock:ro"
-{% endif %}
-{% for v in volumes %}
-      - "${DEFAULT_DOCKER_DIR}/${SERVICE_NAME_LOWERCASE}/{{ v.name }}:{{ v.path }}"
-{% endfor %}
-{% endif %}
+      {% for v in volumes %}
+      - "{{ deployments.docker_compose.host_base_path }}/{{ service.name | lower }}/{{ v.name }}:{{ v.path }}"
+      {% endfor %}
+    {% endif %}
+
     networks:
-{% for net_name in deployments.docker_compose.networks_to_join %}
+      {% for net_name in deployments.docker_compose.networks_to_join %}
       - {{ net_name }}
-{% endfor %}
+      {% endfor %}
+
+    {% if deployments.docker_compose.healthcheck is defined %}
+    healthcheck:
+      test: {{ deployments.docker_compose.healthcheck.test | tojson }}
+      interval: {{ deployments.docker_compose.healthcheck.interval | default('30s') }}
+      timeout: {{ deployments.docker_compose.healthcheck.timeout | default('5s') }}
+      retries: {{ deployments.docker_compose.healthcheck.retries | default(3) }}
+    {% endif %}
+
+    {% if deployments.docker_compose.security_opts is defined %}
     security_opt:
-{% for opt in deployments.docker_compose.security_opts %}
+      {% for opt in deployments.docker_compose.security_opts %}
       - {{ opt }}
-{% endfor %}
+      {% endfor %}
+    {% endif %}
+
 {% if deployments.docker_compose.logging %}
     logging:
       driver: {{ deployments.docker_compose.logging.driver }}
+      options:
+      {% for key, value in deployments.docker_compose.logging.options.items() %}
+        "{{ key }}": "{{ value }}"
+      {% endfor %}
 {% endif %}
-
-
-
 
     labels:
       # === Traefik Labels ===
 {% if config.routing_enabled %}
       - "traefik.enable=true"
-      - "traefik.docker.network=${DEFAULT_NETWORK_SECURED}"
-      - "traefik.http.routers.${SERVICE_NAME}.rule=Host(`${SERVICE_NAME}.${SERVICE_DOMAIN_NAME}`)" 
-      - "traefik.http.routers.${SERVICE_NAME}.entrypoints={{ config.entrypoint }}"
-      - "traefik.http.routers.${SERVICE_NAME}.tls=true"
-      - "traefik.http.routers.${SERVICE_NAME}.tls.certresolver={{ config.cert_resolver }}"
+      - "traefik.docker.network={{ deployments.docker_compose.network_definitions.secured.name }}"
+      - "traefik.http.routers.{{ service.name }}.rule=Host(`{{ service.hostname | default(service.name) }}.{{ config.domain_name }}`)"
+      - "traefik.http.routers.{{ service.name }}.entrypoints={{ config.entrypoint }}"
+      - "traefik.http.routers.{{ service.name }}.tls=true"
+      - "traefik.http.routers.{{ service.name }}.tls.certresolver={{ config.cert_resolver }}"
 {% set dashboard_port = (ports | selectattr('name', 'equalto', 'dashboard') | list | first) %}
 {% set web_port = (ports | selectattr('name', 'equalto', 'web') | list | first) %}
-{% set service_port = dashboard_port.port if dashboard_port else (web_port.port if web_port else (ports | first).port) %}
-      - "traefik.http.services.${SERVICE_NAME}.loadbalancer.server.port={{ service_port }}"
+{% set http_port = (ports | selectattr('name', 'equalto', 'http') | list | first) %}
+{% set service_port = dashboard_port.port if dashboard_port else (web_port.port if web_port else (http_port.port if http_port else (ports | first).port)) %}
+      - "traefik.http.services.{{ service.name }}.loadbalancer.server.port={{ service_port }}"
 {% endif %}
 
       # === AutoDNS Labels ===
-{% if config.integrations.autodns.enabled %}
-      - "auto-dns.customDNS.${SERVICE_NAME}=true"
+{% if config.integrations is defined and config.integrations.autodns is defined and config.integrations.autodns.enabled %}
+      - "auto-dns.customDNS.{{ service.name }}=true"
 {% if config.integrations.autodns.create_wildcard %}
-      - "auto-dns.createWildcard.${SERVICE_NAME}=true"
+      - "auto-dns.createWildcard.{{ service.name }}=true"
 {% endif %}
-      - "auto-dns.customDOMAIN.${SERVICE_NAME}=${SERVICE_DOMAIN_NAME}"
-      - "auto-dns.customHost.${SERVICE_NAME}=${SERVICE_NAME}"
+      - "auto-dns.customDOMAIN.{{ service.name }}={{ config.domain_name }}"
+      - "auto-dns.customHost.{{ service.name }}={{ service.hostname | default(service.name) }}"
 {% endif %}
 
       # === Homepage Labels ===
-{% if config.integrations.homepage.enabled %}
-      - "homepage.group=${SERVICE_CATEGORY}"
-      - "homepage.name=${SERVICE_NAME} ${SERVICE_HOSTNAME}"
-      - "homepage.href=https://${SERVICE_NAME}.${SERVICE_DOMAIN_NAME}"
-      - "homepage.icon=${SERVICE_ICON}"
-      - "homepage.description=${SERVICE_DESCRIPTION}"
-{% if deployments.docker_compose.dot_env.HOMEPAGE_WIDGET_TYPE is defined %}
-      - "homepage.widget.type=${HOMEPAGE_WIDGET_TYPE}"
-      - "homepage.widget.slug=${HOMEPAGE_WIDGET_SLUG}"
-      - "homepage.widget.url=https://${SERVICE_NAME}.${SERVICE_DOMAIN_NAME}"
-      - "homepage.showStats=true"
+{% if config.integrations is defined and config.integrations.homepage is defined and config.integrations.homepage.enabled %}
+      - "homepage.group={{ service.category }}"
+      - "homepage.name={{ service.name }}"
+      - "homepage.href=https://{{ service.hostname | default(service.name) }}.{{ config.domain_name }}"
+      - "homepage.icon={{ service.icon }}"
+      - "homepage.description={{ service.description }}"
+{% if config.integrations.homepage.widget is defined %}
+      - "homepage.widget.type={{ config.integrations.homepage.widget.type }}"
+      - "homepage.widget.url=https://{{ service.hostname | default(service.name) }}.{{ config.domain_name }}"
+{% if config.integrations.homepage.widget.key is defined %}
+      - "homepage.widget.key={{ config.integrations.homepage.widget.key }}"
 {% endif %}
+{% endif %}
+{% endif %}
+
+{% if dependencies is defined and dependencies %}
+  # --- Service Dependencies ---
+{% for dep_name, dep_config in dependencies.items() %}
+  {{ dep_config.name }}:
+    image: "{{ dep_config.image_repo }}:{{ dep_config.image_tag }}"
+    container_name: "{{ dep_config.name }}"
+    hostname: "{{ dep_config.name }}"
+    restart: "{{ dep_config.restart_policy | default('always') }}"
+    {% if dep_config.command is defined %}
+    command: "{{ dep_config.command }}"
+    {% endif %}
+    {% if dep_config.user is defined %}
+    user: "{{ dep_config.user }}"
+    {% endif %}
+    env_file:
+      - .env
+      - stack.env
+    {% if dep_config.depends_on is defined %}
+    depends_on:
+      {% for dep in dep_config.depends_on %}
+      {{ dep.service }}:
+        condition: {{ dep.condition }}
+      {% endfor %}
+    {% endif %}
+    {% if dep_config.volumes is defined %}
+    volumes:
+      {% for vol in dep_config.volumes %}
+      - "{{ deployments.docker_compose.host_base_path }}/{{ service.name | lower }}/{{ vol.name }}:{{ vol.path }}"
+      {% endfor %}
+    {% endif %}
+    {% if dep_config.networks_to_join is defined %}
+    networks:
+      {% for net_name in dep_config.networks_to_join %}
+      - {{ net_name }}
+      {% endfor %}
+    {% endif %}
+    {% if dep_config.healthcheck is defined %}
+    healthcheck:
+      test: {{ dep_config.healthcheck.test | tojson }}
+      interval: {{ dep_config.healthcheck.interval | default('30s') }}
+      timeout: {{ dep_config.healthcheck.timeout | default('5s') }}
+      retries: {{ dep_config.healthcheck.retries | default(3) }}
+    {% endif %}
+    {% if dep_config.labels is defined %}
+    labels:
+      {% for label in dep_config.labels %}
+      - "{{ label }}"
+      {% endfor %}
+    {% endif %}
+{% endfor %}
 {% endif %}
 
 networks:
 {% for net_name, net_def in deployments.docker_compose.network_definitions.items() %}
   {{ net_name }}:
-    external: {{ net_def.external }}
-    name: "${DEFAULT_NETWORK_{{ net_name | upper }}}"
+    name: "{{ net_def.name }}"
+    {% if net_def.external is defined and net_def.external %}
+    external: true
+    {% else %}
+    driver: "{{ net_def.driver | default('bridge') }}"
+    {% endif %}
 {% endfor %}
