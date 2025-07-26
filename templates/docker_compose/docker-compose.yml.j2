@@ -30,7 +30,7 @@ services:
     {% if ports is defined and ports %}
     ports:
       {% for p in ports %}
-      - "{{ p.port }}:{{ p.port }}"
+      - "{{ p.external_port | default(p.port) }}:{{ p.port }}"
       {% endfor %}
     {% endif %}
 
