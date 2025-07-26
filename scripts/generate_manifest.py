@@ -108,6 +108,10 @@ def main():
     try:
         initial_data = json.loads(args.ssot_json)
 
+        # Ensure 'dependencies' key exists to prevent rendering errors for services
+        # that have optional dependencies but reference them in their SSoT.
+        initial_data.setdefault('dependencies', {})
+
         # Resolve any Jinja2 templates within the SSoT data itself.
         # This makes the script idempotent and compatible with both Ansible (pre-rendered)
         # and raw CI (un-rendered) data sources.
