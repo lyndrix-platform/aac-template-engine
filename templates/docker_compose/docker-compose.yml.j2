@@ -80,41 +80,41 @@ services:
     labels:
       # === Traefik Labels ===
       {% if config.routing_enabled %}
-      - "traefik.enable=true"
-      - "traefik.docker.network={{ deployments.docker_compose.network_definitions.secured.name }}"
-      - "traefik.http.routers.{{ service.name }}.rule=Host(`{{ service.hostname | default(service.name) }}.{{ config.domain_name }}`)"
-      - "traefik.http.routers.{{ service.name }}.entrypoints={{ config.entrypoint }}"
-      - "traefik.http.routers.{{ service.name }}.tls=true"
-      - "traefik.http.routers.{{ service.name }}.tls.certresolver={{ config.cert_resolver }}"
+      traefik.enable: "true"
+      traefik.docker.network: "{{ deployments.docker_compose.network_definitions.secured.name }}"
+      traefik.http.routers.{{ service.name }}.rule: "Host(`{{ service.hostname | default(service.name) }}.{{ config.domain_name }}`)"
+      traefik.http.routers.{{ service.name }}.entrypoints: "{{ config.entrypoint }}"
+      traefik.http.routers.{{ service.name }}.tls: "true"
+      traefik.http.routers.{{ service.name }}.tls.certresolver: "{{ config.cert_resolver }}"
       {% set dashboard_port = (ports | selectattr('name', 'equalto', 'dashboard') | list | first) %}
       {% set web_port = (ports | selectattr('name', 'equalto', 'web') | list | first) %}
       {% set http_port = (ports | selectattr('name', 'equalto', 'http') | list | first) %}
       {% set service_port = dashboard_port.port if dashboard_port else (web_port.port if web_port else (http_port.port if http_port else (ports | first).port)) %}
-      - "traefik.http.services.{{ service.name }}.loadbalancer.server.port={{ service_port }}"
+      traefik.http.services.{{ service.name }}.loadbalancer.server.port: "{{ service_port }}"
       {% endif %}
 
       # === AutoDNS Labels ===
       {% if config.integrations is defined and config.integrations.autodns is defined and config.integrations.autodns.enabled %}
-      - "auto-dns.customDNS.{{ service.name }}=true"
+      auto-dns.customDNS.{{ service.name }}: "true"
       {% if config.integrations.autodns.create_wildcard %}
-      - "auto-dns.createWildcard.{{ service.name }}=true"
+      auto-dns.createWildcard.{{ service.name }}: "true"
       {% endif %}
-      - "auto-dns.customDOMAIN.{{ service.name }}={{ config.domain_name }}"
-      - "auto-dns.customHost.{{ service.name }}={{ service.hostname | default(service.name) }}"
+      auto-dns.customDOMAIN.{{ service.name }}: "{{ config.domain_name }}"
+      auto-dns.customHost.{{ service.name }}: "{{ service.hostname | default(service.name) }}"
       {% endif %}
 
       # === Homepage Labels ===
       {% if config.integrations is defined and config.integrations.homepage is defined and config.integrations.homepage.enabled %}
-      - "homepage.group={{ service.category }}"
-      - "homepage.name={{ service.name }}"
-      - "homepage.href=https://{{ service.hostname | default(service.name) }}.{{ config.domain_name }}"
-      - "homepage.icon={{ service.icon }}"
-      - "homepage.description={{ service.description }}"
+      homepage.group: "{{ service.category }}"
+      homepage.name: "{{ service.name }}"
+      homepage.href: "https://{{ service.hostname | default(service.name) }}.{{ config.domain_name }}"
+      homepage.icon: "{{ service.icon }}"
+      homepage.description: "{{ service.description }}"
       {% if config.integrations.homepage.widget is defined %}
-      - "homepage.widget.type={{ config.integrations.homepage.widget.type }}"
-      - "homepage.widget.url=https://{{ service.hostname | default(service.name) }}.{{ config.domain_name }}"
+      homepage.widget.type: "{{ config.integrations.homepage.widget.type }}"
+      homepage.widget.url: "https://{{ service.hostname | default(service.name) }}.{{ config.domain_name }}"
       {% if config.integrations.homepage.widget.key is defined %}
-      - "homepage.widget.key={{ config.integrations.homepage.widget.key }}"
+      homepage.widget.key: "{{ config.integrations.homepage.widget.key }}"
       {% endif %}
       {% endif %}
       {% endif %}
