@@ -1,0 +1,76 @@
+version: "3.8"
+
+services:
+  # --- Main Application Service ---
+  traefik-dev:
+    image: "traefik:v3.0"
+    container_name: "traefik-dev"
+    hostname: "traefik-dev"
+    restart: "always"
+
+    command:
+      - "--configFile=/etc/traefik/traefik.yml"
+
+    env_file: 
+      - .env
+      - stack.env
+
+
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"
+
+    volumes:
+      - "/export/docker/traefik-dev/data:/data"
+      - "/export/docker/traefik-dev/log:/log"
+      - "/export/docker/traefik-dev/config:/etc/traefik"
+      - "/export/docker/traefik-dev/letsencrypt:/letsencrypt"
+
+    networks:
+      - secured
+
+
+    security_opt:
+      - no-new-privileges:true
+
+    logging:
+      driver: json-file
+      options:
+        "max-size": "10m"
+        "max-file": "10"
+
+    labels:
+      # === Traefik Labels ===
+      - "traefik.enable=true"
+      - "traefik.docker.network=services-secured"
+      - "traefik.http.routers.traefik-dev.rule=Host(`traefik-dev.int.fam-feser.de`)"
+      - "traefik.http.routers.traefik-dev.entrypoints=websecure"
+      - "traefik.http.routers.traefik-dev.tls=true"
+      - "traefik.http.routers.traefik-dev.tls.certresolver=ionos"
+      - "traefik.http.services.traefik-dev.loadbalancer.server.port=8080"
+
+      # === AutoDNS Labels ===
+      - "auto-dns.customDNS.traefik-dev=true"
+      - "auto-dns.createWildcard.traefik-dev=true"
+      - "auto-dns.customDOMAIN.traefik-dev=int.fam-feser.de"
+      - "auto-dns.customHost.traefik-dev=traefik-dev"
+
+      # === Homepage Labels ===
+      - "homepage.group=Networking"
+      - "homepage.name=traefik-dev"
+      - "homepage.href=https://traefik-dev.int.fam-feser.de"
+      - "homepage.icon=https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/traefik.png"
+      - "homepage.description=A modern HTTP reverse proxy and load balancer."
+
+
+networks:
+  secured:
+    name: "services-secured"
+    external: true
+  exposed:
+    name: "services-exposed"
+    external: true
+  interconnect:
+    name: "docker-default"
+    external: true

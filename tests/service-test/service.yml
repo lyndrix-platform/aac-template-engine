@@ -1,0 +1,158 @@
+---
+# ===================================================================
+# Single Source of Truth (SSoT) for the Traefik Service
+# This file contains all information to generate configurations for
+# various deployment targets (Docker Compose, Kubernetes, etc.).
+# ===================================================================
+
+# -------------------------------------------------------------------
+# 1. Allgemeine, Deployment-unabhängige Service-Informationen
+# -------------------------------------------------------------------
+
+service:
+  name: "traefik-dev"
+  image_repo: "traefik"
+  image_tag: "v3.0"
+  description: "A modern HTTP reverse proxy and load balancer."
+  icon: "https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/traefik.png"
+  category: "Networking"
+  stage: "prod" # Deployment stage (e.g., prod, dev)
+  hostname: "{{ service.name }}"
+
+
+# -------------------------------------------------------------------
+# 2. Abstrakte Definition von Ports und Volumes
+# -------------------------------------------------------------------
+ports:
+  - name: web
+    port: 80
+    protocol: TCP
+  - name: websecure
+    port: 443
+    protocol: TCP
+  - name: dashboard
+    port: 8080
+    protocol: TCP
+
+volumes:
+  - name: data
+    path: "/data"
+    description: "Für Let's Encrypt Zertifikate und ACME"
+  - name: log
+    path: "/log"
+    description: "Traefik Access- und App-Logs"
+  - name: config
+    path: "/etc/traefik"
+    description: "Statische und dynamische Konfigurationsdateien"
+  - name: letsencrypt
+    path: "/letsencrypt"
+    description: "Let's Encrypt Zertifikate"
+
+# -------------------------------------------------------------------
+# 3. Applikationsspezifische Konfiguration (Traefik)
+# -------------------------------------------------------------------
+config:
+  domain_name: "int.fam-feser.de" # Basis-Domain für Routing
+  dashboard_enabled: true
+  routing_enabled: true
+  cert_resolver: "ionos"
+  entrypoint: "websecure"
+  # Labels für Integrationen wie Homepage oder AutoDNS
+  integrations:
+    homepage:
+      enabled: true
+    autodns:
+      enabled: true
+      create_wildcard: true
+
+# -------------------------------------------------------------------
+# 4. Deployment-spezifische Konfigurationen
+# -------------------------------------------------------------------
+deployments:
+  # --- Konfiguration für Docker Compose ---
+  docker_compose:
+    command:
+      - "--configFile=/etc/traefik/traefik.yml"
+    restart_policy: "always"    
+    host_base_path: "/export/docker" # Basis-Pfad auf dem Host
+    docker_socket_path: "/var/run/docker.sock"    
+    # A list of networks the service should connect to.
+    # These are defined under network_definitions.
+    networks_to_join:
+      - secured
+    # Definitions of all available networks for this stack type
+    network_definitions:
+      secured:
+        name: "services-secured"
+        external: true
+      exposed:
+        name: "services-exposed"
+        external: true
+      interconnect:
+        name: "docker-default"
+        external: true
+    security_opts:
+      - "no-new-privileges:true"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "10"
+        
+    # Allgemeine Umgebungsvariablen für .env
+    dot_env:
+      PUID: 1000
+      PGID: 1000
+      TZ: "Europe/Berlin"
+      SERVICE_NAME: "{{ service.name }}"
+      SERVICE_NAME_LOWERCASE: "{{ service.name}}"
+      SERVICE_HOSTNAME: "{{ service.hostname }}"
+      SERVICE_DOMAIN_NAME: "{{ config.domain_name }}"
+      SERVICE_IMAGE_NAME: "{{ service.image_repo }}"
+      SERVICE_IMAGE_TAG: "{{ service.image_tag }}"
+      SERVICE_DESCRIPTION: "{{ service.description }}"
+      SERVICE_CATEGORY: "{{ service.category }}"
+      SERVICE_ICON: "{{ service.icon }}"
+      SERVICE_STAGE: "{{ service.stage }}"
+      SERVICE_RESTART_POLICY: "{{ deployments.docker_compose.restart_policy }}"
+      DEFAULT_DOCKER_DIR: "{{ deployments.docker_compose.host_base_path }}"      
+      DEFAULT_NETWORK_SECURED: "{{ deployments.docker_compose.network_definitions.secured.name }}"
+      DEFAULT_NETWORK_EXPOSED: "{{ deployments.docker_compose.network_definitions.exposed.name }}"
+      DEFAULT_NETWORK_INTERCONNECT: "{{ deployments.docker_compose.network_definitions.interconnect.name }}"
+      # Homepage Widget Integration
+      HOMEPAGE_WIDGET_TYPE: "traefik"
+      HOMEPAGE_WIDGET_SLUG: "traefik-dashboard"
+    # Service-specific env vars that will be written to stack.env
+    stack_env:
+      LOG_LEVEL: "info"
+      IONOS_API_KEY: "REDACTED"
+      SOME_TEST_VAR: "test-value"
+
+  # --- Konfiguration für Kubernetes (Beispiel) ---
+  kubernetes:
+    namespace: "networking"
+    replicas: 2
+    service_type: "LoadBalancer" # oder NodePort, ClusterIP
+    ingress:
+      enabled: true
+      class_name: "traefik" # oder nginx, etc.
+      tls_secret_name: "traefik-dashboard-tls"
+    persistent_volume_claims:
+      data:
+        storage_class: "ceph-rbd"
+        size: "1Gi"
+      log:
+        storage_class: "ceph-rbd"
+        size: "5Gi"
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+
+
+
+
+

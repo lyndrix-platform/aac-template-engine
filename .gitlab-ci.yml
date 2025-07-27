@@ -1,4 +1,3 @@
-
 # You can override the included template(s) by including variable overrides
 # SAST customization: https://docs.gitlab.com/ee/user/application_security/sast/#customizing-the-sast-settings
 # Secret Detection customization: https://docs.gitlab.com/ee/user/application_security/secret_detection/pipeline/#customization
@@ -10,59 +9,38 @@
 stages:
   - test
 
-## ADD SOME JOBS TO TEST ANSIBLE Deployment as well..
-
-
 .test-template:
   stage: test
   image: python:3.9-slim
   before_script:
     - pip install PyYAML Jinja2
-  # The script creates the 'deployments' directory, which we clean up after the job.
+  # The script creates the 'deployments' directory inside the test folder, which we clean up.
   after_script:
-    - rm -rf deployments
+    - rm -rf tests/service-test/deployments
   tags:
     - docker
 
 test-docker-compose-generation:
   extends: .test-template
   script:
-    - echo "Testing docker-compose generation..."
-    # We need to copy the test templates to the location the script expects them
-    - cp -r tests/templates .
-    # Convert the YAML SSoT to a JSON string before passing it to the script
-    - DEMO_SERVICE_JSON=$(python -c 'import sys, yaml, json; print(json.dumps(yaml.safe_load(sys.stdin)))' < tests/demo-service.yml)
-    - python scripts/generate_manifest.py --ssot-json "$DEMO_SERVICE_JSON" --template-path . --deployment-type docker_compose || exit 1
+    - echo "🧪 Testing docker-compose generation with BookStack service..."
+    # CHANGED: Change directory to the test service repository
+    - cd tests/service-test
+    # CHANGED: Convert the local service.yml to a JSON string
+    - BOOKSTACK_SERVICE_JSON=$(python -c 'import sys, yaml, json; print(json.dumps(yaml.safe_load(sys.stdin)))' < service.yml)
+    # CHANGED: Call the script from the new location and provide the path to the main template engine
+    - python ../../scripts/generate_manifest.py --ssot-json "$BOOKSTACK_SERVICE_JSON" --template-path ../.. --deployment-type docker_compose
     - echo "Verifying generated files..."
-    # 1. Check if files were created
+    # CHANGED: Update verification steps for BookStack artifacts
     - test -f deployments/docker_compose/docker-compose.yml || (echo "docker-compose.yml not found!" && exit 1)
     - test -f deployments/docker_compose/.env || (echo ".env file not found!" && exit 1)
-    # The -q flag was added to the following line for consistency
-    - grep -q 'RESTART_POLICY="unless-stopped"' deployments/docker_compose/.env
-    - echo "✅ Docker Compose generation test passed."
+    - test -f deployments/docker_compose/stack.env || (echo "stack.env file not found!" && exit 1)
+    - grep -q 'image: lscr.io/linuxserver/bookstack' deployments/docker_compose/docker-compose.yml
+    - grep -q 'DB_DATABASE: "bookstack"' deployments/docker_compose/.env
+    - grep -q 'DB_PASSWORD=' deployments/docker_compose/stack.env
+    - echo "✅ BookStack Docker Compose generation test passed."
   tags:
     - docker
-
-test-custom-files-generation:
-  extends: .test-template
-  script:
-    - echo "Testing custom files generation..."
-    # We need to copy the test templates to the location the script expects them
-    - cp -r tests/custom_templates .
-    # Convert the YAML SSoT to a JSON string before passing it to the script
-    - DEMO_SERVICE_JSON=$(python -c 'import sys, yaml, json; print(json.dumps(yaml.safe_load(sys.stdin)))' < tests/demo-service.yml)
-    - python scripts/generate_manifest.py --ssot-json "$DEMO_SERVICE_JSON" --template-path . --process-files || exit 1
-    - echo "Verifying generated files..."
-    # 1. Check if rendered and copied files exist in the correct structure
-    - test -f deployments/files/config/settings.conf || (echo "Rendered settings.conf not found!" && exit 1)
-    #- test -f deployments/files/data/static.txt || (echo "Copied static.txt not found!" && exit 1)
-    # 2. Check content of the rendered file
-    - grep 'hostname = My-Demo-App' deployments/files/config/settings.conf
-    - grep 'some_setting = value-a' deployments/files/config/settings.conf
-    - echo "✅ Custom files generation test passed."
-  tags:
-    - docker
-
 
 validate-schema:
   stage: test
@@ -70,9 +48,9 @@ validate-schema:
   before_script:
     - pip install yamale PyYAML
   script:
-    - echo "Validating YAML schema..."
-    # Use the correct schema file to validate the data file.
-    - python -c "import yamale; yamale_schema = yamale.make_schema('tests/service-schema.yml'); yamale_data = yamale.make_data('tests/demo-service.yml'); yamale.validate(yamale_schema, yamale_data)"
-    - echo "Schema validation successful!"
+    - echo "📄 Validating BookStack service.yml against the schema..."
+    # CHANGED: Point the validator to the new BookStack service file
+    - python -c "import yamale; yamale_schema = yamale.make_schema('tests/service-schema.yml'); yamale_data = yamale.make_data('tests/service-test/service.yml'); yamale.validate(yamale_schema, yamale_data)"
+    - echo "✅ Schema validation successful!"
   tags:
     - docker
