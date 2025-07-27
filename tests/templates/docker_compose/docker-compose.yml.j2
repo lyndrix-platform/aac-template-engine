@@ -1,6 +1,6 @@
 version: '3.8'
 services:
   app:
-    image: "{{ data.service.image_repo }}:latest"
-    container_name: "{{ data.deployments.docker_compose.container_name_lowercase }}"
+    image: "{{ service.image_repo }}:latest"
+    container_name: "{{ service.name | lower }}"
     restart: "${RESTART_POLICY}"
