@@ -16,3 +16,5 @@ yaml-syntax-check:
     - |
       find . -type f \( -name "*.yml" -o -name "*.yaml" \) -print0 | xargs -0 -n 1 python -c "import yaml, sys; print(f'-- Checking: {sys.argv[1]}'); yaml.safe_load(open(sys.argv[1]))"
     - echo "✅ Syntax check passed for all YAML files."
+  tags:
+    - docker
