@@ -20,39 +20,6 @@ stages:
   tags:
     - docker
 
-test-docker-compose-generation:
-  extends: .test-template
-  script:
-    - |
-      echo "🧪 Testing docker-compose generation with BookStack service..."
-      
-      # Navigate into the test service directory
-      cd tests/service-test
-      
-      echo "📄 Reading service.yml and converting to JSON..."
-      BOOKSTACK_SERVICE_JSON="$(python -c 'import sys, yaml, json; print(json.dumps(yaml.safe_load(sys.stdin)))' < service.yml)"
-      
-      # 🐞 CRITICAL DEBUG STEP: Print the JSON to see what the script will receive
-      echo "--- START OF JSON DATA ---"
-      echo "$BOOKSTACK_SERVICE_JSON"
-      echo "--- END OF JSON DATA ---"
-
-      echo "⚙️ Running manifest generator script..."
-      python ../../scripts/generate_manifest.py --ssot-json "$BOOKSTACK_SERVICE_JSON" --template-path ../.. --deployment-type docker_compose
-      
-      echo "🔎 Verifying generated files..."
-      test -f deployments/docker_compose/docker-compose.yml || (echo "docker-compose.yml not found!" && exit 1)
-      test -f deployments/docker_compose/.env || (echo ".env file not found!" && exit 1)
-      test -f deployments/docker_compose/stack.env || (echo "stack.env file not found!" && exit 1)
-      
-      grep -q 'image: lscr.io/linuxserver/bookstack' deployments/docker_compose/docker-compose.yml
-      grep -q 'DB_DATABASE: "bookstack"' deployments/docker_compose/.env
-      grep -q 'DB_PASSWORD=' deployments/docker_compose/stack.env
-      
-      echo "✅ BookStack Docker Compose generation test passed."
-  tags:
-    - docker
-
 validate-schema:
   stage: test
   image: python:3.9-slim
@@ -61,7 +28,41 @@ validate-schema:
   script:
     - echo "📄 Validating BookStack service.yml against the schema..."
     # Point the validator to the new BookStack service file
-    - python -c "import yamale; yamale_schema = yamale.make_schema('tests/service-schema.yml'); yamale_data = yamale.make_data('tests/service-test/service.yml'); yamale.validate(yamale_schema, yamale_data)"
+    - python -c "import yamale; yamale_schema = yamale.make_schema('tests/service-test/service.yml'); yamale_data = yamale.make_data('tests/service-test/service.yml'); yamale.validate(yamale_schema, yamale_data)"
     - echo "✅ Schema validation successful!"
   tags:
     - docker
+
+test-docker-compose-generation:
+  extends: .test-template
+  needs:
+    - validate-schema
+  script:
+    - |
+      echo "🧪 Testing docker-compose generation..."
+      
+      # Navigate into the test service directory
+      cd tests/service-test
+      
+      echo "📄 Displaying raw content of service.yml for verification:"
+      cat service.yml
+      echo "---"
+
+      echo "⚙️ Converting to JSON and running manifest generator..."
+      BOOKSTACK_SERVICE_JSON="$(python -c 'import sys, yaml, json; print(json.dumps(yaml.safe_load(sys.stdin)))' < service.yml)"
+      python ../../scripts/generate_manifest.py --ssot-json "$BOOKSTACK_SERVICE_JSON" --template-path ../.. --deployment-type docker_compose
+      
+      echo "🔎 Verifying generated files for BookStack..."
+      test -f deployments/docker_compose/docker-compose.yml || (echo "docker-compose.yml not found!" && exit 1)
+      test -f deployments/docker_compose/.env || (echo ".env file not found!" && exit 1)
+      test -f deployments/docker_compose/stack.env || (echo "stack.env file not found!" && exit 1)
+      
+      # These checks will now pass once the correct service.yml is in the repo
+      grep -q 'image: lscr.io/linuxserver/bookstack' deployments/docker_compose/docker-compose.yml
+      grep -q 'DB_DATABASE: "bookstack"' deployments/docker_compose/.env
+      grep -q 'DB_PASSWORD=' deployments/docker_compose/stack.env
+      
+      echo "✅ BookStack Docker Compose generation test passed."
+  tags:
+    - docker
+
