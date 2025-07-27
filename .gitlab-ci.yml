@@ -23,22 +23,25 @@ stages:
 test-docker-compose-generation:
   extends: .test-template
   script:
-    - echo "🧪 Testing docker-compose generation with BookStack service..."
-    # CHANGED: Change directory to the test service repository
-    - cd tests/service-test
-    # CHANGED: Convert the local service.yml to a JSON string
-    - BOOKSTACK_SERVICE_JSON=$(python -c 'import sys, yaml, json; print(json.dumps(yaml.safe_load(sys.stdin)))' < service.yml)
-    # CHANGED: Call the script from the new location and provide the path to the main template engine
-    - python ../../scripts/generate_manifest.py --ssot-json "$BOOKSTACK_SERVICE_JSON" --template-path ../.. --deployment-type docker_compose
-    - echo "Verifying generated files..."
-    # CHANGED: Update verification steps for BookStack artifacts
-    - test -f deployments/docker_compose/docker-compose.yml || (echo "docker-compose.yml not found!" && exit 1)
-    - test -f deployments/docker_compose/.env || (echo ".env file not found!" && exit 1)
-    - test -f deployments/docker_compose/stack.env || (echo "stack.env file not found!" && exit 1)
-    - grep -q 'image: lscr.io/linuxserver/bookstack' deployments/docker_compose/docker-compose.yml
-    - grep -q 'DB_DATABASE: "bookstack"' deployments/docker_compose/.env
-    - grep -q 'DB_PASSWORD=' deployments/docker_compose/stack.env
-    - echo "✅ BookStack Docker Compose generation test passed."
+    # FIXED: The entire script block is now a single multi-line string
+    # to prevent YAML parsing errors with comments.
+    - |
+      echo "🧪 Testing docker-compose generation with BookStack service..."
+      # Change directory to the test service repository
+      cd tests/service-test
+      # Convert the local service.yml to a JSON string
+      BOOKSTACK_SERVICE_JSON=$(python -c 'import sys, yaml, json; print(json.dumps(yaml.safe_load(sys.stdin)))' < service.yml)
+      # Call the script from the new location and provide the path to the main template engine
+      python ../../scripts/generate_manifest.py --ssot-json "$BOOKSTACK_SERVICE_JSON" --template-path ../.. --deployment-type docker_compose
+      echo "Verifying generated files..."
+      # Update verification steps for BookStack artifacts
+      test -f deployments/docker_compose/docker-compose.yml || (echo "docker-compose.yml not found!" && exit 1)
+      test -f deployments/docker_compose/.env || (echo ".env file not found!" && exit 1)
+      test -f deployments/docker_compose/stack.env || (echo "stack.env file not found!" && exit 1)
+      grep -q 'image: lscr.io/linuxserver/bookstack' deployments/docker_compose/docker-compose.yml
+      grep -q 'DB_DATABASE: "bookstack"' deployments/docker_compose/.env
+      grep -q 'DB_PASSWORD=' deployments/docker_compose/stack.env
+      echo "✅ BookStack Docker Compose generation test passed."
   tags:
     - docker
 
@@ -49,7 +52,7 @@ validate-schema:
     - pip install yamale PyYAML
   script:
     - echo "📄 Validating BookStack service.yml against the schema..."
-    # CHANGED: Point the validator to the new BookStack service file
+    # Point the validator to the new BookStack service file
     - python -c "import yamale; yamale_schema = yamale.make_schema('tests/service-schema.yml'); yamale_data = yamale.make_data('tests/service-test/service.yml'); yamale.validate(yamale_schema, yamale_data)"
     - echo "✅ Schema validation successful!"
   tags:
