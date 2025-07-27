@@ -60,7 +60,7 @@ def run_creation_logic(gitlab_url, private_token, target_group_path, template_pr
                 project.reload()
             if project.import_status == 'failed':
                 raise Exception(f"Der Import-Prozess (Fork) ist fehlgeschlagen: {project.import_error}")
-            project.delete_forked_from_link()
+            project.unfork()
             print(f"🎉 Projekt '{project.name_with_namespace}' erfolgreich und unabhängig erstellt.")
         
         # --- 2. Branches erstellen (idempotent) ---
