@@ -125,7 +125,7 @@ deployments:
     # Service-specific env vars that will be written to stack.env
     stack_env:
       LOG_LEVEL: "info"
-      IONOS_API_KEY: "REDACTED"
+      IONOS_API_KEY: "some.key"
       SOME_TEST_VAR: "test-value"
 
   # --- Konfiguration für Kubernetes (Beispiel) ---
