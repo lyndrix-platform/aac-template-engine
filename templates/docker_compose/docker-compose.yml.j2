@@ -77,6 +77,7 @@ services:
       {% endfor %}
     {% endif %}
 
+    {% if config.routing_enabled or (config.integrations and (config.integrations.autodns.enabled or config.integrations.homepage.enabled)) %}
     labels:
       # === Traefik Labels ===
       {% if config.routing_enabled %}
@@ -118,6 +119,7 @@ services:
       {% endif %}
       {% endif %}
       {% endif %}
+    {% endif %}
 
 {% if dependencies is defined and dependencies %}
   # --- Service Dependencies ---
