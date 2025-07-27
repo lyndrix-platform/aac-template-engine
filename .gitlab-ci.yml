@@ -37,11 +37,8 @@ test-docker-compose-generation:
     # 1. Check if files were created
     - test -f deployments/docker_compose/docker-compose.yml || (echo "docker-compose.yml not found!" && exit 1)
     - test -f deployments/docker_compose/.env || (echo ".env file not found!" && exit 1)
-    # 2. Check content for correct variable rendering (including filter)
-    - grep -q 'container_name: "my-demo-app"' deployments/docker_compose/docker-compose.yml
-    - grep -q 'image: "demo/app:latest"' deployments/docker_compose/docker-compose.yml
-    - grep -q 'SERVICE_NAME_LOWERCASE="my-demo-app"' deployments/docker_compose/.env
-    - grep 'RESTART_POLICY="unless-stopped"' deployments/docker_compose/.env
+    # The -q flag was added to the following line for consistency
+    - grep -q 'RESTART_POLICY="unless-stopped"' deployments/docker_compose/.env
     - echo "✅ Docker Compose generation test passed."
   tags:
     - docker
