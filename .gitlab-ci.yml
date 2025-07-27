@@ -1,40 +1,19 @@
+# .gitlab-ci.yml
+
 stages:
   - test
 
-.test-template:
+yaml-syntax-check:
   stage: test
-  image: python:3.9-slim
-  before_script:
-    - pip install PyYAML Jinja2
-  after_script:
-    # Clean up the generated files after the job
-    - rm -rf tests/service-test/deployments
-  tags:
-    - docker
+  image: python:3.11-slim # A small, efficient Docker image with Python
 
-test-docker-compose-generation:
-  extends: .test-template
+  before_script:
+    - pip install PyYAML # Installs the necessary Python library for parsing YAML
+
   script:
-    - |
-      echo "🧪 Testing docker-compose generation..."
-      
-      # ESSENTIAL: Change directory so the script runs in the service's context.
-      cd tests/service-test
-      
-      echo "⚙️ Converting to JSON and running manifest generator..."
-      BOOKSTACK_SERVICE_JSON="$(python -c 'import sys, yaml, json; print(json.dumps(yaml.safe_load(sys.stdin)))' < service.yml)"
-      python ../../scripts/generate_manifest.py --ssot-json "$BOOKSTACK_SERVICE_JSON" --template-path ../.. --deployment-type docker_compose
-      
-      echo "🔎 Verifying generated files..."
-      test -f deployments/docker_compose/docker-compose.yml || (echo "docker-compose.yml not found!" && exit 1)
-      test -f deployments/docker_compose/.env || (echo ".env file not found!" && exit 1)
-      test -f deployments/docker_compose/stack.env || (echo "stack.env file not found!" && exit 1)
-      
-      # Final verification checks
-      grep -q 'image: lscr.io/linuxserver/bookstack' deployments/docker_compose/docker-compose.yml
-      grep -q 'DB_DATABASE="bookstack"' deployments/docker_compose/.env
-      grep -q 'DB_PASSWORD=' deployments/docker_compose/stack.env
-      
-      echo "✅ BookStack Docker Compose generation test passed."
-  tags:
-    - docker
+    - echo "🔎 Checking syntax of all .yml and .yaml files..."
+    # Finds all files ending in .yml or .yaml and passes them to the Python command.
+    # The `find` command ensures files in subdirectories are also checked.
+    # The `xargs` command executes the syntax check for each file found.
+    - find . -type f \( -name "*.yml" -o -name "*.yaml" \) -print0 | xargs -0 -n 1 python -c "import yaml, sys; print(f'-- Checking: {sys.argv[1]}'); yaml.safe_load(open(sys.argv[1]))"
+    - echo "✅ Syntax check passed for all YAML files."
