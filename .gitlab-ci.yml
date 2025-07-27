@@ -18,21 +18,20 @@ test-docker-compose-generation:
     - |
       echo "🧪 Testing docker-compose generation..."
       
-      # Navigate into the test service directory
+      # ESSENTIAL: Change directory so the script runs in the service's context.
       cd tests/service-test
       
       echo "⚙️ Converting to JSON and running manifest generator..."
       BOOKSTACK_SERVICE_JSON="$(python -c 'import sys, yaml, json; print(json.dumps(yaml.safe_load(sys.stdin)))' < service.yml)"
       python ../../scripts/generate_manifest.py --ssot-json "$BOOKSTACK_SERVICE_JSON" --template-path ../.. --deployment-type docker_compose
       
-      echo "🔎 Verifying generated files for BookStack..."
+      echo "🔎 Verifying generated files..."
       test -f deployments/docker_compose/docker-compose.yml || (echo "docker-compose.yml not found!" && exit 1)
       test -f deployments/docker_compose/.env || (echo ".env file not found!" && exit 1)
       test -f deployments/docker_compose/stack.env || (echo "stack.env file not found!" && exit 1)
       
-      # Verifying content of generated files
+      # Final verification checks
       grep -q 'image: lscr.io/linuxserver/bookstack' deployments/docker_compose/docker-compose.yml
-      # FIXED: Changed colon to equals sign to match the .env file format
       grep -q 'DB_DATABASE="bookstack"' deployments/docker_compose/.env
       grep -q 'DB_PASSWORD=' deployments/docker_compose/stack.env
       
