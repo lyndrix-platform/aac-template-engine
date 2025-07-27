@@ -1,5 +1,0 @@
-include:
-  - project: 'aac-application-definitions/aac-template-engine'
-    ref: main
-    file: '/templates/cicd/service-pipeline.yml'
-    

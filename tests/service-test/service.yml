@@ -1,63 +1,40 @@
----
-# ===================================================================
-# Single Source of Truth (SSoT) for the Traefik Service
-# This file contains all information to generate configurations for
-# various deployment targets (Docker Compose, Kubernetes, etc.).
-# ===================================================================
-
-# -------------------------------------------------------------------
-# 1. Allgemeine, Deployment-unabhängige Service-Informationen
-# -------------------------------------------------------------------
-
+# ----------------------------------------------------------------
+# Haupt-Service: BookStack
+# Definiert Metadaten, die von Integrationen wie Traefik oder Homepage genutzt werden.
+# ----------------------------------------------------------------
 service:
-  name: "traefik-dev"
-  image_repo: "traefik"
-  image_tag: "v3.0"
-  description: "A modern HTTP reverse proxy and load balancer."
-  icon: "https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/traefik.png"
-  category: "Networking"
-  stage: "prod" # Deployment stage (e.g., prod, dev)
-  hostname: "{{ service.name }}"
+  name: "BookStack"
+  description: "Dokumentations-Wiki für Notizen und Anleitungen."
+  category: "Dev & Code"      # Gruppe für die Homepage
+  icon: "bookstack.png"         # Icon für die Homepage
+  hostname: "bookstack"         # Hostname für den Container und die DNS-Route
+  image_repo: "lscr.io/linuxserver/bookstack"
+  image_tag: "latest"
 
-
-# -------------------------------------------------------------------
-# 2. Abstrakte Definition von Ports und Volumes
-# -------------------------------------------------------------------
+# ----------------------------------------------------------------
+# Ports des Haupt-Services
+# Der Port wird für das Traefik-Routing benötigt.
+# ----------------------------------------------------------------
 ports:
-  - name: web
-    port: 80
-    protocol: TCP
-  - name: websecure
-    port: 443
-    protocol: TCP
-  - name: dashboard
-    port: 8080
-    protocol: TCP
+  - name: "web"
+    port: 80 # Der interne Port des Containers, den Traefik anspricht
 
+# ----------------------------------------------------------------
+# Volumes des Haupt-Services
+# Der Pfad wird aus 'host_base_path' + 'name' zusammengesetzt.
+# ----------------------------------------------------------------
 volumes:
-  - name: data
-    path: "/data"
-    description: "Für Let's Encrypt Zertifikate und ACME"
-  - name: log
-    path: "/log"
-    description: "Traefik Access- und App-Logs"
-  - name: config
-    path: "/etc/traefik"
-    description: "Statische und dynamische Konfigurationsdateien"
-  - name: letsencrypt
-    path: "/letsencrypt"
-    description: "Let's Encrypt Zertifikate"
+  - name: "config"
+    path: "/config"
 
-# -------------------------------------------------------------------
-# 3. Applikationsspezifische Konfiguration (Traefik)
-# -------------------------------------------------------------------
+# ----------------------------------------------------------------
+# Globale Konfiguration für Integrationen
+# ----------------------------------------------------------------
 config:
-  domain_name: "int.fam-feser.de" # Basis-Domain für Routing
-  dashboard_enabled: true
+  domain_name: "int.fam-feser.de"
   routing_enabled: true
-  cert_resolver: "ionos"
   entrypoint: "websecure"
-  # Labels für Integrationen wie Homepage oder AutoDNS
+  cert_resolver: "ionos"
   integrations:
     homepage:
       enabled: true
@@ -65,94 +42,99 @@ config:
       enabled: true
       create_wildcard: true
 
-# -------------------------------------------------------------------
-# 4. Deployment-spezifische Konfigurationen
-# -------------------------------------------------------------------
+# ----------------------------------------------------------------
+# Deployment-spezifische Konfigurationen
+# ----------------------------------------------------------------
 deployments:
-  # --- Konfiguration für Docker Compose ---
   docker_compose:
-    command:
-      - "--configFile=/etc/traefik/traefik.yml"
-    restart_policy: "always"    
-    host_base_path: "/export/docker" # Basis-Pfad auf dem Host
-    docker_socket_path: "/var/run/docker.sock"    
-    # A list of networks the service should connect to.
-    # These are defined under network_definitions.
+    host_base_path: "/export/docker" # Basis-Pfad auf dem Host für alle Volumes
+    restart_policy: "unless-stopped"
     networks_to_join:
-      - secured
-    # Definitions of all available networks for this stack type
+      - "secured"
+      - "bookstack_internal"
+      - "docker-default"
+      
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost"]
+      interval: "30s"
+      timeout: "5s"
+      retries: 3
+
+    # Definition der Docker-Netzwerke für diesen Stack
     network_definitions:
       secured:
         name: "services-secured"
         external: true
-      exposed:
-        name: "services-exposed"
-        external: true
-      interconnect:
+      docker-default:
         name: "docker-default"
         external: true
-    security_opts:
-      - "no-new-privileges:true"
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "10"
-        
-    # Allgemeine Umgebungsvariablen für .env
+      bookstack_internal:
+        name: "bookstack_internal"
+        driver: "bridge"
+
+    # Nicht-sensible Umgebungsvariablen für BookStack
+    # Werden in die .env-Datei geschrieben.
     dot_env:
-      PUID: 1000
-      PGID: 1000
+      PUID: "1000"
+      PGID: "1000"
       TZ: "Europe/Berlin"
-      SERVICE_NAME: "{{ service.name }}"
-      SERVICE_NAME_LOWERCASE: "{{ service.name}}"
-      SERVICE_HOSTNAME: "{{ service.hostname }}"
-      SERVICE_DOMAIN_NAME: "{{ config.domain_name }}"
-      SERVICE_IMAGE_NAME: "{{ service.image_repo }}"
-      SERVICE_IMAGE_TAG: "{{ service.image_tag }}"
-      SERVICE_DESCRIPTION: "{{ service.description }}"
-      SERVICE_CATEGORY: "{{ service.category }}"
-      SERVICE_ICON: "{{ service.icon }}"
-      SERVICE_STAGE: "{{ service.stage }}"
-      SERVICE_RESTART_POLICY: "{{ deployments.docker_compose.restart_policy }}"
-      DEFAULT_DOCKER_DIR: "{{ deployments.docker_compose.host_base_path }}"      
-      DEFAULT_NETWORK_SECURED: "{{ deployments.docker_compose.network_definitions.secured.name }}"
-      DEFAULT_NETWORK_EXPOSED: "{{ deployments.docker_compose.network_definitions.exposed.name }}"
-      DEFAULT_NETWORK_INTERCONNECT: "{{ deployments.docker_compose.network_definitions.interconnect.name }}"
-      # Homepage Widget Integration
-      HOMEPAGE_WIDGET_TYPE: "traefik"
-      HOMEPAGE_WIDGET_SLUG: "traefik-dashboard"
-    # Service-specific env vars that will be written to stack.env
+      APP_PROXIES: '*'
+      APP_URL: "https://{{ service.hostname }}.{{ config.domain_name }}"
+      DB_HOST: "{{ dependencies.database.name }}" # Dynamischer Verweis auf den DB-Container
+      DB_PORT: "3306"
+      DB_USERNAME: "bookstack"
+      DB_DATABASE: "bookstack"
+      MAIL_DRIVER: "smtp"
+      MAIL_FROM_NAME: "BookStack"
+      MAIL_FROM: "bookstack@example.com"
+      MAIL_HOST: "localhost"
+      MAIL_PORT: "587"
+      MAIL_USERNAME: "null"
+      MAIL_PASSWORD: "null"
+      MAIL_ENCRYPTION: "null"
+      AUTH_AUTO_INITIATE: "true"
+      AUTH_METHOD: "oidc"
+      OIDC_NAME: "authentik"
+      OIDC_ISSUER: "https://test.auth.test-test.de/application/o/bookstack-titan/"
+      OIDC_ISSUER_DISCOVER: "true"
+      OIDC_EMAIL_ATTRIBUTE: "email"
+      OIDC_DISPLAY_NAME_ATTRIBUTES: "name"
+      OIDC_END_SESSION_ENDPOINT: "https://auth.test.test-test.de/application/o/bookstack-titan/end-session/"
+      OIDC_USER_TO_GROUPS: "true"
+      OIDC_GROUPS_CLAIM: "groups"
+      OIDC_ADDITIONAL_SCOPES: "groups"
+      OIDC_REMOVE_FROM_GROUPS: "true"
+      
+    # Sensible Umgebungsvariablen für BookStack
+    # Werden in die stack.env-Datei geschrieben.
     stack_env:
-      LOG_LEVEL: "info"
-      IONOS_API_KEY: "some.key"
-      SOME_TEST_VAR: "test-value"
+      APP_KEY: "test"
+      DB_PASSWORD: "test"
+      OIDC_CLIENT_ID: "test"
+      OIDC_CLIENT_SECRET: "test"
 
-  # --- Konfiguration für Kubernetes (Beispiel) ---
-  kubernetes:
-    namespace: "networking"
-    replicas: 2
-    service_type: "LoadBalancer" # oder NodePort, ClusterIP
-    ingress:
-      enabled: true
-      class_name: "traefik" # oder nginx, etc.
-      tls_secret_name: "traefik-dashboard-tls"
-    persistent_volume_claims:
-      data:
-        storage_class: "ceph-rbd"
-        size: "1Gi"
-      log:
-        storage_class: "ceph-rbd"
-        size: "5Gi"
-    resources:
-      requests:
-        cpu: "100m"
-        memory: "128Mi"
-      limits:
-        cpu: "500m"
-        memory: "512Mi"
-
-
+# ----------------------------------------------------------------
+# Service-Abhängigkeiten (z.B. Datenbanken)
+# ----------------------------------------------------------------
+dependencies:
+  database: # Logischer Name der Abhängigkeit
+    name: "bookstack-db" # Tatsächlicher Container-Name
+    image_repo: "mariadb"
+    image_tag: "latest"
+    networks_to_join:
+      - "bookstack_internal"
+      - "docker-default"
+    volumes:
+      - name: "db"
+        path: "/var/lib/mysql"
+        
+    # Umgebungsvariablen für die Datenbank.
+    # Die Engine sortiert sie automatisch nach '.env' oder 'stack.env'.
+    environment:
+      MARIADB_DATABASE: "bookstack"
+      MARIADB_USER: "bookstack"
+      MARIADB_PASSWORD: "test" # Wird als Secret behandelt
+      MARIADB_ROOT_PASSWORD: "test"     # Wird als Secret behandelt
 
 
-
+      
