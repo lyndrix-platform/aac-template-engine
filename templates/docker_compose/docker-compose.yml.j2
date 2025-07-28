@@ -34,20 +34,18 @@ services:
       {% endfor %}
     {% endif %}
 
-    {% if volumes is defined and volumes %}
+    {% if (volumes is defined and volumes) or (deployments.docker_compose.raw_volumes is defined and deployments.docker_compose.raw_volumes) %}
     volumes:
+      {# First, process the standard, named volumes #}
       {% for v in volumes %}
       - "{{ deployments.docker_compose.host_base_path }}/{{ service.name | lower }}/{{ v.name }}:{{ v.path }}"
       {% endfor %}
-    {% endif %}
-    
-    {% if deployments.docker_compose.raw_volumes is defined and deployments.docker_compose.raw_volumes %}
-    volumes:
+      
+      {# Second, process the raw volume mounts like the docker socket #}
       {% for v in deployments.docker_compose.raw_volumes %}
       - "{{ v }}"
       {% endfor %}
     {% endif %}
-
     networks:
       {% for net_name in deployments.docker_compose.networks_to_join %}
       - {{ net_name }}
