@@ -4,7 +4,7 @@ import sys
 import argparse
 import time
 
-def run_creation_logic(gitlab_url, private_token, target_group_path, template_project_path, new_repo_name, branch_list_str, template_trigger_branch, target_trigger_branch):
+def run_creation_logic(gitlab_url, private_token, target_group_path, template_project_path, webhook_source_path, new_repo_name, branch_list_str, template_trigger_branch, target_trigger_branch):
     """
     Diese Funktion enthält die eigentliche Logik zur Erstellung des Repositories und der Trigger-Konfiguration.
     Sie ist idempotent und kann mehrfach ausgeführt werden.
@@ -22,6 +22,7 @@ def run_creation_logic(gitlab_url, private_token, target_group_path, template_pr
     print(f"GitLab URL: {gitlab_url}")
     print(f"Zielgruppe: {target_group_path}")
     print(f"Template Projekt: {template_project_path}")
+    print(f"Webhook Quelle: {webhook_source_path}") ## NEU ##
     print(f"Neues Repository: {new_repo_name}")
     print("---------------------\n")
 
@@ -43,6 +44,12 @@ def run_creation_logic(gitlab_url, private_token, target_group_path, template_pr
         print("🔍 Suche nach Template-Projekt...")
         template_project = gl.projects.get(template_project_path)
         print(f"✔️ Template-Projekt '{template_project.path_with_namespace}' gefunden (ID: {template_project.id}).")
+
+        ## NEU: Das Repository für den Webhook explizit abrufen ##
+        print("🔍 Suche nach Webhook-Quellprojekt...")
+        webhook_source_project = gl.projects.get(webhook_source_path)
+        print(f"✔️ Webhook-Quellprojekt '{webhook_source_project.path_with_namespace}' gefunden (ID: {webhook_source_project.id}).")
+
 
         # --- 1. Prüfen, ob das Projekt bereits existiert ---
         full_project_path = f"{target_group.path}/{project_path_slug}"
@@ -75,23 +82,25 @@ def run_creation_logic(gitlab_url, private_token, target_group_path, template_pr
                 print(f"  - Branch '{branch_name}' neu erstellt.")
 
         # --- 3. Prüfen, ob Webhook/Trigger bereits konfiguriert ist ---
-        print(f"\n🔗 Prüfe und konfiguriere Cross-Projekt-Trigger...")
+        print(f"\n🔗 Prüfe und konfiguriere Cross-Projekt-Trigger im Projekt '{webhook_source_project.name}'...") ## NEU ##
         
-        # Wir identifizieren den Webhook anhand seiner Basis-URL, da der Token nicht auslesbar ist.
         webhook_url_base = f"https://{clean_gitlab_url}/api/v4/projects/{project.id}/ref/{target_trigger_branch}/trigger/pipeline"
-        existing_hooks = template_project.hooks.list(all=True)
+        ## NEU: Haken werden im korrekten Projekt gesucht ##
+        existing_hooks = webhook_source_project.hooks.list(all=True)
         found_hook = next((h for h in existing_hooks if h.url.startswith(webhook_url_base)), None)
 
         if found_hook:
             print("✔️ Passender Webhook/Trigger existiert bereits.")
         else:
             print("  - Konfiguriere neuen Trigger und Webhook...")
-            trigger = project.triggers.create({'description': f'Triggered by updates in {template_project.path_with_namespace}'})
+            trigger_description = f'Trigger for {project.path_with_namespace} from {webhook_source_project.path_with_namespace}'
+            trigger = project.triggers.create({'description': trigger_description})
             trigger_token = trigger.token
             
             webhook_url = f"{webhook_url_base}?token={trigger_token}"
             hook_data = { 'url': webhook_url, 'push_events': True, 'push_events_branch_filter': template_trigger_branch, 'enable_ssl_verification': True }
-            template_project.hooks.create(hook_data)
+            ## NEU: Haken werden im korrekten Projekt erstellt ##
+            webhook_source_project.hooks.create(hook_data)
             print("  - Trigger und Webhook erfolgreich erstellt.")
 
         print("\n✨ Alle Operationen erfolgreich abgeschlossen!")
@@ -102,17 +111,20 @@ def run_creation_logic(gitlab_url, private_token, target_group_path, template_pr
     except Exception as e:
         print(f"🔥 Ein unerwarteter Fehler ist aufgetreten: {e}")
         sys.exit(1)
+
 def main():
     """
     Parst Argumente und holt Fallback-Werte aus Umgebungsvariablen.
     """
     parser = argparse.ArgumentParser(description="Erstellt ein GitLab Repository inkl. Cross-Projekt-Trigger.", formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument('--repo-name', help="Name des neuen Repositories.")
-    parser.add_argument('--group-path', help="Pfad der Zielgruppe.")
-    parser.add_argument('--template-path', help="Pfad des Template-Projekts.")
+    parser.add_argument('--repo-name', help="Name des neuen Repositories.", required=True)
+    parser.add_argument('--group-path', help="Pfad der Zielgruppe.", required=True)
+    parser.add_argument('--template-path', help="Pfad des Template-Projekts.", required=True)
+    ## NEU: Neuer, erforderlicher Parameter ##
+    parser.add_argument('--webhook-source-path', help="Pfad des Projekts, das den Webhook erhalten soll.", required=True)
     parser.add_argument('--branches', help="Komma-getrennte Liste der Branches.")
     parser.add_argument('--gitlab-url', help="URL Ihrer GitLab-Instanz.")
-    parser.add_argument('--template-trigger-branch', help="Branch im Template, der den Trigger auslöst (Default: main).")
+    parser.add_argument('--template-trigger-branch', help="Branch im Webhook-Quellprojekt, der den Trigger auslöst (Default: main).")
     parser.add_argument('--target-trigger-branch', help="Branch im neuen Repo, auf dem die Pipeline laufen soll (Default: main).")
     args = parser.parse_args()
 
@@ -121,6 +133,8 @@ def main():
         "new_repo_name": args.repo_name or os.environ.get('NEW_REPO_NAME'),
         "target_group_path": args.group_path or os.environ.get('TARGET_GROUP_PATH'),
         "template_project_path": args.template_path or os.environ.get('TEMPLATE_PROJECT_PATH'),
+        ## NEU ##
+        "webhook_source_path": args.webhook_source_path or os.environ.get('WEBHOOK_SOURCE_PATH'),
         "branch_list_str": args.branches or os.environ.get('BRANCH_LIST', 'dev,test,main,prod'),
         "gitlab_url": args.gitlab_url or os.environ.get('GITLAB_URL'),
         "private_token": os.environ.get('GITLAB_PRIVATE_TOKEN'), # Token NUR aus Umgebungsvariable
@@ -129,10 +143,10 @@ def main():
     }
 
     # Überprüfen, ob die minimal notwendigen Variablen gesetzt sind
-    if not all([config["gitlab_url"], config["private_token"], config["target_group_path"], config["template_project_path"], config["new_repo_name"]]):
-        print("🔥 Fehler: Nicht alle erforderlichen Konfigurationswerte konnten ermittelt werden.")
-        print("Stellen Sie sicher, dass GITLAB_URL, GITLAB_PRIVATE_TOKEN, TARGET_GROUP_PATH, TEMPLATE_PROJECT_PATH und NEW_REPO_NAME gesetzt sind.")
-        sys.exit(1)
+    # (required=True in argparse übernimmt die Prüfung für Kommandozeilenargumente)
+    if not all([config["gitlab_url"], config["private_token"]]):
+         print("🔥 Fehler: Die Umgebungsvariablen GITLAB_URL und/oder GITLAB_PRIVATE_TOKEN sind nicht gesetzt.")
+         sys.exit(1)
     
     run_creation_logic(**config)
 
