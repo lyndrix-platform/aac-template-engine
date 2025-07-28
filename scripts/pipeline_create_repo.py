@@ -4,6 +4,7 @@ import sys
 import argparse
 import time
 
+
 def run_creation_logic(gitlab_url, private_token, target_group_path, template_project_path, webhook_source_path, new_repo_name, branch_list_str, template_trigger_branch, target_trigger_branch):
     """
     Diese Funktion enthält die eigentliche Logik zur Erstellung des Repositories und der Trigger-Konfiguration.
