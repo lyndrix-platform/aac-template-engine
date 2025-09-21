@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang=en prefix="og:http://ogp.me/ns#">
+<meta charset="utf-8">
+<meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no">
+<meta name=color-scheme value="light dark">
+<title>Assets — Rust library // Lib.rs</title>
+<meta name="twitter:title" content="Assets — Rust library">
+<meta property="og:title" content="assets">
+<link crossorigin=anonymous rel=preload as=font href="/fira/va9B4kDNxMZdWfMOD5VnLK3eRhf6Xl7Glw.woff2">
+<link crossorigin=anonymous rel=preload as=font href="/fira/va9B4kDNxMZdWfMOD5VnPKreRhf6Xl7Glw.woff2">
+<link crossorigin=anonymous rel=preload as=font href="/fira/va9E4kDNxMZdWfMOD5Vvl4jLazX3dA.woff2">
+<link crossorigin=anonymous rel=preload as=style href="/index.css">
+<link crossorigin=anonymous rel=preconnect href="//img.gs">
+<style>@font-face {font-family:Fira Sans;font-style:normal;font-weight:700;src:local(Fira Sans Bold),local(FiraSans-Bold),url(/fira/va9B4kDNxMZdWfMOD5VnLK3eRhf6Xl7Glw.woff2)format("woff2");unicode-range:U+??,U+131,U+152-153,U+2BB-2BC,U+2C6,U+2DA,U+2DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;font-display:swap}@font-face {font-family:Fira Sans;font-style:normal;font-weight:300;src:local(Fira Sans Light),local(FiraSans-Light),url(/fira/va9B4kDNxMZdWfMOD5VnPKreRhf6Xl7Glw.woff2)format("woff2");unicode-range:U+??,U+131,U+152-153,U+2BB-2BC,U+2C6,U+2DA,U+2DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;font-display:optional}@font-face {font-family:Fira Sans;font-style:normal;font-weight:400;src:local(Fira Sans Regular),local(FiraSans-Regular),local(Fira Sans ot),url(/fira/va9E4kDNxMZdWfMOD5Vvl4jLazX3dA.woff2)format("woff2");unicode-range:U+??,U+131,U+152-153,U+2BB-2BC,U+2C6,U+2DA,U+2DC,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;font-display:fallback}html,body{background:var(--background-color);color:var(--text-color);margin:0;padding:0;font-family:fira sans ot,fira sans,trebuchet ms,roboto,sans-serif;line-height:1.6}h1,h2,h3,h4,h5{font-family:fira sans ot,fira sans,ubuntu,roboto,-apple-system,trebuchet ms,sans-serif}#package h2,#package .desc{font-family:fira sans ot,fira sans,ubuntu,roboto,-apple-system,helvetica,sans-serif}header{padding:1em 0 0}.inner-col{box-sizing:border-box;max-width:60em;margin:0 auto;padding:0 1em}@media (prefers-color-scheme:dark){img[src$=\#gh-light-mode-only],a[href$=\#gh-light-mode-only]{display:none}}@media (prefers-color-scheme:light){img[src$=\#gh-dark-mode-only],a[href$=\#gh-dark-mode-only]{display:none}}</style>
+<link crossorigin=anonymous rel=stylesheet href="/index.css">
+<meta property="og:image" content="https://lib.rs/og/c/assets.png">
+<meta property="og:image:width" content="1200"><meta property="og:image:height" content="627">
+<meta name="twitter:image" content="https://lib.rs/og/tc/assets.png">
+<meta name="twitter:card" content="summary_large_image">
+<link crossorigin=anonymous rel=apple-touch-icon href="/crates-logo.png" type=image/png sizes=256x256>
+<link crossorigin=anonymous rel=icon href="/favicon.png" type=image/png sizes=32x32 media="(prefers-color-scheme: light)">
+<link crossorigin=anonymous rel=icon href="/favicon-dark.png" type=image/png sizes=32x32 media="(prefers-color-scheme: dark)">
+<link crossorigin=anonymous rel=icon href="/crates-logo.png" type=image/png sizes=256x256>
+<link crossorigin=anonymous rel=icon href="/favicon.png" type=image/png sizes=32x32>
+<link crossorigin=anonymous rel=mask-icon href="/logo.svg">
+<meta name=theme-color content="#aaaaaa">
+<meta name=theme-color content="#353746" media="(prefers-color-scheme: dark)">
+<meta property="og:url" content="https://lib.rs/crates/assets">
+<meta rel=canonical content="https://lib.rs/crates/assets">
+<link rel=alternate href="https://crates.io/crates/assets">
+<link rel="og:see_also" href="https://crates.io/crates/assets">
+<meta property="og:description" content="asynchronous asset management">
+<meta name=description content="asynchronous asset management | Rust/Cargo package">
+<meta name=keywords content="assets-management, async, management">
+<meta name="date.created" content="2018-12-02">
+<meta name="article:published_time" content="2018-12-02">
+<meta property="og:type" content=website>
+<meta name="article:author" content="Nathan Faucett">
+<meta property="og:determiner" content>
+<meta property="og:site_name" content="Lib.rs">
+<body vocab="http://schema.org/">
+<div typeof="SoftwareApplication" class="obsolete-crate">
+<header id="package">
+<div class="inner-col">
+<aside class="search-link"><a href="/#search_q" accesskey=s title=Search><svg width="16" height="16" viewBox="0 0 100 100"><title>Search</title><circle cx="45" cy="45" r="30" stroke="black" stroke-width="10" fill="none"/><line x1="64" y1="64" x2="95" y2="95" stroke="black" stroke-width="15"/></svg></a></aside>
+<div class="breadcrumbs" typeof="BreadcrumbList">
+<h1>
+<span property="itemListElement" typeof="ListItem"><a accesskey="s" property="item" typeof="WebPage" href="/"><span property="name">Lib</span>.rs</a><meta property="position" content="1"></span>
+</h1>
+›
+</div>
+<span class="keywords">
+<span>
+<a property="applicationCategory" href="/keywords/assets-management" class=keyword><span>#</span>assets-management</a>
+<a property="applicationCategory" href="/keywords/async" class=keyword><span>#</span>async</a>
+<a property="applicationCategory" href="/keywords/management" class=keyword><span>#</span>management</a>
+</span>
+</span>
+<h2>
+<span class="labels">
+</span>
+<span property="name">
+assets</span></h2>
+<p class=desc>asynchronous asset management</p>
+<p class=byline>
+by
+<a href="/~nathanfaucett" class="owner" title="owner: nathanfaucett" property="author" typeof="Person"><span property="name">Nathan Faucett</span></a>
+</p>
+<nav><ul>
+<li><a href="/install/assets" class="button">Install</a></li>
+<li><a href="https://docs.rs/assets">API reference</a></li>
+<li><span><a href="https://gitlab.com/nathanfaucett/rs-assets" property="url">GitLab repo</a>
+(<a href="https://gitlab.com/nathanfaucett/rs-assets/tree/9deba471fdb5408aa0c87740b014f7fcc9c6f10f/">nathanfaucett</a>)</span>
+</li>
+</ul></nav>
+</div>
+</header>
+<main>
+<div class="inner-col">
+<section id="readme-deps">
+<div>
+<section class="about-crate">
+<section id="versions">
+<h3>
+<a href="/crates/assets/versions">7 releases</a>
+</h3>
+<p class="edition-2018">Uses old Rust 2015</p>
+<table>
+<tr><th content="0.3.0" property="softwareVersion">
+0.3.0
+</th><td property="datePublished" class="date">
+Dec 2, 2018
+</td></tr>
+<tr><th content="0.2.3">
+0.2.3
+</th><td class="date">
+Jul 13, 2018
+</td></tr>
+<tr><th content="0.2.2">
+0.2.2
+</th><td class="date">
+Feb 28, 2018
+</td></tr>
+<tr><th content="0.2.1">
+0.2.1
+</th><td class="date">
+Jan 24, 2018
+</td></tr>
+<tr><th content="0.1.1">
+0.1.1
+</th><td class="date">
+Nov 22, 2017
+</td></tr>
+</table>
+</section>
+<section id="downloads">
+<p class="top-n">#<b>65</b> in <a href="/keywords/management">#management</a></p>
+<p>
+<b>26</b> downloads per month
+</p>
+</section>
+<section id="sloc">
+<section id="license">
+<b property="license">MIT</b>
+license
+</section>
+<p>
+<span title="78KB as tarball">
+100KB
+</span>
+<br>
+<span title="1,010">
+1K
+</span>
+<abbr title="Lines of code, excluding comments">SLoC</abbr>
+</p>
+</section>
+</section>
+<section id=readme class="readme" vocab>
+<h1 id="readme-assets">assets</h1>
+<p>asynchronous asset management</p>
+<pre lang="rust"><code><tt class="src-rs"><tt class="k-ot k-ot-rs">extern</tt> <tt class="k-ot k-ot-rs">crate</tt> assets<tt class="pun-term pun-term-rs">;</tt>
+<tt class="k-ot k-ot-rs">extern</tt> <tt class="k-ot k-ot-rs">crate</tt> futures_cpupool<tt class="pun-term pun-term-rs">;</tt>
+<tt class="k-ot k-ot-rs">extern</tt> <tt class="k-ot k-ot-rs">crate</tt> serde_json<tt class="pun-term pun-term-rs">;</tt>
+
+<tt class="k-ot k-ot-rs">use</tt> <tt class="m-path m-path-rs">assets<tt class="pun-acc pun-acc-rs">::</tt></tt><tt class="m-bl m-bl-rs"><tt class="pun-sec pun-sec-bl">{</tt>Asset<tt class="pun-sep pun-sep-rs">,</tt> AssetImport<tt class="pun-sep pun-sep-rs">,</tt> AssetManager<tt class="pun-sep pun-sep-rs">,</tt> FileLoader</tt><tt class="m-bl m-bl-rs"><tt class="pun-sec pun-sec-bl">}</tt></tt><tt class="pun-term pun-term-rs">;</tt>
+<tt class="k-ot k-ot-rs">use</tt> <tt class="m-path m-path-rs">futures_cpupool<tt class="pun-acc pun-acc-rs">::</tt></tt>CpuPool<tt class="pun-term pun-term-rs">;</tt>
+
+<tt class="k-ot k-ot-rs">use</tt> <tt class="m-path m-path-rs">std<tt class="pun-acc pun-acc-rs">::</tt></tt><tt class="m-path m-path-rs">sync<tt class="pun-acc pun-acc-rs">::</tt></tt>Arc<tt class="pun-term pun-term-rs">;</tt>
+
+<tt class="m-ann m-ann-rs"><tt class="pun-def pun-def-ann">#</tt><tt class="pun-sec pun-sec-grp">[</tt><tt class="var-ann var-ann-rs">derive</tt><tt class="m-ann m-ann-parms"><tt class="pun-sec pun-sec-grp">(</tt></tt><tt class="m-ann m-ann-parms">Debug</tt><tt class="m-ann m-ann-parms"><tt class="pun-sec pun-sec-grp">)</tt></tt><tt class="pun-sec pun-sec-grp">]</tt></tt>
+<tt class="m-struct m-struct-rs"><tt class="stor-mod stor-mod-rs">pub</tt> <tt class="stor-ty stor-ty-struct">struct</tt> </tt><tt class="m-struct m-struct-rs"><tt class="ent-n ent-n-struct">JSONAsset</tt></tt><tt class="m-struct m-struct-rs"><tt class="pun-sec pun-sec-grp">(</tt><tt class="m-path m-path-rs">serde_json<tt class="pun-acc pun-acc-rs">::</tt></tt>Value<tt class="pun-sec pun-sec-grp">)</tt></tt><tt class="pun-term pun-term-rs">;</tt>
+
+<tt class="m-impl m-impl-rs"><tt class="stor-ty stor-ty-impl">impl</tt> </tt><tt class="m-impl m-impl-rs">Asset <tt class="k-ot k-ot-rs">for</tt></tt><tt class="m-impl m-impl-rs"> <tt class="ent-n ent-n-impl">JSONAsset</tt> </tt><tt class="m-impl m-impl-rs"><tt class="m-bl m-bl-rs"><tt class="pun-sec pun-sec-bl">{</tt>
+    <tt class="stor-ty stor-ty-ty">type</tt> <tt class="ent-n ent-n-ty">Data</tt> <tt class="k-op k-op-asgn">=</tt> JSONAsset<tt class="pun-term pun-term-rs">;</tt>
+</tt><tt class="m-bl m-bl-rs"><tt class="pun-sec pun-sec-bl">}</tt></tt></tt>
+
+<tt class="m-impl m-impl-rs"><tt class="stor-ty stor-ty-impl">impl</tt> </tt><tt class="m-impl m-impl-rs">AssetImport <tt class="k-ot k-ot-rs">for</tt></tt><tt class="m-impl m-impl-rs"> <tt class="ent-n ent-n-impl">JSONAsset</tt> </tt><tt class="m-impl m-impl-rs"><tt class="m-bl m-bl-rs"><tt class="pun-sec pun-sec-bl">{</tt>
+    <tt class="stor-ty stor-ty-ty">type</tt> <tt class="ent-n ent-n-ty">Input</tt> <tt class="k-op k-op-asgn">=</tt> <tt class="m-gen m-gen-rs"><tt class="sup-ty sup-ty-rs">Vec</tt><tt class="pun-def pun-def-gen">&lt;</tt><tt class="stor-ty stor-ty-rs">u8</tt><tt class="pun-def pun-def-gen">&gt;</tt></tt><tt class="pun-term pun-term-rs">;</tt>
+    <tt class="stor-ty stor-ty-ty">type</tt> <tt class="ent-n ent-n-ty">Output</tt> <tt class="k-op k-op-asgn">=</tt> <tt class="stor-ty stor-ty-rs">Self</tt><tt class="pun-term pun-term-rs">;</tt>
+    <tt class="stor-ty stor-ty-ty">type</tt> <tt class="ent-n ent-n-ty">Error</tt> <tt class="k-op k-op-asgn">=</tt> <tt class="m-path m-path-rs">serde_json<tt class="pun-acc pun-acc-rs">::</tt></tt>Error<tt class="pun-term pun-term-rs">;</tt>
+    <tt class="stor-ty stor-ty-ty">type</tt> <tt class="ent-n ent-n-ty">Options</tt> <tt class="k-op k-op-asgn">=</tt> <tt class="pun-sec pun-sec-grp">(</tt><tt class="pun-sec pun-sec-grp">)</tt><tt class="pun-term pun-term-rs">;</tt>
+
+    <tt class="m-ann m-ann-rs"><tt class="pun-def pun-def-ann">#</tt><tt class="pun-sec pun-sec-grp">[</tt><tt class="var-ann var-ann-rs">inline</tt><tt class="pun-sec pun-sec-grp">]</tt></tt>
+    <tt class="m-fn m-fn-rs"><tt class="stor-ty stor-ty-fn">fn</tt> <tt class="ent-n ent-n-fn">import</tt></tt><tt class="m-fn m-fn-rs"><tt class="m-fn m-fn-parms"><tt class="pun-sec pun-sec-parms">(</tt><tt class="var-parm var-parm-rs">bytes</tt><tt class="pun-sep pun-sep-rs">:</tt> <tt class="m-path m-path-rs"><tt class="stor-ty stor-ty-rs">Self<tt class="pun-acc pun-acc-rs">::</tt></tt></tt>Input, <tt class="k-op k-op-rs">_</tt>: <tt class="m-path m-path-rs"><tt class="stor-ty stor-ty-rs">Self<tt class="pun-acc pun-acc-rs">::</tt></tt></tt>Options</tt><tt class="m-fn m-fn-parms"><tt class="pun-sec pun-sec-parms">)</tt></tt></tt><tt class="m-fn m-fn-rs"> <tt class="m-fn m-fn-ret-ty"><tt class="pun-sep pun-sep-rs">-&gt;</tt> <tt class="m-gen m-gen-rs"><tt class="sup-ty sup-ty-rs">Result</tt><tt class="pun-def pun-def-gen">&lt;</tt><tt class="m-path m-path-rs"><tt class="stor-ty stor-ty-rs">Self<tt class="pun-acc pun-acc-rs">::</tt></tt></tt>Output, <tt class="m-path m-path-rs"><tt class="stor-ty stor-ty-rs">Self<tt class="pun-acc pun-acc-rs">::</tt></tt></tt>Error<tt class="pun-def pun-def-gen">&gt;</tt></tt></tt> </tt><tt class="m-fn m-fn-rs"><tt class="pun-sec pun-sec-bl">{</tt>
+        <tt class="stor-ty stor-ty-rs">let</tt> data<tt class="pun-sep pun-sep-rs">:</tt> <tt class="m-path m-path-rs">serde_json<tt class="pun-acc pun-acc-rs">::</tt></tt>Value <tt class="k-op k-op-asgn">=</tt> <tt class="m-path m-path-rs">serde_json<tt class="pun-acc pun-acc-rs">::</tt></tt>from_slice<tt class="pun-sec pun-sec-grp">(</tt><tt class="k-op k-op-bit">&amp;</tt><tt class="k-op k-op-arith">*</tt>bytes<tt class="pun-sec pun-sec-grp">)</tt><tt class="k-op k-op-rs">?</tt><tt class="pun-term pun-term-rs">;</tt>
+        <tt class="sup-ty sup-ty-rs">Ok</tt><tt class="pun-sec pun-sec-grp">(</tt>JSONAsset<tt class="pun-sec pun-sec-grp">(</tt>data<tt class="pun-sec pun-sec-grp">)</tt><tt class="pun-sec pun-sec-grp">)</tt>
+    <tt class="pun-sec pun-sec-bl">}</tt></tt>
+</tt><tt class="m-bl m-bl-rs"><tt class="pun-sec pun-sec-bl">}</tt></tt></tt>
+
+<tt class="stor-mod stor-mod-rs">pub</tt> <tt class="stor-ty stor-ty-ty">type</tt> <tt class="ent-n ent-n-ty">JSONAssetManager</tt><tt class="k-op k-op-comp">&lt;</tt>P<tt class="k-op k-op-comp">&gt;</tt> <tt class="k-op k-op-asgn">=</tt> <tt class="m-gen m-gen-rs">AssetManager<tt class="pun-def pun-def-gen">&lt;</tt>JSONAsset, FileLoader<tt class="pun-def pun-def-gen">&lt;</tt>P<tt class="pun-def pun-def-gen">&gt;</tt><tt class="pun-def pun-def-gen">&gt;</tt></tt><tt class="pun-term pun-term-rs">;</tt>
+
+<tt class="m-fn m-fn-rs"><tt class="stor-ty stor-ty-fn">fn</tt> <tt class="ent-n ent-n-fn">main</tt></tt><tt class="m-fn m-fn-rs"><tt class="m-fn m-fn-parms"><tt class="pun-sec pun-sec-parms">(</tt></tt><tt class="m-fn m-fn-parms"><tt class="pun-sec pun-sec-parms">)</tt></tt></tt><tt class="m-fn m-fn-rs"> </tt><tt class="m-fn m-fn-rs"><tt class="m-bl m-bl-rs"><tt class="pun-sec pun-sec-bl">{</tt>
+    <tt class="stor-ty stor-ty-rs">let</tt> pool <tt class="k-op k-op-asgn">=</tt> <tt class="m-path m-path-rs">Arc<tt class="pun-acc pun-acc-rs">::</tt></tt>new<tt class="pun-sec pun-sec-grp">(</tt><tt class="m-path m-path-rs">CpuPool<tt class="pun-acc pun-acc-rs">::</tt></tt>new_num_cpus<tt class="pun-sec pun-sec-grp">(</tt><tt class="pun-sec pun-sec-grp">)</tt><tt class="pun-sec pun-sec-grp">)</tt><tt class="pun-term pun-term-rs">;</tt>
+    <tt class="stor-ty stor-ty-rs">let</tt> file_loader <tt class="k-op k-op-asgn">=</tt> <tt class="m-path m-path-rs">Arc<tt class="pun-acc pun-acc-rs">::</tt></tt>new<tt class="pun-sec pun-sec-grp">(</tt><tt class="m-path m-path-rs">FileLoader<tt class="pun-acc pun-acc-rs">::</tt></tt>new<tt class="pun-sec pun-sec-grp">(</tt><tt class="pun-sec pun-sec-grp">)</tt><tt class="pun-sec pun-sec-grp">)</tt><tt class="pun-term pun-term-rs">;</tt>
+
+    <tt class="stor-ty stor-ty-rs">let</tt> <tt class="stor-mod stor-mod-rs">mut</tt> json_asset_manager <tt class="k-op k-op-asgn">=</tt> <tt class="m-path m-path-rs">JSONAssetManager<tt class="pun-acc pun-acc-rs">::</tt></tt>new<tt class="pun-sec pun-sec-grp">(</tt>file_loader<tt class="pun-sep pun-sep-rs">,</tt> pool<tt class="pun-sec pun-sec-grp">)</tt><tt class="pun-term pun-term-rs">;</tt>
+
+    <tt class="com-ln com-ln-dbl-sl"><tt class="pun-def pun-def-com">//</tt> add asset and starts load with the option preload = true</tt>
+    <tt class="stor-ty stor-ty-rs">let</tt> handle <tt class="k-op k-op-asgn">=</tt> json_asset_manager<tt class="pun-acc pun-acc-dot">.</tt><tt class="sup-fn sup-fn-rs">add</tt><tt class="pun-sec pun-sec-grp">(</tt><tt class="str-q str-q-dbl"><tt class="pun-def pun-def-str">"</tt>assets/person.json<tt class="pun-def pun-def-str">"</tt></tt><tt class="pun-sep pun-sep-rs">,</tt> <tt class="pun-sec pun-sec-grp">(</tt><tt class="pun-sec pun-sec-grp">)</tt><tt class="pun-sep pun-sep-rs">,</tt> <tt class="pun-sec pun-sec-grp">(</tt><tt class="pun-sec pun-sec-grp">)</tt><tt class="pun-sep pun-sep-rs">,</tt> <tt class="const-lang const-lang-rs">true</tt><tt class="pun-sec pun-sec-grp">)</tt><tt class="pun-term pun-term-rs">;</tt>
+
+    <tt class="sup-mac sup-mac-rs">println!</tt><tt class="pun-sec pun-sec-grp">(</tt><tt class="str-q str-q-dbl"><tt class="pun-def pun-def-str">"</tt>Total Assets <tt class="const-ot const-ot-phold">{:?}</tt><tt class="pun-def pun-def-str">"</tt></tt><tt class="pun-sep pun-sep-rs">,</tt> json_asset_manager<tt class="pun-acc pun-acc-dot">.</tt><tt class="sup-fn sup-fn-rs">count</tt><tt class="pun-sec pun-sec-grp">(</tt><tt class="pun-sec pun-sec-grp">)</tt><tt class="pun-sec pun-sec-grp">)</tt><tt class="pun-term pun-term-rs">;</tt>
+    <tt class="sup-mac sup-mac-rs">println!</tt><tt class="pun-sec pun-sec-grp">(</tt><tt class="str-q str-q-dbl"><tt class="pun-def pun-def-str">"</tt>Assets Loading <tt class="const-ot const-ot-phold">{:?}</tt><tt class="pun-def pun-def-str">"</tt></tt><tt class="pun-sep pun-sep-rs">,</tt> json_asset_manager<tt class="pun-acc pun-acc-dot">.</tt><tt class="sup-fn sup-fn-rs">loading_count</tt><tt class="pun-sec pun-sec-grp">(</tt><tt class="pun-sec pun-sec-grp">)</tt><tt class="pun-sec pun-sec-grp">)</tt><tt class="pun-term pun-term-rs">;</tt>
+    <tt class="sup-mac sup-mac-rs">println!</tt><tt class="pun-sec pun-sec-grp">(</tt><tt class="str-q str-q-dbl"><tt class="pun-def pun-def-str">"</tt>Assets Loaded <tt class="const-ot const-ot-phold">{:?}</tt><tt class="pun-def pun-def-str">"</tt></tt><tt class="pun-sep pun-sep-rs">,</tt> json_asset_manager<tt class="pun-acc pun-acc-dot">.</tt><tt class="sup-fn sup-fn-rs">loaded_count</tt><tt class="pun-sec pun-sec-grp">(</tt><tt class="pun-sec pun-sec-grp">)</tt><tt class="pun-sec pun-sec-grp">)</tt><tt class="pun-term pun-term-rs">;</tt>
+
+    <tt class="com-ln com-ln-dbl-sl"><tt class="pun-def pun-def-com">//</tt> wait for the only event that should be emitted, which is hopefully a Load</tt>
+    <tt class="stor-ty stor-ty-rs">let</tt> _load_event <tt class="k-op k-op-asgn">=</tt> json_asset_manager<tt class="pun-acc pun-acc-dot">.</tt><tt class="sup-fn sup-fn-rs">wait_event</tt><tt class="pun-sec pun-sec-grp">(</tt><tt class="pun-sec pun-sec-grp">)</tt><tt class="pun-acc pun-acc-dot">.</tt><tt class="sup-fn sup-fn-rs">unwrap</tt><tt class="pun-sec pun-sec-grp">(</tt><tt class="pun-sec pun-sec-grp">)</tt><tt class="pun-term pun-term-rs">;</tt>
+
+    <tt class="com-ln com-ln-dbl-sl"><tt class="pun-def pun-def-com">//</tt> if it loaded this should print the json</tt>
+    <tt class="sup-mac sup-mac-rs">println!</tt><tt class="pun-sec pun-sec-grp">(</tt><tt class="str-q str-q-dbl"><tt class="pun-def pun-def-str">"</tt><tt class="const-ot const-ot-phold">{:?}</tt><tt class="pun-def pun-def-str">"</tt></tt><tt class="pun-sep pun-sep-rs">,</tt> json_asset_manager<tt class="pun-acc pun-acc-dot">.</tt><tt class="sup-fn sup-fn-rs">get</tt><tt class="pun-sec pun-sec-grp">(</tt><tt class="k-op k-op-bit">&amp;</tt>handle<tt class="pun-sec pun-sec-grp">)</tt><tt class="pun-acc pun-acc-dot">.</tt><tt class="sup-fn sup-fn-rs">unwrap</tt><tt class="pun-sec pun-sec-grp">(</tt><tt class="pun-sec pun-sec-grp">)</tt><tt class="pun-sec pun-sec-grp">)</tt><tt class="pun-term pun-term-rs">;</tt>
+</tt><tt class="m-bl m-bl-rs"><tt class="pun-sec pun-sec-bl">}</tt></tt></tt>
+</tt></code></pre>
+</section>
+</div>
+<section id="deps">
+<h4>Dependencies</h4>
+<p>
+<span title="amortized size; approx. 265KB compressed">
+~280–640KB
+</span>
+<br>
+<span title="estimated">~12K</span> <abbr title="approx. additional lines of code">SLoC</abbr>
+</p>
+<nav aria-label="Dependencies">
+<ul class="long">
+<li property="requirements" class>
+<a title="0.2" href="/crates/android_glue">android_<wbr>glue</a>
+<span class="cfg k" title="target_os">android</span>
+</li>
+<li property="requirements" class>
+<a title="1.0" href="/crates/fnv">fnv</a>
+</li>
+<li property="requirements" class>
+<a title="deprecated" href="/crates/futures">futures</a>&nbsp;<span class="version outdated deprecated">0.1</span>
+</li>
+<li property="requirements" class>
+<a title="deprecated" href="/crates/futures-cpupool">futures-cpupool</a>&nbsp;<span class="version outdated deprecated">0.1</span>
+</li>
+<li property="requirements" class>
+<a title="obsolete" href="/crates/hibitset">hibitset</a>&nbsp;<span class="version obsolete">0.5</span>
+</li>
+<li property="requirements" class>
+<a href="/crates/assets/features#feature-image" class="feature" title="default feature">image</a>
+<a title="4.0" href="/crates/imagefmt">imagefmt</a>
+</li>
+<li property="requirements" class>
+<a href="/crates/assets/features#feature-json" class="feature" title="default feature">json</a>
+<a title="1.0" href="/crates/serde">serde</a>
+</li>
+<li property="requirements" class>
+<a href="/crates/assets/features#feature-json" class="feature" title="default feature">json</a>
+<a title="1.0" href="/crates/serde_derive">serde_<wbr>derive</a>
+</li>
+<li property="requirements" class>
+<a href="/crates/assets/features#feature-json" class="feature" title="default feature">json</a>
+<a title="1.0" href="/crates/serde_json">serde_<wbr>json</a>
+</li>
+</ul>
+<ul class="dev long">
+<li property="requirements" class>
+<span class="label label-dev">
+dev
+</span>
+<a title="obsolete" href="/crates/gl">gl</a>&nbsp;<span class="version obsolete">0.11</span>
+</li>
+<li property="requirements" class>
+<span class="label label-dev">
+dev
+</span>
+<a title="0.1" href="/crates/gl_helpers">gl_<wbr>helpers</a>
+</li>
+<li property="requirements" class>
+<span class="label label-dev">
+dev
+</span>
+<a title="obsolete" href="/crates/glutin">glutin</a>&nbsp;<span class="version obsolete">0.19</span>
+</li>
+<li property="requirements" class>
+<span class="label label-dev">
+dev
+</span>
+<a title="0.3" href="/crates/main_loop">main_<wbr>loop</a>
+</li>
+<li property="requirements" class>
+<span class="label label-dev">
+dev
+</span>
+<a title="0.2" href="/crates/mat4">mat4</a>
+</li>
+<li property="requirements" class>
+<span class="label label-dev">
+dev
+</span>
+<a title="obsolete" href="/crates/specs">specs</a>&nbsp;<span class="version obsolete">0.14</span>
+</li>
+<li property="requirements" class>
+<span class="label label-dev">
+dev
+</span>
+<a title="outdated" href="/crates/specs_bundler">specs_<wbr>bundler</a>&nbsp;<span class="version outdated">0.5</span>
+</li>
+<li property="requirements" class>
+<span class="label label-dev">
+dev
+</span>
+<a title="0.4" href="/crates/specs_camera">specs_<wbr>camera</a>
+</li>
+<li property="requirements" class>
+<span class="label label-dev">
+dev
+</span>
+<a title="0.2" href="/crates/specs_guided_join">specs_<wbr>guided_<wbr>join</a>
+</li>
+<li property="requirements" class>
+<span class="label label-dev">
+dev
+</span>
+<a title="0.4" href="/crates/specs_sprite">specs_<wbr>sprite</a>
+</li>
+<li property="requirements" class>
+<span class="label label-dev">
+dev
+</span>
+<a title="0.5" href="/crates/specs_time">specs_<wbr>time</a>
+</li>
+<li property="requirements" class>
+<span class="label label-dev">
+dev
+</span>
+<a title="0.4" href="/crates/specs_transform">specs_<wbr>transform</a>
+</li>
+</ul>
+</nav>
+</section>
+</section>
+</div>
+</main>
+</div>
+<footer>
+<div class="inner-col">
+<nav class=seealso aria-label="See also">
+See also:
+<a href="/crates/include_dir">include_dir</a>,
+<a href="/crates/gltf">gltf</a>,
+<a href="/crates/bevy_asset_loader">bevy_asset_loader</a>,
+<a href="/crates/asphalt">asphalt</a>,
+<a href="/crates/axoasset">axoasset</a>,
+<a href="/crates/three-d-asset">three-d-asset</a>,
+<a href="/crates/assets_manager">assets_manager</a>,
+<a href="/crates/itch-downloader">itch-downloader</a>,
+<a href="/crates/tauri-plugin-persisted-scope">tauri-plugin-persisted-scope</a>,
+<a href="/crates/twemoji-assets">twemoji-assets</a>,
+<a href="/crates/salvo-serve-static">salvo-serve-static</a>
+</nav>
+<aside role="contentinfo"><p><a href="/"><b>Lib.rs</b></a> is an unofficial list of Rust/Cargo crates, created by <a href="https://github.com/kornelski">kornelski</a>. It contains data from <a href="/data-processing">multiple sources, including heuristics, and manually curated data</a>. Content of this page is not necessarily endorsed by the authors of the crate. This site is not affiliated with nor endorsed by the Rust Project.
+If something is missing or incorrect,
+please <a href="https://gitlab.com/lib.rs/main/issues/new">file a bug</a>.</p></aside>
+</div>
+</footer>
+</body>
+</html>

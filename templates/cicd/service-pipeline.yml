@@ -144,6 +144,23 @@ promote-to-production:
   rules:
     - if: '$CI_COMMIT_BRANCH == "dev"' # Diese Regel war schon korrekt
 
+trigger-dev-deployment:
+  stage: release
+  trigger:
+    project: 'iac-environment/iac-ansible-automation'
+    branch: main
+    strategy: depend
+  variables:
+    # Pass context to the downstream pipeline
+    SERVICE_NAME: $CI_PROJECT_NAME
+    SERVICE_BRANCH: $CI_COMMIT_BRANCH
+    SERVICE_REPO_URL: $CI_PROJECT_URL
+  rules:
+    # Trigger a deployment for every commit on the dev branch
+    # after the manifests have been committed and promoted.
+    - if: '$CI_COMMIT_BRANCH == "dev"'
+
+
 #create-release-tag-and-deploy:
 #  stage: release
 #  image: alpine:latest
