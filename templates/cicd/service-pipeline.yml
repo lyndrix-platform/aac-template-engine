@@ -264,3 +264,4 @@ publish_to_docs:
   rules:
     # Dieser Job läuft nur bei Commits auf dem 'main'-Branch
     - if: '$CI_COMMIT_BRANCH == "main"'
+    
