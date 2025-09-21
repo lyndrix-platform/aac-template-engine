@@ -255,6 +255,8 @@ publish_to_docs:
         echo "---";
         echo "";
         cat ../documentation.md;
+        echo "";
+        echo -e "---\n*Written by AI*";
       } > "${DOC_FILE}"
 
     # 5. Änderungen committen und zurück ins Doku-Repository pushen
