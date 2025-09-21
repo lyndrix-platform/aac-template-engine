@@ -259,7 +259,7 @@ publish_to_docs:
 
     # 5. Änderungen committen und zurück ins Doku-Repository pushen
     - git add "${DOC_FILE}"
-    - 'git commit -m "docs: Aktualisiere Service-Dokumentation für ${CI_PROJECT_NAME} [skip ci]" || echo "Keine Änderungen an der Dokumentation."'
+    - 'git commit -m "docs: Aktualisiere Service-Dokumentation für ${CI_PROJECT_NAME}" || echo "Keine Änderungen an der Dokumentation."'
     - git push origin main
   rules:
     # Dieser Job läuft nur bei Commits auf dem 'main'-Branch
