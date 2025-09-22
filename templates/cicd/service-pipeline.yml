@@ -158,7 +158,8 @@ trigger-dev-deployment:
   rules:
     # Trigger a deployment for every commit on the dev branch
     # after the manifests have been committed and promoted.
-    - if: '$CI_COMMIT_BRANCH == "dev"'
+    # This rule now prevents an infinite loop by ignoring commits made by the CI bot.
+    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
 
 #create-release-tag-and-deploy:
