@@ -148,9 +148,8 @@ trigger-dev-deployment:
   stage: release
   trigger:
     project: 'iac-environment/iac-ansible-automation'
-    # FIX: Trigger a non-protected branch to avoid permission issues.
-    # The downstream pipeline will handle the logic based on the source.
-    branch: service-rollout-trigger
+    # Trigger the main branch directly. Permissions will be handled in the downstream project settings.
+    branch: main
     strategy: depend
   variables:
     # Pass context to the downstream pipeline
