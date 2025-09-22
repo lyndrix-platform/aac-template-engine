@@ -1,233 +1,179 @@
 # This is a reusable GitLab CI/CD pipeline for service repositories.
-# It automates the generation, validation, and commit of deployment configurations.
+# It automates a full GitOps lifecycle: Generate -> Validate -> Commit -> Deploy -> Promote.
 
 default:
   tags:
     - docker
 
-
 stages:
   - generate
   - validate
-  - commit
-  - promote
-  - release
-  - documentation # Neue Stage für die Dokumentations-Synchronisierung
-  - info # Neue Stage für die Info-Jobs
+  - dev-commit
+  - dev-deploy
+  - test-promote
+  - test-deploy
+  - prod-promote
+  - prod-deploy
 
 # ==========================================================================
-#   WORKFLOW FÜR DEN 'dev'-BRANCH (Generate, Validate, Commit, Promote)
-#   Die folgenden Jobs laufen jetzt AUSSCHLIESSLICH auf dem 'dev'-Branch.
+# STAGE 1: GENERATE (runs on dev branch)
+# Generate all deployment files from the service.yml SSoT.
 # ==========================================================================
-
-.generate-job:
+.generate-base:
   stage: generate
   image: python:3.9-slim
-  # ... (before_script und script bleiben unverändert) ...
   before_script:
     - apt-get update && apt-get install -y --no-install-recommends git
     - pip install PyYAML Jinja2
     - git clone "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
-    - cp -r aac-template-engine/templates .
-  script:
-    - SSOT_JSON=$(python -c 'import sys, yaml, json; print(json.dumps(yaml.safe_load(sys.stdin)))' < service.yml)
-    - echo "Generating '$DEPLOYMENT_TYPE' deployment..."
-    - python aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --deployment-type "$DEPLOYMENT_TYPE" || exit 1
-
   artifacts:
-    paths:
-      - deployments/
+    paths: [deployments/]
     expire_in: 1 hour
   rules:
-    - if: '$CI_COMMIT_BRANCH == "dev"' # NEU: Nur auf dev ausführen
+    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /ci:/'
 
 generate-docker-compose:
-  extends: .generate-job
-  variables:
-    DEPLOYMENT_TYPE: docker_compose
-
-generate-custom-files:
-  extends: .generate-job
+  extends: .generate-base
   script:
     - SSOT_JSON=$(python -c 'import sys, yaml, json; print(json.dumps(yaml.safe_load(sys.stdin)))' < service.yml)
-    - echo "Processing custom files..."
-    - python aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --process-files || exit 1
+    - python aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --deployment-type "docker_compose"
+
+generate-custom-files:
+  extends: .generate-base
+  script:
+    - SSOT_JSON=$(python -c 'import sys, yaml, json; print(json.dumps(yaml.safe_load(sys.stdin)))' < service.yml)
+    - python aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --process-files
   rules:
-    - if: '$CI_COMMIT_BRANCH == "dev"'
-      exists:
-        - custom_templates/files/**/*
+    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /ci:/'
+      exists: [custom_templates/files/**/*]
+
+# ==========================================================================
+# STAGE 2: VALIDATE (runs on dev branch)
+# Check the syntax of the generated files.
+# ==========================================================================
 
 validate-docker-compose:
   stage: validate
   image: docker:latest
-  services:
-    - docker:dind
-  needs:
-    - generate-docker-compose
-  # ... (script bleibt unverändert) ...
+  services: [docker:dind]
+  needs: [generate-docker-compose]
   script:
-    - |
-      if [ -f "deployments/docker_compose/docker-compose.yml" ]; then
-        echo "Validating generated docker-compose.yml syntax..."
-        apk add --no-cache docker-compose
-        docker-compose -f deployments/docker_compose/docker-compose.yml config
-      else
-        echo "No docker-compose.yml found to validate."
-        exit 1
-      fi
+    - apk add --no-cache docker-compose
+    - docker-compose -f deployments/docker_compose/docker-compose.yml config
   rules:
-    - if: '$CI_COMMIT_BRANCH == "dev"' # NEU: Nur auf dev ausführen
+    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /ci:/'
 
-.git-auth-setup:
+# ==========================================================================
+# STAGE 3: DEV COMMIT (runs on dev branch)
+# Commits generated files back to the dev branch.
+# ==========================================================================
+.git-commit-base:
   before_script:
     - apk add --no-cache git
     - git config --global user.email "ci-bot@${CI_SERVER_HOST}"
     - git config --global user.name "GitLab CI Bot"
-    # Use the 'store' credential helper for robust, non-interactive authentication
     - git config --global credential.helper 'store'
     - echo "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}" > ~/.git-credentials
-    # Set the remote URL without credentials; the helper will provide them
     - git remote set-url origin "https://${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
 
-commit-generated-files:
-  stage: commit
+dev-commit:
+  stage: dev-commit
   image: alpine:latest
-  extends: .git-auth-setup
-  needs:
-    - generate-docker-compose
-    - validate-docker-compose
-    - job: generate-custom-files
-      optional: true
+  extends: .git-commit-base
+  needs: [validate-docker-compose, generate-custom-files]
   script:
     - git add deployments/
-    - |
-      if ! git diff --staged --quiet; then
-        echo "Changes detected in deployment files. Committing..."
-        git commit -m "ci: Auto-generate deployment manifests [skip ci]"
-        git push origin HEAD:$CI_COMMIT_BRANCH
-        echo "Committed and pushed generated deployment files."
-      else
-        echo "No changes in deployment files to commit."
-      fi
+    - 'git diff --staged --quiet || (git commit -m "ci: Auto-generate deployment manifests" && git push origin HEAD:$CI_COMMIT_BRANCH)'
   rules:
-    - if: '$CI_COMMIT_BRANCH == "dev"' # NEU: Nur auf dev ausführen
+    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /ci:/'
 
-promote-to-test:
-  stage: promote
-  image: alpine:latest
-  extends: .git-auth-setup
-  needs:
-    - commit-generated-files
-  script:
-    - echo "Promoting dev branch to test branch..."
-    - git fetch origin
-    - git reset --hard origin/dev
-    - git push -f origin HEAD:test
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "dev"' # Diese Regel war schon korrekt
-
-promote-to-production:
-  stage: promote
-  image: alpine:latest
-  extends: .git-auth-setup
-  needs:
-    - promote-to-test
-  script:
-    - echo "Promoting test branch to production (main) branch..."
-    - git fetch origin
-    - git reset --hard origin/test
-    - git push -f origin HEAD:main
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "dev"' # Diese Regel war schon korrekt
-
-trigger-dev-deployment:
-  stage: release
+# ==========================================================================
+# STAGE 4: DEV DEPLOY (runs on dev branch)
+# Triggers the Ansible pipeline to deploy the dev version.
+# ==========================================================================
+dev-deploy:
+  stage: dev-deploy
   trigger:
     project: 'iac-environment/iac-ansible-automation'
-    # Trigger the main branch directly. Permissions will be handled in the downstream project settings.
     branch: main
     strategy: depend
   variables:
-    # Pass context to the downstream pipeline
     SERVICE_NAME: $CI_PROJECT_NAME
-    SERVICE_BRANCH: $CI_COMMIT_BRANCH
-    SERVICE_REPO_URL: $CI_PROJECT_URL
+    SERVICE_BRANCH: 'dev' # Hardcode the target environment
+  needs: [dev-commit]
   rules:
-    # Trigger a deployment for every commit on the dev branch
-    # after the manifests have been committed and promoted.
-    # This rule now prevents an infinite loop by ignoring commits made by the CI bot.
-    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
-
-
-#create-release-tag-and-deploy:
-#  stage: release
-#  image: alpine:latest
-#  needs:
-#    - promote-to-production
-#  before_script:
-#    - apk add --no-cache git
-#    - git config --global user.email "ci-bot@${CI_SERVER_HOST}"
-#    - git config --global user.name "GitLab CI Bot"
-#    - git remote set-url origin "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
-#  script:
-#    - export TAG_VERSION=$(date +%Y.%m.%d)-$(git rev-parse --short HEAD)
-#    - echo "Creating and pushing tag: $TAG_VERSION"
-#    - git tag $TAG_VERSION
-#    - git push origin $TAG_VERSION
-#    - echo "Deployment for $CI_PROJECT_NAME with version $TAG_VERSION would now be triggered."
-#  rules:
-#    - if: '$CI_COMMIT_BRANCH == "dev"'
-#trigger-production-deployment:
-#  stage: release
-#  trigger:
-#    project: 'iac-environment/iac-ansible-automation'
-#    branch: main
-#    strategy: depend
-#  variables:
-#    SERVICE_NAME: $CI_PROJECT_NAME
-#    SERVICE_VERSION: $CI_COMMIT_TAG
-#    SERVICE_REPO_URL: $CI_PROJECT_URL
-#  rules:
-#    - if: $CI_COMMIT_TAG # Diese Regel bleibt, da sie auf Tags reagiert
+    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /ci:/'
 
 # ==========================================================================
-#   NEUE INFO-JOBS für 'main' und 'test' Branches
+# STAGE 5: TEST PROMOTE (runs on dev branch)
+# Promotes dev to test after a successful dev deployment.
 # ==========================================================================
-
-list-main-deployments:
-  stage: info
+test-promote:
+  stage: test-promote
   image: alpine:latest
+  extends: .git-commit-base
+  needs: [dev-deploy]
   script:
-    - echo "📄 Listing deployments on main branch..."
-    - |
-      if [ -d "deployments" ]; then
-        ls -R deployments
-      else
-        echo "No deployments directory found."
-      fi
+    - git fetch origin dev
+    - git checkout -B test origin/dev
+    - git push -f origin test
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /ci:/'
 
-list-test-deployments:
-  stage: info
+# ==========================================================================
+# STAGE 6: TEST DEPLOY (runs on test branch)
+# Triggers a manual deployment to the test environment.
+# ==========================================================================
+test-deploy:
+  stage: test-deploy
+  trigger:
+    project: 'iac-environment/iac-ansible-automation'
+    branch: main
+    strategy: depend
+  variables:
+    SERVICE_NAME: $CI_PROJECT_NAME
+    SERVICE_BRANCH: 'test' # Hardcode the target environment
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "test"'
+      when: manual # Requires human validation before running
+      allow_failure: false
+
+# ==========================================================================
+# STAGE 7: PROD PROMOTE (runs on test branch)
+# Promotes test to main after a successful manual test deployment.
+# ==========================================================================
+prod-promote:
+  stage: prod-promote
   image: alpine:latest
+  extends: .git-commit-base
+  needs: [test-deploy]
   script:
-    - echo "🧪 Listing deployments on test branch..."
-    - |
-      if [ -d "deployments" ]; then
-        ls -R deployments
-      else
-        echo "No deployments directory found."
-      fi
+    - git fetch origin test
+    - git checkout -B main origin/test
+    - git push -f origin main
   rules:
     - if: '$CI_COMMIT_BRANCH == "test"'
 
 # ==========================================================================
-#   NEUER JOB: Dokumentation im zentralen Hugo-Repo aktualisieren
+# STAGE 8: PROD DEPLOY (runs on main branch)
+# Triggers a manual deployment to the production environment.
 # ==========================================================================
-
+prod-deploy:
+  stage: prod-deploy
+  trigger:
+    project: 'iac-environment/iac-ansible-automation'
+    branch: main
+    strategy: depend
+  variables:
+    SERVICE_NAME: $CI_PROJECT_NAME
+    SERVICE_BRANCH: 'main' # Hardcode the target environment
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual # Requires human validation before running
+      allow_failure: false
+    
 publish_to_docs:
-  stage: documentation
+  stage: prod-deploy
   image: alpine:latest
   variables:
     # URL zum zentralen Hugo-Dokumentations-Repository
@@ -278,7 +224,3 @@ publish_to_docs:
     - git add "${DOC_FILE}"
     - 'git commit -m "docs: Aktualisiere Service-Dokumentation für ${CI_PROJECT_NAME}" || echo "Keine Änderungen an der Dokumentation."'
     - git push origin main
-  rules:
-    # Dieser Job läuft nur bei Commits auf dem 'main'-Branch
-    - if: '$CI_COMMIT_BRANCH == "main"'
-    
