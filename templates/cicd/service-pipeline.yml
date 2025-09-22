@@ -175,8 +175,8 @@ prod-deploy:
 publish_to_docs:
   stage: prod-deploy
   image: alpine:latest
+  needs: [prod-deploy]
   variables:
-    # URL zum zentralen Hugo-Dokumentations-Repository
     DOCS_REPO_URL: "https://gitlab.int.fam-feser.de/documentation/aac-iac-documentation.git"
   before_script:
     - apk add --no-cache git
@@ -224,3 +224,7 @@ publish_to_docs:
     - git add "${DOC_FILE}"
     - 'git commit -m "docs: Aktualisiere Service-Dokumentation für ${CI_PROJECT_NAME}" || echo "Keine Änderungen an der Dokumentation."'
     - git push origin main
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual # Requires human validation before running
+      allow_failure: false
