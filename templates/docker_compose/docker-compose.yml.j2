@@ -128,7 +128,10 @@ services:
     hostname: "{{ dep_config.name }}"
     restart: "{{ dep_config.restart_policy | default('always') }}"
     {% if dep_config.command is defined %}
-    command: "{{ dep_config.command }}"
+    command:
+      {% for cmd_item in dep_config.command %}
+      - "{{ cmd_item }}"
+      {% endfor %}
     {% endif %}
     {% if dep_config.user is defined %}
     user: "{{ dep_config.user }}"
