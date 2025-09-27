@@ -77,11 +77,18 @@ services:
 
     {% if config.routing_enabled or (config.integrations and (config.integrations.autodns.enabled or config.integrations.homepage.enabled)) %}
     labels:
+      {# --- Define FQDN based on DNS mode --- #}
+      {% if config.integrations.autodns.use_custom_hostname %}
+        {% set fqdn = service.hostname ~ '.' ~ config.domain_name %}
+      {% else %}
+        {% set fqdn = service.stage ~ '.' ~ service.name ~ '.' ~ inventory_hostname ~ '.' ~ config.domain_name %}
+      {% endif %}
+
       # === Traefik Labels ===
       {% if config.routing_enabled %}
       traefik.enable: "true"
       traefik.docker.network: "{{ deployments.docker_compose.network_definitions.secured.name }}"
-      traefik.http.routers.{{ service.name }}.rule: "Host(`{{ service.hostname | default(service.name) }}.{{ config.domain_name }}`)"
+      traefik.http.routers.{{ service.name }}.rule: "Host(`{{ fqdn }}`)"
       traefik.http.routers.{{ service.name }}.entrypoints: "{{ config.entrypoint }}"
       traefik.http.routers.{{ service.name }}.tls: "true"
       traefik.http.routers.{{ service.name }}.tls.certresolver: "{{ config.cert_resolver }}"
@@ -92,26 +99,34 @@ services:
       traefik.http.services.{{ service.name }}.loadbalancer.server.port: "{{ service_port }}"
       {% endif %}
 
-      # === AutoDNS Labels ===
+      # === AutoDNS Labels (Dynamically selects mode) ===
       {% if config.integrations is defined and config.integrations.autodns is defined and config.integrations.autodns.enabled %}
-      auto-dns.customDNS.{{ service.name }}: "true"
-      {% if config.integrations.autodns.create_wildcard %}
-      auto-dns.createWildcard.{{ service.name }}: "true"
-      {% endif %}
-      auto-dns.customDOMAIN.{{ service.name }}: "{{ config.domain_name }}"
-      auto-dns.customHost.{{ service.name }}: "{{ service.hostname | default(service.name) }}"
+        auto-dns.createWildcard.{{ service.name }}: "{{ config.integrations.autodns.create_wildcard | lower }}"
+        {% if config.integrations.autodns.use_custom_hostname %}
+          {# --- Custom Hostname Mode (for Prod) --- #}
+          auto-dns.customDNS.{{ service.name }}: "true"
+          auto-dns.customDOMAIN.{{ service.name }}: "{{ config.domain_name }}"
+          auto-dns.customHost.{{ service.name }}: "{{ service.hostname }}"
+        {% else %}
+          {# --- Automatic Structured Mode (for Dev/Test) --- #}
+          auto-dns.customDNS.{{ service.name }}: "false"
+          auto-dns.domain.{{ service.name }}: "{{ config.domain_name }}"
+          auto-dns.stage.{{ service.name }}: "{{ service.stage }}"
+          auto-dns.service.{{ service.name }}: "{{ service.name }}"
+          auto-dns.hostname.{{ service.name }}: "{{ inventory_hostname }}"
+        {% endif %}
       {% endif %}
 
       # === Homepage Labels ===
       {% if config.integrations is defined and config.integrations.homepage is defined and config.integrations.homepage.enabled %}
       homepage.group: "{{ service.category }}"
       homepage.name: "{{ service.name }}"
-      homepage.href: "https://{{ service.hostname | default(service.name) }}.{{ config.domain_name }}"
+      homepage.href: "https://{{ fqdn }}"
       homepage.icon: "{{ service.icon }}"
       homepage.description: "{{ service.description }}"
       {% if config.integrations.homepage.widget is defined %}
       homepage.widget.type: "{{ config.integrations.homepage.widget.type }}"
-      homepage.widget.url: "https://{{ service.hostname | default(service.name) }}.{{ config.domain_name }}"
+      homepage.widget.url: "https://{{ fqdn }}"
       {% if config.integrations.homepage.widget.key is defined %}
       homepage.widget.key: "{{ config.integrations.homepage.widget.key }}"
       {% endif %}

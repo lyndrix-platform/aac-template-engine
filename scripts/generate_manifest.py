@@ -131,6 +131,10 @@ def main():
         # that have optional dependencies but reference them in their SSoT.
         initial_data.setdefault('dependencies', {})
 
+        # --- Inject the current stage into the data for self-rendering ---
+        # This makes {{ service.stage }} available inside service.yml
+        initial_data.setdefault('service', {})['stage'] = args.stage
+
         # --- Apply Stage-Specific Overrides ---
         current_stage = args.stage
         print(f"INFO: Generating manifests for stage: '{current_stage}'", file=sys.stderr)
