@@ -12,6 +12,7 @@ import sys
 import json
 import argparse
 import shutil
+from copy import deepcopy
 from jinja2 import Environment, FileSystemLoader, ChoiceLoader
 
 def render_ssot_recursively(data: dict) -> dict:
@@ -92,6 +93,23 @@ def process_templates(template_paths: list, output_base: str, context: dict):
             print(f"ERROR: Failed to render {template_file}: {e}", file=sys.stderr)
             sys.exit(1)
 
+def deep_merge(source, destination):
+    """
+    Recursively merge source dict into destination dict.
+    """
+    for key, value in source.items():
+        if isinstance(value, dict):
+            # get node or create one
+            node = destination.setdefault(key, {})
+            deep_merge(value, node)
+        else:
+            destination[key] = value
+    return destination
+
+def get_current_stage(data: dict) -> str:
+    """Determines the current deployment stage from the SSoT data."""
+    # The git_version (dev, test, main) directly corresponds to the stage.
+    return data.get("git_version", "dev").replace("main", "prod")
 
 def main():
     """Main execution function."""
@@ -99,6 +117,7 @@ def main():
     parser.add_argument('--ssot-json', required=True, help="The complete, pre-rendered SSoT as a JSON string.")
     parser.add_argument('--template-path', required=True, help="The absolute path to the main template engine directory.")
     
+    parser.add_argument('--stage', required=True, help="The deployment stage (e.g., dev, test, prod) to apply overrides for.")
     action_group = parser.add_mutually_exclusive_group(required=True)
     action_group.add_argument('--deployment-type', help="The deployment type to generate (e.g., 'docker_compose').")
     action_group.add_argument('--process-files', action='store_true', help="Process 'custom_templates/files' only.")
@@ -112,14 +131,27 @@ def main():
         # that have optional dependencies but reference them in their SSoT.
         initial_data.setdefault('dependencies', {})
 
+        # --- Apply Stage-Specific Overrides ---
+        current_stage = args.stage
+        print(f"INFO: Generating manifests for stage: '{current_stage}'", file=sys.stderr)
+
+        # Make a deep copy to avoid modifying the original data structure in-place
+        data_with_overrides = deepcopy(initial_data)
+
+        stage_overrides = data_with_overrides.pop("stage_overrides", {})
+        if current_stage in stage_overrides:
+            print(f"INFO: Applying overrides for stage '{current_stage}'", file=sys.stderr)
+            override_data = stage_overrides[current_stage]
+            data_with_overrides = deep_merge(override_data, data_with_overrides)
+
         # Resolve any Jinja2 templates within the SSoT data itself.
         # This makes the script idempotent and compatible with both Ansible (pre-rendered)
         # and raw CI (un-rendered) data sources.
-        data = render_ssot_recursively(initial_data)
+        data = render_ssot_recursively(data_with_overrides)
 
         # --- DEBUG: Print the exact data being used for rendering ---
         print("--- SCRIPT: Using the following data for rendering ---", file=sys.stderr)
-        print(json.dumps(data.get("deployments", {}).get("docker_compose", {}).get("stack_env"), indent=4), file=sys.stderr)
+        print(json.dumps({"service": data.get("service"), "config": data.get("config")}, indent=2), file=sys.stderr)
         print("----------------------------------------------------", file=sys.stderr)
 
         if not data:

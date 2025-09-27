@@ -34,14 +34,14 @@ stages:
 generate-docker-compose:
   extends: .generate-base
   script:
-    - SSOT_JSON=$(python -c 'import sys, yaml, json; print(json.dumps(yaml.safe_load(sys.stdin)))' < service.yml)
-    - python aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --deployment-type "docker_compose"
+    - SSOT_JSON=$(python3 -c 'import sys, yaml, json; print(json.dumps(yaml.safe_load(sys.stdin)))' < service.yml)
+    - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --deployment-type "docker_compose" --stage "dev"
 
 generate-custom-files:
   extends: .generate-base
   script:
-    - SSOT_JSON=$(python -c 'import sys, yaml, json; print(json.dumps(yaml.safe_load(sys.stdin)))' < service.yml)
-    - python aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --process-files
+    - SSOT_JSON=$(python3 -c 'import sys, yaml, json; print(json.dumps(yaml.safe_load(sys.stdin)))' < service.yml)
+    - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --process-files --stage "dev"
   rules:
     - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE!~ /ci:/'
       exists: [custom_templates/files/**/*]
