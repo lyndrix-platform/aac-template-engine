@@ -63,67 +63,64 @@ validate-docker-compose:
 # ==========================================================================
 # STAGE 3: DEV COMMIT (runs on dev branch)
 # ==========================================================================
-.git-commit-base:
-  before_script:
-    - apk add --no-cache git
-    - git config --global user.email "ci-bot@${CI_SERVER_HOST}"
-    - git config --global user.name "GitLab CI Bot"
-    - git config --global credential.helper 'store'
-    - echo "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}" > ~/.git-credentials
-    - git remote set-url origin "https://${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
-
-dev-commit:
+.promote-base:
   stage: dev-commit
-  image: alpine:latest
-  extends: .git-commit-base
+  image: python:3.9-slim
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends git
+    - pip install PyYAML
+    - git clone "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
+  variables:
+    IAC_CONTROLLER_REPO_URL: "https://gitlab.int.fam-feser.de/iac-environment/iac-controller.git"
+    # NOTE: You must create a Project Access Token in the 'iac-controller' project
+    # with the 'developer' role and 'write_repository' scope.
+    # Store this token as a masked, protected CI/CD variable named 'IAC_CONTROLLER_TOKEN'
+    # in the group or project where this pipeline runs.
+
+dev-promote-and-deploy:
+  extends: .promote-base
   needs:
     - job: validate-docker-compose
     - job: generate-custom-files
       optional: true
   script:
-    # KORREKTUR: Der Befehl wurde in einen sauberen, mehrzeiligen if-Block umgewandelt.
-    - |
-      git add deployments/
-      if ! git diff --staged --quiet; then
-        git commit -m "ci: Auto-generate deployment manifests"
-        git push origin HEAD:$CI_COMMIT_BRANCH
-      else
-        echo "No changes to commit."
-      fi
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE!~ /ci:/'
-
-# ==========================================================================
-# STAGE 4: DEV DEPLOY (runs on dev branch)
-# ==========================================================================
-dev-deploy:
-  stage: dev-deploy
-  trigger:
-    project: 'iac-environment/iac-ansible-automation'
-    branch: main
-    strategy: depend
-  variables:
-    SERVICE_NAME: $CI_PROJECT_NAME
-    SERVICE_BRANCH: 'dev'
-    DEPLOYMENT_TYPE: 'single_service_trigger'
-  needs: [dev-commit] # KORREKTUR: Abhängigkeit ist nun korrekt auf 'dev-commit' gesetzt.
+    - echo "Promoting service to dev environment..."
+    - >
+      python aac-template-engine/scripts/promote_service.py
+      --service-name "$CI_PROJECT_NAME"
+      --service-git-repo "$CI_PROJECT_URL.git"
+      --target-stage "dev"
+      --iac-controller-repo-url "$IAC_CONTROLLER_REPO_URL"
+      --iac-controller-token "$IAC_CONTROLLER_TOKEN"
   rules:
     - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE!~ /ci:/'
 
 # ==========================================================================
 # STAGE 5: TEST PROMOTE (runs on dev branch)
 # ==========================================================================
+# This job is now manual. A user can click it to create the 'test' branch
+# and promote the service to the 'test' stage in the central inventory.
 test-promote:
   stage: test-promote
-  image: alpine:latest
-  extends: .git-commit-base
-  needs: [dev-deploy]
+  extends: .promote-base
+  needs: [dev-promote-and-deploy]
   script:
+    - echo "Creating test branch..."
     - git fetch origin dev
     - git checkout -B test origin/dev
     - git push -f origin test
+    - echo "Promoting service to test environment..."
+    - >
+      python aac-template-engine/scripts/promote_service.py
+      --service-name "$CI_PROJECT_NAME"
+      --service-git-repo "$CI_PROJECT_URL.git"
+      --target-stage "test"
+      --iac-controller-repo-url "$IAC_CONTROLLER_REPO_URL"
+      --iac-controller-token "$IAC_CONTROLLER_TOKEN"
   rules:
     - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE!~ /ci:/'
+      when: manual
+      allow_failure: false
 
 # ==========================================================================
 # STAGE 6: TEST DEPLOY (runs on test branch)
@@ -140,21 +137,27 @@ test-deploy:
     DEPLOYMENT_TYPE: 'single_service_trigger'
   rules:
     - if: '$CI_COMMIT_BRANCH == "test"'
-      when: manual
-      allow_failure: false
 
 # ==========================================================================
 # STAGE 7: PROD PROMOTE (runs on test branch)
 # ==========================================================================
 prod-promote:
   stage: prod-promote
-  image: alpine:latest
-  extends: .git-commit-base
+  extends: .promote-base
   needs: [test-deploy]
   script:
+    - echo "Creating main branch from test..."
     - git fetch origin test
     - git checkout -B main origin/test
     - git push -f origin main
+    - echo "Promoting service to prod environment..."
+    - >
+      python aac-template-engine/scripts/promote_service.py
+      --service-name "$CI_PROJECT_NAME"
+      --service-git-repo "$CI_PROJECT_URL.git"
+      --target-stage "prod"
+      --iac-controller-repo-url "$IAC_CONTROLLER_REPO_URL"
+      --iac-controller-token "$IAC_CONTROLLER_TOKEN"
   rules:
     - if: '$CI_COMMIT_BRANCH == "test"'
 
@@ -182,10 +185,6 @@ publish_to_docs:
   needs: [prod-deploy]
   variables:
     DOCS_REPO_URL: "https://gitlab.int.fam-feser.de/documentation/aac-iac-documentation.git"
-  before_script:
-    - apk add --no-cache git
-    - git config --global user.email "ci-bot@${CI_SERVER_HOST}"
-    - git config --global user.name "GitLab CI Bot"
   script:
     - |
       if [ ! -f "documentation.md" ]; then
