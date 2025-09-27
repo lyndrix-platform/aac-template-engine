@@ -32,13 +32,13 @@ stages:
     - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE!~ /ci:/'
 
 generate-docker-compose:
-  extends:.generate-base
+  extends: .generate-base
   script:
     - SSOT_JSON=$(python -c 'import sys, yaml, json; print(json.dumps(yaml.safe_load(sys.stdin)))' < service.yml)
     - python aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --deployment-type "docker_compose"
 
 generate-custom-files:
-  extends:.generate-base
+  extends: .generate-base
   script:
     - SSOT_JSON=$(python -c 'import sys, yaml, json; print(json.dumps(yaml.safe_load(sys.stdin)))' < service.yml)
     - python aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --process-files
@@ -75,7 +75,7 @@ validate-docker-compose:
 dev-commit:
   stage: dev-commit
   image: alpine:latest
-  extends:.git-commit-base
+  extends: .git-commit-base
   needs:
     - job: validate-docker-compose
     - job: generate-custom-files
@@ -116,7 +116,7 @@ dev-deploy:
 test-promote:
   stage: test-promote
   image: alpine:latest
-  extends:.git-commit-base
+  extends: .git-commit-base
   needs: [dev-deploy]
   script:
     - git fetch origin dev
@@ -149,7 +149,7 @@ test-deploy:
 prod-promote:
   stage: prod-promote
   image: alpine:latest
-  extends:.git-commit-base
+  extends: .git-commit-base
   needs: [test-deploy]
   script:
     - git fetch origin test
