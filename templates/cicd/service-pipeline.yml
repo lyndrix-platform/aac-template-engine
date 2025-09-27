@@ -80,7 +80,10 @@ dev-commit:
   stage: dev-commit
   image: alpine:latest
   extends: .git-commit-base
-  needs: [validate-docker-compose, generate-custom-files]
+  needs:
+    - job: validate-docker-compose
+    - job: generate-custom-files
+      optional: true
   script:
     - git add deployments/
     - 'git diff --staged --quiet || (git commit -m "ci: Auto-generate deployment manifests" && git push origin HEAD:$CI_COMMIT_BRANCH)'
