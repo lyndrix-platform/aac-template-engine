@@ -128,10 +128,16 @@ services:
     hostname: "{{ dep_config.name }}"
     restart: "{{ dep_config.restart_policy | default('always') }}"
     {% if dep_config.command is defined %}
+    {# Check if the command is a simple list or a multi-line shell command #}
+    {% if dep_config.command | length == 3 and dep_config.command[0] == 'sh' and dep_config.command[1] == '-c' and '\n' in dep_config.command[2] %}
     command:
-      {% for cmd_item in dep_config.command %}
-      - "{{ cmd_item }}"
-      {% endfor %}
+      - sh
+      - -c
+      - |
+{{ dep_config.command[2] | indent(8) }}
+    {% else %}
+    command: {{ dep_config.command | tojson }}
+    {% endif %}
     {% endif %}
     {% if dep_config.user is defined %}
     user: "{{ dep_config.user }}"
