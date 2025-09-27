@@ -94,6 +94,17 @@ dev-commit:
 # STAGE 4: DEV DEPLOY (runs on dev branch)
 # Triggers the Ansible pipeline to deploy the dev version.
 # ==========================================================================
+debug_variables:
+  stage: dev-deploy
+  needs: [dev-commit]
+  script:
+    - echo "CI_PIPELINE_SOURCE = $CI_PIPELINE_SOURCE"
+    - echo "SERVICE_NAME = $SERVICE_NAME"
+    - echo "SERVICE_BRANCH = $SERVICE_BRANCH"
+    - echo "DEPLOYMENT_TYPE = $DEPLOYMENT_TYPE"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "trigger"'
+
 dev-deploy:
   stage: dev-deploy
   trigger:
@@ -103,8 +114,8 @@ dev-deploy:
   variables:
     SERVICE_NAME: $CI_PROJECT_NAME
     SERVICE_BRANCH: 'dev'
-    SERVICE_REPO_URL: $CI_PROJECT_URL  # Add this if needed
-  needs: [dev-commit]
+    DEPLOYMENT_TYPE: 'single_service_trigger'  # Add this
+  needs: [debug_variables]
   rules:
     - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /ci:/'
 
