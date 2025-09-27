@@ -95,7 +95,7 @@ def main():
     parser = argparse.ArgumentParser(description="Promote a service by updating the central IaC inventory.")
     parser.add_argument("--service-name", required=True, help="Name of the service (e.g., aac-firefly-iii).")
     parser.add_argument("--service-git-repo", required=True, help="Full Git URL of the service repository.")
-    parser.add_argument("--target-stage", required=True, choices=['dev', 'test'], help="The stage to promote to (dev or test).")
+    parser.add_argument("--target-stage", required=True, choices=['dev', 'test', 'prod'], help="The stage to promote to (dev, test, or prod).")
     parser.add_argument("--iac-controller-repo-url", required=True, help="Git URL for the iac-controller repository.")
     parser.add_argument("--iac-controller-token", required=True, help="Access token for pushing to the iac-controller repo.")
     parser.add_argument("--inventory-file", default="environments/feser_homelab.yml", help="Relative path to the inventory file in the controller repo.")
