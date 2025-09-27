@@ -84,7 +84,7 @@ dev-commit:
     # KORREKTUR: Der Befehl wurde in einen sauberen, mehrzeiligen if-Block umgewandelt.
     - |
       git add deployments/
-      if! git diff --staged --quiet; then
+      if ! git diff --staged --quiet; then
         git commit -m "ci: Auto-generate deployment manifests"
         git push origin HEAD:$CI_COMMIT_BRANCH
       else
@@ -188,7 +188,7 @@ publish_to_docs:
     - git config --global user.name "GitLab CI Bot"
   script:
     - |
-      if [! -f "documentation.md" ]; then
+      if [ ! -f "documentation.md" ]; then
         echo "Keine 'documentation.md' in diesem Repository gefunden. Überspringe Dokumentations-Update."
         exit 0
       fi
@@ -216,7 +216,7 @@ publish_to_docs:
       } > "${DOC_FILE}"
 
       git add "${DOC_FILE}"
-      if! git diff --staged --quiet; then
+      if ! git diff --staged --quiet; then
         git commit -m "docs: Aktualisiere Service-Dokumentation für ${CI_PROJECT_NAME}"
         git push origin main
       else
