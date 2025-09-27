@@ -59,7 +59,7 @@ def find_prod_site(inventory_data, service_name):
     return None
 
 
-def find_target_host(inventory_data, site_name, target_stage):
+def find_host_in_site(inventory_data, site_name, target_stage):
     """Finds the first available docker host in a given site and stage."""
     site = inventory_data.get("sites", {}).get(site_name)
     if not site:
@@ -79,6 +79,17 @@ def find_target_host(inventory_data, site_name, target_stage):
     print(f"ERROR: No suitable 'docker_hosts' found in site '{site_name}', stage '{target_stage}'.", file=sys.stderr)
     sys.exit(1)
 
+
+def find_first_available_host(inventory_data, target_stage):
+    """Finds the first available docker host in any site for a given stage."""
+    for site_name, site_data in inventory_data.get("sites", {}).items():
+        stage = site_data.get("stages", {}).get(target_stage, {})
+        for host_name, host_data in stage.get("hosts", {}).items():
+            if "docker_hosts" in host_data.get("ansible_groups", []):
+                print(f"Found first available target host '{host_name}' in site '{site_name}' and stage '{target_stage}'.")
+                return site_name, host_name
+    print(f"ERROR: No suitable 'docker_hosts' found in any site for stage '{target_stage}'.", file=sys.stderr)
+    sys.exit(1)
 
 def main():
     parser = argparse.ArgumentParser(description="Promote a service by updating the central IaC inventory.")
@@ -109,11 +120,14 @@ def main():
         # Use a loader that preserves comments and structure if possible in the future
         inventory = yaml.safe_load(f)
 
+    # --- 2a. Determine Target Site and Host ---
     prod_site = find_prod_site(inventory, args.service_name)
-    target_site = prod_site if prod_site else "onprem"
-    print(f"Determined target site: '{target_site}'")
-
-    target_host_name = find_target_host(inventory, target_site, args.target_stage)
+    if prod_site:
+        print(f"Determined target site based on prod deployment: '{prod_site}'")
+        target_site = prod_site
+        target_host_name = find_host_in_site(inventory, target_site, args.target_stage)
+    else:
+        target_site, target_host_name = find_first_available_host(inventory, args.target_stage)
 
     # --- 3. Create/Update Service Definition ---
     service_definition = {
@@ -126,12 +140,12 @@ def main():
 
     # Navigate to the target host's service list
     target_host = inventory["sites"][target_site]["stages"][args.target_stage]["hosts"][target_host_name]
-    if "services" not in target_host:
+    if target_host.get("services") is None: # Check for None explicitly
         target_host["services"] = []
 
     # Check if service already exists and update it, otherwise append
     service_found = False
-    for i, existing_service in enumerate(target_host["services"]):
+    for i, existing_service in enumerate(target_host.get("services", [])):
         if existing_service.get("name") == args.service_name:
             print(f"Updating existing service '{args.service_name}' on host '{target_host_name}'.")
             target_host["services"][i] = service_definition
