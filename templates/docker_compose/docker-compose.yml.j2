@@ -167,8 +167,8 @@ services:
     {% endif %}
     {% if dep_config.labels is defined %}
     labels:
-      {% for label in dep_config.labels %}
-      - "{{ label }}"
+      {% for key, value in dep_config.labels.items() %}
+      "{{ key }}": "{{ value }}"
       {% endfor %}
     {% endif %}
 {% endfor %}
