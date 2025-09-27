@@ -71,11 +71,7 @@ validate-docker-compose:
     - pip install PyYAML
     - git clone "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
   variables:
-    IAC_CONTROLLER_REPO_URL: "https://gitlab.int.fam-feser.de/iac-environment/iac-controller.git"
-    # NOTE: You must create a Project Access Token in the 'iac-controller' project
-    # with the 'developer' role and 'write_repository' scope.
-    # Store this token as a masked, protected CI/CD variable named 'IAC_CONTROLLER_TOKEN'
-    # in the group or project where this pipeline runs.
+    IAC_CONTROLLER_REPO_URL: "https://gitlab.int.fam-feser.de/iac-environment/iac-controller.git" # The URL to the central inventory repository.
 
 dev-promote-and-deploy:
   extends: .promote-base
@@ -91,7 +87,7 @@ dev-promote-and-deploy:
       --service-git-repo "$CI_PROJECT_URL.git"
       --target-stage "dev"
       --iac-controller-repo-url "$IAC_CONTROLLER_REPO_URL"
-      --iac-controller-token "$IAC_CONTROLLER_TOKEN"
+      --iac-controller-token "$CI_GITLAB_TOKEN_GLOBAL_FESER"
   rules:
     - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE!~ /ci:/'
 
@@ -116,7 +112,7 @@ test-promote:
       --service-git-repo "$CI_PROJECT_URL.git"
       --target-stage "test"
       --iac-controller-repo-url "$IAC_CONTROLLER_REPO_URL"
-      --iac-controller-token "$IAC_CONTROLLER_TOKEN"
+      --iac-controller-token "$CI_GITLAB_TOKEN_GLOBAL_FESER"
   rules:
     - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE!~ /ci:/'
       when: manual
@@ -157,7 +153,7 @@ prod-promote:
       --service-git-repo "$CI_PROJECT_URL.git"
       --target-stage "prod"
       --iac-controller-repo-url "$IAC_CONTROLLER_REPO_URL"
-      --iac-controller-token "$IAC_CONTROLLER_TOKEN"
+      --iac-controller-token "$CI_GITLAB_TOKEN_GLOBAL_FESER"
   rules:
     - if: '$CI_COMMIT_BRANCH == "test"'
 
