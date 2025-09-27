@@ -102,7 +102,8 @@ dev-deploy:
     strategy: depend
   variables:
     SERVICE_NAME: $CI_PROJECT_NAME
-    SERVICE_BRANCH: 'dev' # Hardcode the target environment
+    SERVICE_BRANCH: 'dev'
+    SERVICE_REPO_URL: $CI_PROJECT_URL  # Add this if needed
   needs: [dev-commit]
   rules:
     - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /ci:/'
