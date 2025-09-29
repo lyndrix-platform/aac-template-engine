@@ -120,7 +120,7 @@ services:
       # === Homepage Labels ===
       {% if config.integrations is defined and config.integrations.homepage is defined and config.integrations.homepage.enabled %}
       homepage.group: "{{ service.category }}"
-      homepage.name: "{{ service.name }}"
+      homepage.name: "{{ service.name }} - {{ inventory_hostname | default('ci-validation-host') }}"
       homepage.href: "https://{{ fqdn }}"
       homepage.icon: "{{ service.icon }}"
       homepage.description: "{{ service.description }}"
