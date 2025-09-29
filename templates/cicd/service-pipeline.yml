@@ -123,14 +123,18 @@ test-promote:
 # ==========================================================================
 test-deploy:
   stage: test-deploy
+  # Dieser Job löst die zentrale Ansible-Pipeline aus, um NUR diesen Service auszurollen.
   trigger:
     project: 'iac-environment/iac-ansible-automation'
     branch: main
     strategy: depend
+  # Die Variablen werden an die Downstream-Pipeline übergeben.
+  # SERVICE_NAME wird verwendet, um das Ansible-Playbook auf die richtige Host-Gruppe zu beschränken (`--limit service_...`).
+  # DEPLOYMENT_TYPE stellt sicher, dass der richtige Job in der Downstream-Pipeline ausgeführt wird.
   variables:
-    SERVICE_NAME: $CI_PROJECT_NAME
-    SERVICE_BRANCH: 'test'
-    DEPLOYMENT_TYPE: 'single_service_trigger'
+    SERVICE_NAME: $CI_PROJECT_NAME # z.B. 'aac-traefik'
+    SERVICE_BRANCH: 'test' # Informative Variable für die Downstream-Pipeline
+    DEPLOYMENT_TYPE: 'single_service_trigger' # Löst den 'rollout_single_service'-Job aus
   rules:
     - if: '$CI_COMMIT_BRANCH == "test"'
 
@@ -162,14 +166,18 @@ prod-promote:
 # ==========================================================================
 prod-deploy:
   stage: prod-deploy
+  # Dieser Job löst die zentrale Ansible-Pipeline aus, um NUR diesen Service auszurollen.
   trigger:
     project: 'iac-environment/iac-ansible-automation'
     branch: main
     strategy: depend
+  # Die Variablen werden an die Downstream-Pipeline übergeben.
+  # SERVICE_NAME wird verwendet, um das Ansible-Playbook auf die richtige Host-Gruppe zu beschränken (`--limit service_...`).
+  # DEPLOYMENT_TYPE stellt sicher, dass der richtige Job in der Downstream-Pipeline ausgeführt wird.
   variables:
-    SERVICE_NAME: $CI_PROJECT_NAME
-    SERVICE_BRANCH: 'main'
-    DEPLOYMENT_TYPE: 'single_service_trigger'
+    SERVICE_NAME: $CI_PROJECT_NAME # z.B. 'aac-traefik'
+    SERVICE_BRANCH: 'main' # Informative Variable für die Downstream-Pipeline
+    DEPLOYMENT_TYPE: 'single_service_trigger' # Löst den 'rollout_single_service'-Job aus
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
       when: manual
