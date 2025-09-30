@@ -77,7 +77,8 @@ Eine Liste von Volumes, die der Service benötigt. Die Engine erstellt automatis
 
 Der tatsächliche Pfad auf dem Host-System wird von der Template-Engine standardmäßig nach folgendem Schema aufgebaut:
 
-`<host_base_path>/<service_name>/<volume_name>/`
+`<host_base_path>/<service_name>/<volume_name>/
+`
 
 *   **`host_base_path`**: Wird aus `deployments.docker_compose.host_base_path` in der `service.yml` bezogen (z.B. `/export/docker`).
 *   **`service_name`**: Der Name des Services (z.B. `aac-traefik`).
@@ -114,17 +115,34 @@ Enthält die Konfigurationen für verschiedene Deployment-Ziele.
 
 | Schlüssel | Typ | Beschreibung | Beispiel |
 | :--- | :--- | :--- | :--- |
+| `command` | Array | Überschreibt den Standard-Befehl des Containers. | `["my-command", "--flag"]` |
 | `restart_policy`| String | Neustart-Richtlinie für den Container. | `always` |
 | `host_base_path`| String | Basis-Pfad auf dem Host für Volume-Daten. | `/export/docker` |
 | `networks_to_join`| Array | Liste von logischen Netzwerknamen, mit denen der Service verbunden wird. | `[ "secured", "exposed" ]` |
 | `network_definitions`| Object | Definition der unter `networks_to_join` verwendeten Netzwerke. | `secured: { name: "services-secured", external: true }` |
 | `raw_volumes` | Array | Für direkte Host-Pfad-Mounts (z.B. Docker-Socket). | `[ "/var/run/docker.sock:/var/run/docker.sock" ]` |
+| `security_opts` | Array | Setzt Docker Security-Optionen für den Container. | `["no-new-privileges:true"]` |
+| `logging` | Object | Konfiguration für das Docker-Logging-Subsystem. | `{ driver: "json-file", options: { "max-size": "10m" } }` |
 | `dot_env` | Object | Key-Value-Paare, die als **nicht-geheime** Umgebungsvariablen in die `.env`-Datei geschrieben werden. | `TZ: "Europe/Berlin"` |
 | `stack_env` | Object | Key-Value-Paare, die als **geheime** Umgebungsvariablen in die `stack.env`-Datei geschrieben werden. | `IONOS_API_KEY: "secret-key"` |
 
+
+#### `kubernetes` (Beispiel)
+
+Die Engine unterstützt auch die Generierung von Kubernetes-Manifesten. Der `kubernetes`-Block ist ähnlich strukturiert und dient als SSoT für Kubernetes-Deployments. *(Hinweis: Die Template-Implementierung für Kubernetes ist möglicherweise nicht so vollständig wie für Docker Compose.)*
+
+| Schlüssel | Typ | Beschreibung |
+| :--- | :--- | :--- |
+| `namespace` | String | Der Kubernetes-Namespace, in dem der Service bereitgestellt wird. |
+| `replicas` | Integer | Die Anzahl der Pod-Replicas. |
+| `service_type` | String | Der Typ des Kubernetes-Services (z.B. `LoadBalancer`, `NodePort`). |
+| `ingress` | Object | Konfiguration für den Ingress-Controller. |
+| `persistent_volume_claims`| Object | Definiert die Persistent Volume Claims (PVCs) für stateful Daten. |
+| `resources` | Object | Definiert CPU- und Memory-Requests und -Limits für die Pods. |
+
 ### 3.6 `dependencies`
 
-Definiert abhängige Services (z.B. Datenbanken, Redis), die zusammen mit dem Hauptservice bereitgestellt werden. Jeder Eintrag in `dependencies` ist im Grunde eine kompakte Service-Definition.
+Definiert abhängige Services (z.B. Datenbanken, Redis), die zusammen mit dem Hauptservice bereitgestellt werden. Jeder Eintrag in `dependencies` ist im Grunde eine kompakte Service-Definition und kann die meisten der gleichen Schlüssel wie ein Top-Level-Service enthalten, z.B. `image_repo`, `volumes`, `command` und `environment`.
 
 ```yaml
 dependencies:
@@ -242,7 +260,7 @@ Dieser Aufbau ermöglicht verschiedene, mächtige Deployment-Strategien:
 
 *   **Vollständiges Umgebungs-Deployment:** Manuelle Änderungen oder ein getriggerter Lauf im `iac-controller` können die Ansible-Pipeline ohne `--limit` starten. In diesem Fall würde Ansible den Zustand *aller* im `iac-controller` definierten Services auf *allen* Hosts der jeweiligen Umgebung (z.B. `prod`) überprüfen und ggf. korrigieren. Dies ist nützlich, um Konfigurationsdrift zu beheben oder globale Änderungen auszurollen.
 
-*   **Promotion (`dev` -> `test` -> `prod`):** Die CI/CD-Pipeline im App-Repo enthält manuelle Jobs (`test-promote`, `prod-promote`), die genau den oben beschriebenen Prozess für die nächsthöhere Umgebung wiederholen: Sie erstellen den passenden Git-Branch (`test` oder `main`) und committen die generierten Artefakte in den entsprechenden `test`- oder `prod`-Pfad im `iac-controller`.
+*   **Promotion (`dev` -> `test` -> `prod`):** Die CI/CD-Pipeline im App-Repo enthält manuelle Jobs (`test-promote`, `prod-promote`). Diese erstellen zuerst den entsprechenden Git-Branch (`test` oder `main`) im App-Repository selbst und pushen diesen. Anschließend wiederholen sie den Promote-Prozess für die nächsthöhere Umgebung, indem sie die generierten Artefakte in den entsprechenden `test`- oder `prod`-Pfad im `iac-controller` committen.
 
 ---
 
@@ -263,7 +281,27 @@ Dieser Aufbau ermöglicht verschiedene, mächtige Deployment-Strategien:
 
 ---
 
-## 8. Beispiel: Multi-Container Service (Firefly III)
+## 8. Automatisierte Service-Dokumentation
+
+Ein weiteres Kernmerkmal des Systems ist die Fähigkeit, die technische Dokumentation eines Services direkt aus dessen Repository zu ziehen und zentral zu veröffentlichen.
+
+**Voraussetzung:** Im Root des Applikations-Repositories existiert eine `documentation.md`-Datei.
+
+**Der `publish_to_docs`-Workflow:**
+
+Dieser Prozess wird durch einen manuellen `publish_to_docs`-Job in der CI/CD-Pipeline auf dem `main`-Branch gesteuert:
+
+1.  **Prüfung:** Der Job prüft, ob eine `documentation.md` im Repository vorhanden ist.
+2.  **Klonen des Doku-Repos:** Das zentrale Dokumentations-Repository (`documentation/aac-iac-documentation`) wird geklont.
+3.  **Hugo-Header-Generierung:** Der Job erstellt dynamisch einen Hugo-kompatiblen "Front Matter"-Header. Dieser enthält Metadaten wie `title`, `date`, `lastmod`, `draft` und `description`.
+4.  **Zusammenführung:** Der generierte Header wird mit dem Inhalt der `documentation.md` aus dem App-Repo zusammengefügt.
+5.  **Commit & Push:** Die fertige Markdown-Datei wird im Dokumentations-Repository unter `site/content/aac-services/<service-name>/<service-name>-documentation.md` gespeichert, committet und in den `main`-Branch gepusht.
+
+Durch diesen Prozess wird sichergestellt, dass die Dokumentation immer auf dem gleichen Stand wie der Code ist ("Docs as Code") und ohne manuelles Eingreifen in einem zentralen Portal (das mit Hugo gebaut wird) zur Verfügung steht.
+
+---
+
+## 9. Beispiel: Multi-Container Service (Firefly III)
 
 Hier ist ein anonymisiertes Beispiel einer `service.yml` für Firefly III. Es zeigt, wie ein komplexerer Service, der aus mehreren Containern (Hauptanwendung, Datenbank, Redis, Importer, Cron) besteht, definiert wird.
 
