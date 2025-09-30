@@ -64,7 +64,18 @@ Ein flexibler Abschnitt für anwendungsspezifische Konfigurationen, die in Templ
 | :--- | :--- | :--- | :--- |
 | `domain_name`| String | Basis-Domain für das Routing. | `int.fam-feser.de` |
 | `cert_resolver`| String | Name des Cert-Resolvers (z.B. für Traefik). | `ionos` |
-| `integrations`| Object | Unterobjekt für Integrationen mit anderen Tools. | `{ homepage: { enabled: true } }` |
+| `integrations`| Object | Definiert, wie der Service mit anderen Tools im Ökosystem interagiert. Die hier gesetzten Flags und Konfigurationen werden von den Templates genutzt, um z.B. automatisch Service-Widgets für Dashboards oder DNS-Einträge zu erstellen. | `{ "homepage": { "enabled": true }, "autodns": { "enabled": true } }` |
+
+#### Der `integrations`-Block
+
+Dieser Block ist entscheidend für die nahtlose Einbettung eines Services in die bestehende Infrastruktur. Anstatt Konfigurationen in verschiedenen anderen Repositories manuell zu pflegen, deklariert der Service hier seine Teilhabe an bestimmten Systemen.
+
+**Beispiele:**
+
+*   **`homepage`:** Wenn `enabled: true` gesetzt ist, können Templates automatisch die notwendigen Docker-Labels generieren, damit der Service auf einem [Homepage-Dashboard](https.gethomepage.dev/) erscheint.
+*   **`autodns`:** Bei `enabled: true` kann ein Prozess angestoßen werden, der automatisch die notwendigen DNS-Einträge für den Service erstellt, basierend auf dem `hostname` und der `domain_name`.
+
+Dieser Abschnitt ist erweiterbar und der Ort, um zukünftige Automatisierungen zu verankern.
 
 ### 2.5 `deployments`
 
