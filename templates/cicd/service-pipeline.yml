@@ -50,6 +50,8 @@ stages:
 .commit-artifacts:
   image: alpine:latest
   before_script:
+    - echo "Adding DNS fix for internal GitLab instance..."
+    - echo "$INTERNAL_GITLAB_IP gitlab.int.fam-feser.de" >> /etc/hosts
     - apk add --no-cache git
     - git config --global user.email "ci-bot@${CI_SERVER_HOST}"
     - git config --global user.name "GitLab CI Re-committer"
