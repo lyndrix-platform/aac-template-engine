@@ -183,7 +183,10 @@ def main():
             data_with_overrides = deep_merge(override_data, data_with_overrides)
 
         # --- Apply Default Docker Compose Network Logic (BEFORE recursive rendering) ---
-        if args.deployment_type == 'docker_compose' or (args.process_files and data_with_overrides.get('deployments', {}).get('docker_compose')):
+        # We apply this logic if 'docker_compose' is the target deployment type OR if we are processing files
+        # for a service that HAS a docker_compose deployment defined, as templates might reference network data.
+        if args.deployment_type == 'docker_compose' or \
+           (args.process_files and 'docker_compose' in data_with_overrides.get('deployments', {})):
             print("INFO: Pre-processing and applying default Docker Compose network logic.", file=sys.stderr)
             data_with_overrides = process_network_logic(data_with_overrides)
 
