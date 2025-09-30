@@ -1,28 +1,31 @@
 # This is a reusable GitLab CI/CD pipeline for service repositories.
-# It automates a full GitOps lifecycle: Generate -> Validate -> Commit -> Deploy -> Promote.
+# It automates a full GitOps lifecycle for each environment:
+# Generate -> Validate -> Commit -> Deploy.
 
 default:
   tags:
     - docker
 
 stages:
-  - generate
-  - validate
+  - dev-generate
+  - dev-validate
   - dev-commit
   - dev-deploy
-  - test-promote
+  - test-generate
+  - test-validate
+  - test-commit
   - test-deploy
   - prod-generate
   - prod-validate
-  - prod-recommit
-  - prod-promote
+  - prod-commit
   - prod-deploy
+  - documentation
 
 # ==========================================================================
-# STAGE 1: GENERATE (runs on dev branch)
+# REUSABLE TEMPLATES (.generate-base, .validate-base, .commit-artifacts)
 # ==========================================================================
+
 .generate-base:
-  stage: generate
   image: python:3.9-slim
   before_script:
     - apt-get update && apt-get install -y --no-install-recommends git
@@ -32,74 +35,91 @@ stages:
     paths: [deployments/]
     expire_in: 1 hour
   rules:
-    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE!~ /ci:/'
+    # This rule is a placeholder and should be overridden in the concrete jobs
+    - if: '$CI_COMMIT_BRANCH && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
-generate-docker-compose:
-  extends: .generate-base
-  script:
-    - SSOT_JSON=$(python3 -c 'import sys, yaml, json; print(json.dumps(yaml.safe_load(sys.stdin)))' < service.yml)
-    - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --deployment-type "docker_compose" --stage "dev"
 
-generate-custom-files:
-  extends: .generate-base
-  script:
-    - SSOT_JSON=$(python3 -c 'import sys, yaml, json; print(json.dumps(yaml.safe_load(sys.stdin)))' < service.yml)
-    - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --process-files --stage "dev"
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE!~ /ci:/'
-      exists: [custom_templates/files/**/*]
-
-# ==========================================================================
-# STAGE 2: VALIDATE (runs on dev branch)
-# ==========================================================================
-validate-docker-compose:
-  stage: validate
+.validate-base:
   image: docker:latest
   services: [docker:dind]
-  needs: [generate-docker-compose]
   script:
     - apk add --no-cache docker-compose
     - docker-compose -f deployments/docker_compose/docker-compose.yml config
   rules:
-    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE!~ /ci:/'
+    - if: '$CI_COMMIT_BRANCH && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
-# ==========================================================================
-# STAGE 3: DEV COMMIT (runs on dev branch)
-# ==========================================================================
-.base-script:
-  stage: dev-commit
-  image: python:3.9-slim
+.commit-artifacts:
+  image: alpine:latest
   before_script:
-    - apt-get update && apt-get install -y --no-install-recommends git
-    - pip install PyYAML
-    - git clone "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
-  variables:
-    IAC_CONTROLLER_REPO_URL: "https://gitlab.int.fam-feser.de/iac-environment/iac-controller.git" # The URL to the central inventory repository.
-    
-dev-promote:
-  extends: .base-script
-  needs:
-    - job: validate-docker-compose
-    - job: generate-custom-files
-      optional: true
+    - echo "Adding DNS fix for internal GitLab instance..."
+    - echo "$INTERNAL_GITLAB_IP gitlab.int.fam-feser.de" >> /etc/hosts
+    - apk add --no-cache git
+    - git config --global user.email "ci-bot@${CI_SERVER_HOST}"
+    - git config --global user.name "GitLab CI Re-committer"
+    - git remote set-url origin "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+    - git checkout $CI_COMMIT_BRANCH
+    # --- FIX ---
+    # Sync with the remote branch to avoid non-fast-forward errors
+    - git pull --rebase origin $CI_COMMIT_BRANCH
   script:
-    - echo "Promoting service to dev environment..."
-    - >
-      python aac-template-engine/scripts/promote_service.py
-      --service-name "$CI_PROJECT_NAME"
-      --service-git-repo "$CI_PROJECT_URL.git"
-      --target-stage "dev"
-      --iac-controller-repo-url "$IAC_CONTROLLER_REPO_URL"
-      --iac-controller-token "$CI_GITLAB_TOKEN_GLOBAL_FESER"
+    - git add deployments/
+    - |
+      if ! git diff --staged --quiet; then
+        echo "Changes detected in generated artifacts. Committing..."
+        # The [skip ci] tag is crucial to prevent pipeline loops!
+        git commit -m "ci: Re-commit ${CI_COMMIT_BRANCH} artifacts [skip ci]"
+        git push origin $CI_COMMIT_BRANCH
+      else
+        echo "No changes in generated artifacts to re-commit."
+      fi
   rules:
-    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE!~ /ci:/'
+    - if: '$CI_COMMIT_BRANCH && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
 # ==========================================================================
-# STAGE 4: DEV DEPLOY (triggers downstream)
+# DEV WORKFLOW (runs on 'dev' branch)
 # ==========================================================================
+dev-generate-docker-compose:
+  extends: .generate-base
+  stage: dev-generate
+  script:
+    - SSOT_JSON=$(python3 -c 'import sys, yaml, json; print(json.dumps(yaml.safe_load(sys.stdin)))' < service.yml)
+    - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --deployment-type "docker_compose" --stage "dev"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+
+dev-generate-custom-files:
+  extends: .generate-base
+  stage: dev-generate
+  script:
+    - SSOT_JSON=$(python3 -c 'import sys, yaml, json; print(json.dumps(yaml.safe_load(sys.stdin)))' < service.yml)
+    - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --process-files --stage "dev"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+      exists: [custom_templates/files/**/*]
+
+dev-validate-docker-compose:
+  extends: .validate-base
+  stage: dev-validate
+  needs: [dev-generate-docker-compose]
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+
+dev-commit:
+  extends: .commit-artifacts
+  stage: dev-commit
+  needs:
+    # This ensures the job runs after validation is complete
+    - dev-validate-docker-compose
+    # These ensure the job gets the artifacts from BOTH generate jobs
+    - dev-generate-docker-compose
+    - job: dev-generate-custom-files
+      optional: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+
 dev-deploy:
   stage: dev-deploy
-  needs: [dev-promote]
+  needs: [dev-commit]
   trigger:
     project: 'iac-environment/iac-ansible-automation'
     branch: main
@@ -109,42 +129,67 @@ dev-deploy:
     SERVICE_BRANCH: 'dev'
     DEPLOYMENT_TYPE: 'single_service_trigger'
   rules:
-    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE!~ /ci:/'
+    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
 # ==========================================================================
-# STAGE 5: TEST PROMOTE (runs on dev branch)
+# TEST WORKFLOW (runs on 'test' branch)
 # ==========================================================================
-# This job is now manual. A user can click it to create the 'test' branch
-# and promote the service to the 'test' stage in the central inventory.
-test-promote:
-  stage: test-promote
-  extends: .base-script
-  needs: [dev-deploy]
+test-generate-docker-compose:
+  extends: .generate-base
+  stage: test-generate
   script:
-    - echo "Creating test branch..."
-    - git fetch origin dev
-    - git checkout -B test origin/dev
-    - git push -f origin test
-    - echo "Promoting service to test environment..."
-    - >
-      python aac-template-engine/scripts/promote_service.py
-      --service-name "$CI_PROJECT_NAME"
-      --service-git-repo "$CI_PROJECT_URL.git"
-      --target-stage "test"
-      --iac-controller-repo-url "$IAC_CONTROLLER_REPO_URL"
-      --iac-controller-token "$CI_GITLAB_TOKEN_GLOBAL_FESER"
+    - SSOT_JSON=$(python3 -c 'import sys, yaml, json; print(json.dumps(yaml.safe_load(sys.stdin)))' < service.yml)
+    - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --deployment-type "docker_compose" --stage "test"
   rules:
-    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE!~ /ci:/'
-      when: manual
-      allow_failure: false
+    - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+
+test-generate-custom-files:
+  extends: .generate-base
+  stage: test-generate
+  script:
+    - SSOT_JSON=$(python3 -c 'import sys, yaml, json; print(json.dumps(yaml.safe_load(sys.stdin)))' < service.yml)
+    - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --process-files --stage "test"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+      exists: [custom_templates/files/**/*]
+
+test-validate-docker-compose:
+  extends: .validate-base
+  stage: test-validate
+  needs: [test-generate-docker-compose]
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+
+test-commit:
+  extends: .commit-artifacts
+  stage: test-commit
+  needs:
+    # This ensures the job runs after validation is complete
+    - test-validate-docker-compose
+    # These ensure the job gets the artifacts from BOTH generate jobs
+    - test-generate-docker-compose
+    - job: test-generate-custom-files
+      optional: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+
+test-deploy:
+  stage: test-deploy
+  needs: [test-commit]
+  trigger:
+    project: 'iac-environment/iac-ansible-automation'
+    branch: main
+    strategy: depend
+  variables:
+    SERVICE_NAME: $CI_PROJECT_NAME
+    SERVICE_BRANCH: 'test'
+    DEPLOYMENT_TYPE: 'single_service_trigger'
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
 # ==========================================================================
-# STAGE 7: PROD GENERATE, VALIDATE & RE-COMMIT (runs on main branch)
+# PROD WORKFLOW (runs on 'main' branch)
 # ==========================================================================
-# These jobs ensure that the main branch always contains the final, rendered
-# artifacts for the 'prod' stage. This is useful for audits, manual emergency
-# deployments, or simply reviewing the final configuration before deployment.
-
 prod-generate-docker-compose:
   extends: .generate-base
   stage: prod-generate
@@ -152,7 +197,7 @@ prod-generate-docker-compose:
     - SSOT_JSON=$(python3 -c 'import sys, yaml, json; print(json.dumps(yaml.safe_load(sys.stdin)))' < service.yml)
     - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --deployment-type "docker_compose" --stage "prod"
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE!~ /ci:/'
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
 prod-generate-custom-files:
   extends: .generate-base
@@ -161,127 +206,56 @@ prod-generate-custom-files:
     - SSOT_JSON=$(python3 -c 'import sys, yaml, json; print(json.dumps(yaml.safe_load(sys.stdin)))' < service.yml)
     - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --process-files --stage "prod"
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE!~ /ci:/'
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
       exists: [custom_templates/files/**/*]
 
 prod-validate-docker-compose:
+  extends: .validate-base
   stage: prod-validate
-  image: docker:latest
-  services: [docker:dind]
   needs: [prod-generate-docker-compose]
-  script:
-    - apk add --no-cache docker-compose
-    - docker-compose -f deployments/docker_compose/docker-compose.yml config
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE!~ /ci:/'
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
-prod-recommit:
-  stage: prod-recommit
-  image: python:3.9-slim
+prod-commit:
+  extends: .commit-artifacts
+  stage: prod-commit
   needs:
+    # This ensures the job runs after validation is complete
     - prod-validate-docker-compose
+    # These ensure the job gets the artifacts from BOTH generate jobs
+    - prod-generate-docker-compose
     - job: prod-generate-custom-files
       optional: true
-  before_script:
-    - apt-get update && apt-get install -y --no-install-recommends git
-    - pip install PyYAML
-    - git clone "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
-    - git config --global user.email "ci-bot@${CI_SERVER_HOST}"
-    - git config --global user.name "GitLab CI Re-committer"
-    - git remote set-url origin "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
-    - git checkout $CI_COMMIT_BRANCH
-  script:
-    - |
-      if [ -d "deployments" ]; then
-        git add deployments/
-      fi
-    - |
-      if ! git diff --staged --quiet; then
-        git commit -m "ci: Re-commit prod artifacts for main branch"
-        git push origin $CI_COMMIT_BRANCH
-      else
-        echo "No changes in generated artifacts to re-commit."
-      fi
-    # This part promotes the service to the central inventory AFTER the artifacts have been re-committed.
-    - echo "Promoting service to prod environment..."
-    - >
-      python aac-template-engine/scripts/promote_service.py
-      --service-name "$CI_PROJECT_NAME"
-      --service-git-repo "$CI_PROJECT_URL.git"
-      --target-stage "prod"
-      --iac-controller-repo-url "$IAC_CONTROLLER_REPO_URL"
-      --iac-controller-token "$CI_GITLAB_TOKEN_GLOBAL_FESER"
-      --inventory-path "deployments/docker_compose" # Path to the generated artifacts
-      --use-local-artifacts # Use the just-generated files
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE!~ /ci:/'
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
-# ==========================================================================
-# STAGE 6: TEST DEPLOY (runs on test branch)
-# ==========================================================================
-test-deploy:
-  stage: test-deploy
-  # Dieser Job löst die zentrale Ansible-Pipeline aus, um NUR diesen Service auszurollen.
-  trigger:
-    project: 'iac-environment/iac-ansible-automation'
-    branch: main
-    strategy: depend
-  # Die Variablen werden an die Downstream-Pipeline übergeben.
-  # SERVICE_NAME wird verwendet, um das Ansible-Playbook auf die richtige Host-Gruppe zu beschränken (`--limit service_...`).
-  # DEPLOYMENT_TYPE stellt sicher, dass der richtige Job in der Downstream-Pipeline ausgeführt wird.
-  variables:
-    SERVICE_NAME: $CI_PROJECT_NAME # z.B. 'aac-traefik'
-    SERVICE_BRANCH: 'test' # Informative Variable für die Downstream-Pipeline
-    DEPLOYMENT_TYPE: 'single_service_trigger' # Löst den 'rollout_single_service'-Job aus
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "test"'
-
-# ==========================================================================
-# STAGE 7: PROD PROMOTE (runs on test branch)
-# ==========================================================================
-prod-promote:
-  stage: prod-promote
-  extends: .base-script
-  needs: [test-deploy] # Ensures test environment was successfully deployed before promoting to prod.
-  script:
-    - echo "Creating main branch from test..."
-    - git fetch origin test
-    - git checkout -B main origin/test
-    - git push -f origin main
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "test"'
-      when: manual
-      allow_failure: false
-
-# ==========================================================================
-# STAGE 8: PROD DEPLOY (runs on main branch)
-# ==========================================================================
 prod-deploy:
   stage: prod-deploy
-  # Dieser Job löst die zentrale Ansible-Pipeline aus, um NUR diesen Service auszurollen.
+  needs: [prod-commit]
   trigger:
     project: 'iac-environment/iac-ansible-automation'
     branch: main
     strategy: depend
-  # Die Variablen werden an die Downstream-Pipeline übergeben.
-  # SERVICE_NAME wird verwendet, um das Ansible-Playbook auf die richtige Host-Gruppe zu beschränken (`--limit service_...`).
-  # DEPLOYMENT_TYPE stellt sicher, dass der richtige Job in der Downstream-Pipeline ausgeführt wird.
   variables:
-    SERVICE_NAME: $CI_PROJECT_NAME # z.B. 'aac-traefik'
-    SERVICE_BRANCH: 'main' # Informative Variable für die Downstream-Pipeline
-    DEPLOYMENT_TYPE: 'single_service_trigger' # Löst den 'rollout_single_service'-Job aus
+    SERVICE_NAME: $CI_PROJECT_NAME
+    SERVICE_BRANCH: 'main'
+    DEPLOYMENT_TYPE: 'single_service_trigger'
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE!~ /ci:/'
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
       when: manual
       allow_failure: false
 
+# ==========================================================================
+# DOCUMENTATION WORKFLOW
+# ==========================================================================
 publish_to_docs:
-  stage: prod-deploy
+  stage: documentation
   image: alpine:latest
   needs: [prod-deploy]
   variables:
     DOCS_REPO_URL: "https://gitlab.int.fam-feser.de/documentation/aac-iac-documentation.git"
   script:
+    # Der Skript-Inhalt bleibt unverändert, da er bereits gut funktioniert hat.
     - |
       if [ ! -f "documentation.md" ]; then
         echo "Keine 'documentation.md' in diesem Repository gefunden. Überspringe Dokumentations-Update."
@@ -289,6 +263,9 @@ publish_to_docs:
       fi
       
       echo "Klone das Dokumentations-Repository..."
+      apk add --no-cache git
+      git config --global user.email "ci-bot@${CI_SERVER_HOST}"
+      git config --global user.name "GitLab CI Documentation Bot"
       git clone "https://gitlab-ci-token:${DOCS_REPO_TOKEN}@$(echo "$DOCS_REPO_URL" | sed 's|https://||')" docs_repo
       cd docs_repo
 
@@ -303,11 +280,10 @@ publish_to_docs:
         echo "date: $(date -u +'%Y-%m-%dT%H:%M:%SZ')";
         echo "lastmod: $(date -u +'%Y-%m-%dT%H:%M:%SZ')";
         echo "draft: false";
-        echo "tags:";
         echo "description: \"Automatisch generierte Service-Dokumentation für ${CI_PROJECT_NAME}.\"";
         echo "---";
         echo "";
-        cat../documentation.md;
+        cat ../documentation.md;
       } > "${DOC_FILE}"
 
       git add "${DOC_FILE}"
@@ -318,6 +294,6 @@ publish_to_docs:
         echo "Keine Änderungen an der Dokumentation."
       fi
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE!~ /ci:/'
-      when: manual
-      allow_failure: false
+    # Dieser Job läuft nur nach einem erfolgreichen manuellen Prod-Deploy.
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+      when: on_success
