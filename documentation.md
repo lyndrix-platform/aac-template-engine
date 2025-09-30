@@ -135,13 +135,27 @@ Die Engine unterscheidet zwischen zwei Arten von Umgebungsvariablen für den Doc
 
 ## 4. Custom Templates
 
-Wenn die Standard-Templates nicht ausreichen, können servicespezifische Templates erstellt werden.
+Wenn die Standard-Templates nicht ausreichen, bietet die Engine mächtige Möglichkeiten zur Anpassung und zum Überschreiben von Standardverhalten.
+
+### 4.1 Eigene Konfigurationsdateien
+
+Für anwendungsspezifische Konfigurationsdateien, die mit Jinja2-Logik befüllt werden müssen.
 
 *   **Speicherort:** Erstelle ein Verzeichnis `custom_templates/files/` im Root deines Service-Projekts.
 *   **Struktur:** Die Verzeichnisstruktur innerhalb von `custom_templates/files/` wird bei der Generierung beibehalten. Eine Datei unter `custom_templates/files/config/my-config.conf.j2` wird zu `deployments/docker_compose/config/my-config.conf` generiert.
 *   **Templating:** Du kannst die volle Leistung von Jinja2 nutzen und auf alle Daten aus der `service.yml` zugreifen (z.B. `{{ service.name }}`, `{{ config.domain_name }}`).
 
 Der CI/CD-Job `generate-custom-files` verarbeitet diese Templates automatisch.
+
+### 4.2 Überschreiben von Deployment-Templates
+
+Es ist sogar möglich, die Kern-Deployment-Templates der Engine zu überschreiben. Dies ist nützlich für Services, die eine komplett andere `docker-compose.yml`-Struktur benötigen.
+
+*   **Speicherort:** Lege eine Datei mit dem gleichen Namen wie das Original-Template im Verzeichnis `custom_templates/` ab.
+*   **Beispiel:** Um das Standard-Compose-File zu ersetzen, erstelle eine Datei `custom_templates/docker_compose/docker-compose.yml.j2`.
+*   **Funktionsweise:** Die CI/CD-Pipeline prüft zuerst, ob ein Custom-Template im Service-Repository existiert. Wenn ja, wird dieses anstelle des Standard-Templates aus der Template-Engine verwendet.
+
+**Achtung:** Das Überschreiben von Kern-Templates sollte mit Vorsicht verwendet werden, da man damit von den Standardisierungen und zukünftigen Updates der zentralen Template-Engine abweicht.
 
 ---
 
