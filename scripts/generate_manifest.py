@@ -111,6 +111,44 @@ def get_current_stage(data: dict) -> str:
     # The git_version (dev, test, main) directly corresponds to the stage.
     return data.get("git_version", "dev").replace("main", "prod")
 
+def process_network_logic(data: dict) -> dict:
+    """
+    Applies default network configurations for Docker Compose deployments.
+    """
+    service_name = data.get("service", {}).get("name", "unknown-service")
+
+    # 1. Define default network structures
+    default_network_definitions = {
+        "secured": {"name": "services-secured", "external": True},
+        "exposed": {"name": "services-exposed", "external": True},
+        "interconnect": {"name": "docker-default", "external": True},
+        "stack_internal": {"name": f"{service_name}_stack_internal", "driver": "bridge"}
+    }
+    default_networks_to_join = ["secured", "exposed", "stack_internal", "interconnect"]
+
+    # Get the docker_compose section, creating it if it doesn't exist
+    dc_deployments = data.setdefault('deployments', {}).setdefault('docker_compose', {})
+
+    # 2. Merge network_definitions
+    custom_network_definitions = dc_deployments.get('network_definitions', {})
+    # The custom definitions from service.yml override the defaults
+    merged_network_definitions = {**default_network_definitions, **custom_network_definitions}
+    dc_deployments['network_definitions'] = merged_network_definitions
+
+    # 3. Merge networks_to_join for the main service
+    custom_networks_to_join = dc_deployments.get('networks_to_join', [])
+    # Combine lists and remove duplicates, preserving order
+    merged_networks_to_join = list(dict.fromkeys(default_networks_to_join + custom_networks_to_join))
+    dc_deployments['networks_to_join'] = merged_networks_to_join
+
+    # 4. Ensure dependencies join the stack_internal network
+    for dep_name, dep_config in data.get('dependencies', {}).items():
+        dep_networks = dep_config.setdefault('networks_to_join', [])
+        if 'stack_internal' not in dep_networks:
+            dep_networks.append('stack_internal')
+
+    return data
+
 def main():
     """Main execution function."""
     parser = argparse.ArgumentParser(description="Generates deployment manifests from a JSON SSoT string.")
@@ -127,48 +165,45 @@ def main():
     try:
         initial_data = json.loads(args.ssot_json)
 
-        # Ensure 'dependencies' key exists to prevent rendering errors for services
-        # that have optional dependencies but reference them in their SSoT.
+        # Ensure 'dependencies' key exists to prevent rendering errors
         initial_data.setdefault('dependencies', {})
 
-        # --- Inject the current stage into the data for self-rendering ---
-        # This makes {{ service.stage }} available inside service.yml
+        # Inject the current stage into the data
         initial_data.setdefault('service', {})['stage'] = args.stage
 
-        # --- Apply Stage-Specific Overrides ---
+        # Apply Stage-Specific Overrides
         current_stage = args.stage
         print(f"INFO: Generating manifests for stage: '{current_stage}'", file=sys.stderr)
 
-        # Make a deep copy to avoid modifying the original data structure in-place
         data_with_overrides = deepcopy(initial_data)
-
         stage_overrides = data_with_overrides.pop("stage_overrides", {})
         if current_stage in stage_overrides:
             print(f"INFO: Applying overrides for stage '{current_stage}'", file=sys.stderr)
             override_data = stage_overrides[current_stage]
             data_with_overrides = deep_merge(override_data, data_with_overrides)
 
-        # Resolve any Jinja2 templates within the SSoT data itself.
-        # This makes the script idempotent and compatible with both Ansible (pre-rendered)
-        # and raw CI (un-rendered) data sources.
+        # --- Apply Default Docker Compose Network Logic (BEFORE recursive rendering) ---
+        if args.deployment_type == 'docker_compose':
+            print("INFO: Pre-processing and applying default Docker Compose network logic.", file=sys.stderr)
+            data_with_overrides = process_network_logic(data_with_overrides)
+
+        # Resolve Jinja2 templates within the SSoT data
         data = render_ssot_recursively(data_with_overrides)
 
         # --- DEBUG: Print the exact data being used for rendering ---
         print("--- SCRIPT: Using the following data for rendering ---", file=sys.stderr)
-        print(json.dumps({"service": data.get("service"), "config": data.get("config")}, indent=2), file=sys.stderr)
+        print(json.dumps({"service": data.get("service"), "config": data.get("config"), "deployments": data.get("deployments")}, indent=2), file=sys.stderr)
         print("----------------------------------------------------", file=sys.stderr)
 
         if not data:
             raise ValueError("SSoT data is empty after loading from JSON.")
 
         # --- Define template paths with override priority ---
-        # The script is run from the service repo, so '.' is the service repo root.
         service_repo_path = os.getcwd() 
         template_engine_path = args.template_path
 
         if args.deployment_type:
             deployment_type = args.deployment_type
-            # Priority: 1. Service Repo, 2. Template Engine
             template_paths = [
                 os.path.join(service_repo_path, 'custom_templates', deployment_type),
                 os.path.join(template_engine_path, 'templates', deployment_type)
@@ -177,7 +212,6 @@ def main():
             process_templates(template_paths, output_dir, data)
 
         if args.process_files:
-            # Priority: 1. Service Repo, 2. Template Engine
             template_paths = [
                 os.path.join(service_repo_path, 'custom_templates', 'files'),
                 os.path.join(template_engine_path, 'templates', 'files')
