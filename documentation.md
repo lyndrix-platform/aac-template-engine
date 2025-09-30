@@ -16,7 +16,24 @@ Aus dieser SSoT-Datei generiert eine CI/CD-Pipeline automatisch alle benötigten
 
 ---
 
-## 2. Die `service.yml` Datei
+## 2. Systemvoraussetzungen
+
+Damit das Ökosystem aus Template Engine und Deployment-Automatisierung korrekt funktioniert, gibt es eine grundlegende Abhängigkeit zu einer zentralen Ansible-Rolle, die sich im `iac-ansible-automation`-Repository befindet.
+
+**Abhängigkeit: `docker role`**
+
+Diese Ansible-Rolle ist dafür verantwortlich, die Ziel-Systeme (Docker-Hosts) vorzubereiten und sicherzustellen, dass alle für die Services notwendigen externen Ressourcen vorhanden sind. Ihre Hauptaufgaben umfassen:
+
+*   **Docker-Netzwerke:** Erstellung der globalen Docker-Netzwerke (z.B. `services-secured`, `services-exposed`), mit denen sich die Container verbinden.
+*   **Basis-Verzeichnisse:** Anlegen der übergeordneten Verzeichnisstrukturen (z.B. `/export/docker`), in denen die persistenten Volume-Daten der Services abgelegt werden.
+*   **Berechtigungen:** Setzen der korrekten Datei- und Verzeichnisberechtigungen, um einen reibungslosen Betrieb zu gewährleisten.
+*   **SMB-Shares:** Konfiguration von SMB-Freigaben für die Service-Datenverzeichnisse, um einen einfachen und zentralisierten Zugriff auf die persistenten Daten zu ermöglichen.
+
+Ohne die erfolgreiche Ausführung dieser Ansible-Rolle können die von der Template Engine generierten Deployments fehlschlagen, da erwartete Netzwerke oder Verzeichnispfade nicht existieren.
+
+---
+
+## 3. Die `service.yml` Datei
 
 Die `service.yml` ist das Herzstück jedes Services. Sie ist in mehrere logische Abschnitte unterteilt.
 
