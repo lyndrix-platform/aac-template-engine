@@ -3,20 +3,20 @@
 # Definiert Metadaten, die von Integrationen wie Traefik oder Homepage genutzt werden.
 # ----------------------------------------------------------------
 service:
-  name: "BookStack"
-  description: "Dokumentations-Wiki für Notizen und Anleitungen."
-  category: "Dev & Code"      # Gruppe für die Homepage
-  icon: "bookstack.png"         # Icon für die Homepage
-  hostname: "bookstack"         # Hostname für den Container und die DNS-Route
-  image_repo: "lscr.io/linuxserver/bookstack"
-  image_tag: "latest"
+  name: BookStack
+  description: Dokumentations-Wiki für Notizen und Anleitungen.
+  category: Dev & Code        # Gruppe für die Homepage
+  icon: bookstack.png           # Icon für die Homepage
+  hostname: bookstack           # Hostname für den Container und die DNS-Route
+  image_repo: lscr.io/linuxserver/bookstack
+  image_tag: latest
 
 # ----------------------------------------------------------------
 # Ports des Haupt-Services
 # Der Port wird für das Traefik-Routing benötigt.
 # ----------------------------------------------------------------
 ports:
-  - name: "web"
+  - name: web
     port: 80 # Der interne Port des Containers, den Traefik anspricht
 
 # ----------------------------------------------------------------
@@ -24,17 +24,17 @@ ports:
 # Der Pfad wird aus 'host_base_path' + 'name' zusammengesetzt.
 # ----------------------------------------------------------------
 volumes:
-  - name: "config"
-    path: "/config"
+  - name: config
+    path: /config
 
 # ----------------------------------------------------------------
 # Globale Konfiguration für Integrationen
 # ----------------------------------------------------------------
 config:
-  domain_name: "int.fam-feser.de"
+  domain_name: int.fam-feser.de
   routing_enabled: true
-  entrypoint: "websecure"
-  cert_resolver: "ionos"
+  entrypoint: websecure
+  cert_resolver: ionos
   integrations:
     homepage:
       enabled: true
@@ -47,94 +47,76 @@ config:
 # ----------------------------------------------------------------
 deployments:
   docker_compose:
-    host_base_path: "/export/docker" # Basis-Pfad auf dem Host für alle Volumes
-    restart_policy: "unless-stopped"
-    networks_to_join:
-      - "secured"
-      - "bookstack_internal"
-      - "docker-default"
-      
+    host_base_path: /export/docker   # Basis-Pfad auf dem Host für alle Volumes
+    restart_policy: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost"]
-      interval: "30s"
-      timeout: "5s"
+      test: [CMD, curl, -f, http://localhost]
+      interval: 30s
+      timeout: 5s
       retries: 3
 
     # Definition der Docker-Netzwerke für diesen Stack
-    network_definitions:
-      secured:
-        name: "services-secured"
-        external: true
-      docker-default:
-        name: "docker-default"
-        external: true
-      bookstack_internal:
-        name: "bookstack_internal"
-        driver: "bridge"
-
-    # Nicht-sensible Umgebungsvariablen für BookStack
-    # Werden in die .env-Datei geschrieben.
     dot_env:
-      PUID: "1000"
-      PGID: "1000"
-      TZ: "Europe/Berlin"
+      PUID: '1000'
+      PGID: '1000'
+      TZ: Europe/Berlin
       APP_PROXIES: '*'
-      APP_URL: "https://{{ service.hostname }}.{{ config.domain_name }}"
-      DB_HOST: "{{ dependencies.database.name }}" # Dynamischer Verweis auf den DB-Container
-      DB_PORT: "3306"
-      DB_USERNAME: "bookstack"
-      DB_DATABASE: "bookstack"
-      MAIL_DRIVER: "smtp"
-      MAIL_FROM_NAME: "BookStack"
-      MAIL_FROM: "bookstack@example.com"
-      MAIL_HOST: "localhost"
-      MAIL_PORT: "587"
-      MAIL_USERNAME: "null"
-      MAIL_PASSWORD: "null"
-      MAIL_ENCRYPTION: "null"
-      AUTH_AUTO_INITIATE: "true"
-      AUTH_METHOD: "oidc"
-      OIDC_NAME: "authentik"
-      OIDC_ISSUER: "https://test.auth.test-test.de/application/o/bookstack-titan/"
-      OIDC_ISSUER_DISCOVER: "true"
-      OIDC_EMAIL_ATTRIBUTE: "email"
-      OIDC_DISPLAY_NAME_ATTRIBUTES: "name"
-      OIDC_END_SESSION_ENDPOINT: "https://auth.test.test-test.de/application/o/bookstack-titan/end-session/"
-      OIDC_USER_TO_GROUPS: "true"
-      OIDC_GROUPS_CLAIM: "groups"
-      OIDC_ADDITIONAL_SCOPES: "groups"
-      OIDC_REMOVE_FROM_GROUPS: "true"
-      
+      APP_URL: https://{{ service.hostname }}.{{ config.domain_name }}
+      DB_HOST: '{{ dependencies.database.name }}' # Dynamischer Verweis auf den DB-Container
+      DB_PORT: '3306'
+      DB_USERNAME: bookstack
+      DB_DATABASE: bookstack
+      MAIL_DRIVER: smtp
+      MAIL_FROM_NAME: BookStack
+      MAIL_FROM: bookstack@example.com
+      MAIL_HOST: localhost
+      MAIL_PORT: '587'
+      MAIL_USERNAME: 'null'
+      MAIL_PASSWORD: 'null'
+      MAIL_ENCRYPTION: 'null'
+      AUTH_AUTO_INITIATE: 'true'
+      AUTH_METHOD: oidc
+      OIDC_NAME: authentik
+      OIDC_ISSUER: https://test.auth.test-test.de/application/o/bookstack-titan/
+      OIDC_ISSUER_DISCOVER: 'true'
+      OIDC_EMAIL_ATTRIBUTE: email
+      OIDC_DISPLAY_NAME_ATTRIBUTES: name
+      OIDC_END_SESSION_ENDPOINT: 
+        https://auth.test.test-test.de/application/o/bookstack-titan/end-session/
+      OIDC_USER_TO_GROUPS: 'true'
+      OIDC_GROUPS_CLAIM: groups
+      OIDC_ADDITIONAL_SCOPES: groups
+      OIDC_REMOVE_FROM_GROUPS: 'true'
+
     # Sensible Umgebungsvariablen für BookStack
     # Werden in die stack.env-Datei geschrieben.
     stack_env:
-      APP_KEY: "test"
-      DB_PASSWORD: "test"
-      OIDC_CLIENT_ID: "test"
-      OIDC_CLIENT_SECRET: "test"
+      APP_KEY: test
+      DB_PASSWORD: test
+      OIDC_CLIENT_ID: test
+      OIDC_CLIENT_SECRET: test
 
 # ----------------------------------------------------------------
 # Service-Abhängigkeiten (z.B. Datenbanken)
 # ----------------------------------------------------------------
 dependencies:
   database: # Logischer Name der Abhängigkeit
-    name: "bookstack-db" # Tatsächlicher Container-Name
-    image_repo: "mariadb"
-    image_tag: "latest"
+    name: bookstack-db   # Tatsächlicher Container-Name
+    image_repo: mariadb
+    image_tag: latest
     networks_to_join:
-      - "bookstack_internal"
-      - "docker-default"
+      - bookstack_internal
+      - docker-default
     volumes:
-      - name: "db"
-        path: "/var/lib/mysql"
-        
+      - name: db
+        path: /var/lib/mysql
+
     # Umgebungsvariablen für die Datenbank.
     # Die Engine sortiert sie automatisch nach '.env' oder 'stack.env'.
     environment:
-      MARIADB_DATABASE: "bookstack"
-      MARIADB_USER: "bookstack"
-      MARIADB_PASSWORD: "test" # Wird als Secret behandelt
-      MARIADB_ROOT_PASSWORD: "test"     # Wird als Secret behandelt
+      MARIADB_DATABASE: bookstack
+      MARIADB_USER: bookstack
+      MARIADB_PASSWORD: test   # Wird als Secret behandelt
+      MARIADB_ROOT_PASSWORD: test       # Wird als Secret behandelt
 
 
-      
