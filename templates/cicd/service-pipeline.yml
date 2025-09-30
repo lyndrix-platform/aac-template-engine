@@ -12,6 +12,9 @@ stages:
   - dev-deploy
   - test-promote
   - test-deploy
+  - prod-generate
+  - prod-validate
+  - prod-recommit
   - prod-promote
   - prod-deploy
 
@@ -119,6 +122,68 @@ test-promote:
       allow_failure: false
 
 # ==========================================================================
+# STAGE 7: PROD GENERATE, VALIDATE & RE-COMMIT (runs on main branch)
+# ==========================================================================
+# These jobs ensure that the main branch always contains the final, rendered
+# artifacts for the 'prod' stage. This is useful for audits, manual emergency
+# deployments, or simply reviewing the final configuration before deployment.
+
+prod-generate-docker-compose:
+  extends: .generate-base
+  stage: prod-generate
+  script:
+    - SSOT_JSON=$(python3 -c 'import sys, yaml, json; print(json.dumps(yaml.safe_load(sys.stdin)))' < service.yml)
+    - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --deployment-type "docker_compose" --stage "prod"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE!~ /ci:/'
+
+prod-generate-custom-files:
+  extends: .generate-base
+  stage: prod-generate
+  script:
+    - SSOT_JSON=$(python3 -c 'import sys, yaml, json; print(json.dumps(yaml.safe_load(sys.stdin)))' < service.yml)
+    - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --process-files --stage "prod"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE!~ /ci:/'
+      exists: [custom_templates/files/**/*]
+
+prod-validate-docker-compose:
+  stage: prod-validate
+  image: docker:latest
+  services: [docker:dind]
+  needs: [prod-generate-docker-compose]
+  script:
+    - apk add --no-cache docker-compose
+    - docker-compose -f deployments/docker_compose/docker-compose.yml config
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE!~ /ci:/'
+
+prod-recommit:
+  stage: prod-recommit
+  image: alpine:latest
+  needs:
+    - prod-validate-docker-compose
+    - job: prod-generate-custom-files
+      optional: true
+  before_script:
+    - apk add --no-cache git
+    - git config --global user.email "ci-bot@${CI_SERVER_HOST}"
+    - git config --global user.name "GitLab CI Re-committer"
+    - git remote set-url origin "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+    - git checkout $CI_COMMIT_BRANCH
+  script:
+    - git add deployments/
+    - |
+      if ! git diff --staged --quiet; then
+        git commit -m "ci: Re-commit prod artifacts for main branch"
+        git push origin $CI_COMMIT_BRANCH
+      else
+        echo "No changes in generated artifacts to re-commit."
+      fi
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE!~ /ci:/'
+
+# ==========================================================================
 # STAGE 6: TEST DEPLOY (runs on test branch)
 # ==========================================================================
 test-deploy:
@@ -179,7 +244,7 @@ prod-deploy:
     SERVICE_BRANCH: 'main' # Informative Variable für die Downstream-Pipeline
     DEPLOYMENT_TYPE: 'single_service_trigger' # Löst den 'rollout_single_service'-Job aus
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE!~ /ci:/'
       when: manual
       allow_failure: false
 
@@ -226,6 +291,6 @@ publish_to_docs:
         echo "Keine Änderungen an der Dokumentation."
       fi
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE!~ /ci:/'
       when: manual
       allow_failure: false
