@@ -37,7 +37,7 @@ Ohne die erfolgreiche Ausführung dieser Ansible-Rolle können die von der Templ
 
 Die `service.yml` ist das Herzstück jedes Services. Sie ist in mehrere logische Abschnitte unterteilt.
 
-### 2.1 `service`
+### 3.1 `service`
 
 Allgemeine, deployment-unabhängige Informationen über den Service.
 
@@ -52,7 +52,7 @@ Allgemeine, deployment-unabhängige Informationen über den Service.
 | `stage` | String | Standard-Deployment-Stage. | `prod` |
 | `hostname` | String | Gewünschter Hostname für den Service. | `traefik` |
 
-### 2.2 `ports`
+### 3.2 `ports`
 
 Eine Liste von Netzwerkports, die der Container bereitstellt.
 
@@ -63,9 +63,9 @@ Eine Liste von Netzwerkports, die der Container bereitstellt.
 | `external_port`| Integer | **Optional.** Der Port, der auf dem Host gemappt wird. | `28080` |
 | `protocol` | String | Das Protokoll des Ports. | `TCP` |
 
-### 2.3 `volumes`
+### 3.3 `volumes`
 
-Eine Liste von Volumes, die der Service benötigt. Die Engine erstellt automatisch benannte Docker-Volumes.
+Eine Liste von Volumes, die der Service benötigt. Die Engine erstellt automatisch benannte Docker-Volumes, die auf dem Host-System als Verzeichnisse gemappt werden.
 
 | Schlüssel | Typ | Beschreibung | Beispiel |
 | :--- | :--- | :--- | :--- |
@@ -73,7 +73,19 @@ Eine Liste von Volumes, die der Service benötigt. Die Engine erstellt automatis
 | `path` | String | Der Pfad, an den das Volume im Container gemountet wird. | `/data` |
 | `description`| String | Kurze Beschreibung des Zwecks. | `Für Let's Encrypt Zertifikate` |
 
-### 2.4 `config`
+#### Physischer Speicherort auf dem Host
+
+Der tatsächliche Pfad auf dem Host-System wird von der Template-Engine standardmäßig nach folgendem Schema aufgebaut:
+
+`<host_base_path>/<service_name>/<volume_name>/`
+
+*   **`host_base_path`**: Wird aus `deployments.docker_compose.host_base_path` in der `service.yml` bezogen (z.B. `/export/docker`).
+*   **`service_name`**: Der Name des Services (z.B. `aac-traefik`).
+*   **`volume_name`**: Der logische Name des Volumes aus der Liste (z.B. `data`).
+
+Ein Volume mit dem Namen `data` für den Service `aac-traefik` würde also physisch unter `/export/docker/aac-traefik/data/` auf dem Host-System liegen. Die Erstellung dieses Basis-Pfades und die Vergabe der korrekten Berechtigungen wird durch die `docker role` aus dem `iac-ansible-automation`-Projekt sichergestellt (siehe Abschnitt 2. Systemvoraussetzungen).
+
+### 3.4 `config`
 
 Ein flexibler Abschnitt für anwendungsspezifische Konfigurationen, die in Templates verwendet werden können.
 
@@ -94,7 +106,7 @@ Dieser Block ist entscheidend für die nahtlose Einbettung eines Services in die
 
 Dieser Abschnitt ist erweiterbar und der Ort, um zukünftige Automatisierungen zu verankern.
 
-### 2.5 `deployments`
+### 3.5 `deployments`
 
 Enthält die Konfigurationen für verschiedene Deployment-Ziele.
 
@@ -110,7 +122,7 @@ Enthält die Konfigurationen für verschiedene Deployment-Ziele.
 | `dot_env` | Object | Key-Value-Paare, die als **nicht-geheime** Umgebungsvariablen in die `.env`-Datei geschrieben werden. | `TZ: "Europe/Berlin"` |
 | `stack_env` | Object | Key-Value-Paare, die als **geheime** Umgebungsvariablen in die `stack.env`-Datei geschrieben werden. | `IONOS_API_KEY: "secret-key"` |
 
-### 2.6 `dependencies`
+### 3.6 `dependencies`
 
 Definiert abhängige Services (z.B. Datenbanken, Redis), die zusammen mit dem Hauptservice bereitgestellt werden. Jeder Eintrag in `dependencies` ist im Grunde eine kompakte Service-Definition.
 
@@ -134,7 +146,7 @@ dependencies:
 
 ---
 
-## 3. Umgang mit Umgebungsvariablen
+## 4. Umgang mit Umgebungsvariablen
 
 Die Engine unterscheidet zwischen zwei Arten von Umgebungsvariablen für den Docker Compose-Generator:
 
@@ -150,11 +162,11 @@ Die Engine unterscheidet zwischen zwei Arten von Umgebungsvariablen für den Doc
 
 ---
 
-## 4. Custom Templates
+## 5. Custom Templates
 
 Wenn die Standard-Templates nicht ausreichen, bietet die Engine mächtige Möglichkeiten zur Anpassung und zum Überschreiben von Standardverhalten.
 
-### 4.1 Eigene Konfigurationsdateien
+### 5.1 Eigene Konfigurationsdateien
 
 Für anwendungsspezifische Konfigurationsdateien, die mit Jinja2-Loglogik befüllt werden müssen.
 
@@ -164,7 +176,7 @@ Für anwendungsspezifische Konfigurationsdateien, die mit Jinja2-Loglogik befül
 
 Der CI/CD-Job `generate-custom-files` verarbeitet diese Templates automatisch.
 
-### 4.2 Überschreiben von Deployment-Templates
+### 5.2 Überschreiben von Deployment-Templates
 
 Es ist sogar möglich, die Kern-Deployment-Templates der Engine zu überschreiben. Dies ist nützlich für Services, die eine komplett andere `docker-compose.yml`-Struktur benötigen.
 
@@ -176,7 +188,7 @@ Es ist sogar möglich, die Kern-Deployment-Templates der Engine zu überschreibe
 
 ---
 
-## 5. Der CI/CD-GitOps-Workflow
+## 6. Der CI/CD-GitOps-Workflow
 
 Die `service-pipeline.yml` definiert einen mehrstufigen GitOps-Prozess:
 
@@ -206,7 +218,7 @@ Die `service-pipeline.yml` definiert einen mehrstufigen GitOps-Prozess:
 
 ---
 
-## 6. Einen neuen Service hinzufügen
+## 7. Einen neuen Service hinzufügen
 
 1.  **GitLab-Projekt erstellen:** Erstelle ein neues, leeres Projekt in GitLab für deinen Service.
 2.  **`service.yml` erstellen:** Lege im Root des Projekts eine `service.yml`-Datei an und fülle sie gemäß der oben beschriebenen Struktur.
@@ -223,7 +235,7 @@ Die `service-pipeline.yml` definiert einen mehrstufigen GitOps-Prozess:
 
 ---
 
-## 7. Beispiel: Multi-Container Service (Firefly III)
+## 8. Beispiel: Multi-Container Service (Firefly III)
 
 Hier ist ein anonymisiertes Beispiel einer `service.yml` für Firefly III. Es zeigt, wie ein komplexerer Service, der aus mehreren Containern (Hauptanwendung, Datenbank, Redis, Importer, Cron) besteht, definiert wird.
 
@@ -384,3 +396,4 @@ dependencies:
       - "sh"
       - "-c"
       - "echo \"0 3 * * * wget -qO- https://{{ service.hostname }}.{{ config.domain_name }}/api/v1/cron/{{ deployments.docker_compose.stack_env.STATIC_CRON_TOKEN }}\" | crontab - && crond -f -L /dev/stdout"
+```
