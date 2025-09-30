@@ -119,7 +119,6 @@ dev-deploy:
 test-promote:
   stage: test-promote
   extends: .base-script
-  stage: test-promote # Explicitly set stage again to override .base-script
   needs: [dev-deploy]
   script:
     - echo "Creating test branch..."
