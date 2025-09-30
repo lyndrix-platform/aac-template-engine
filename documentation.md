@@ -188,33 +188,61 @@ Es ist sogar möglich, die Kern-Deployment-Templates der Engine zu überschreibe
 
 ---
 
-## 6. Der CI/CD-GitOps-Workflow
+## 6. Der GitOps-Automatisierungs-Workflow
 
-Die `service-pipeline.yml` definiert einen mehrstufigen GitOps-Prozess:
+Das Herzstück der Automatisierung ist ein ausgeklügelter GitOps-Workflow, der über mehrere Repositories hinweg agiert. Jedes Repository hat eine klar definierte Rolle. Das Zusammenspiel wird durch die zentrale CI/CD-Pipeline aus der Template Engine orcherstriert.
 
-1.  **`generate`:** (Auf `dev`-Branch)
-    *   Die `generate_manifest.py`-Skripte werden ausgeführt.
-    *   `docker-compose.yml`, `.env`, `stack.env` und Custom Files werden aus der `service.yml` generiert und als Artefakte gespeichert.
+### 6.1 Die Komponenten des Systems
 
-2.  **`validate`:** (Auf `dev`-Branch)
-    *   Die Syntax der generierten `docker-compose.yml` wird mit `docker-compose config` überprüft.
+1.  **Applikations-Repository** (z.B. `aac-traefik`, `aac-firefly-iii`)
+    *   **Zweck:** Definiert einen einzelnen Service.
+    *   **Inhalt:** Enthält die `service.yml` als "Single Source of Truth" für diesen Service, sowie optionale `documentation.md` und `custom_templates`.
+    *   **Rolle im Workflow:** Der Startpunkt. Eine Änderung hier (Commit) löst den gesamten Prozess aus.
 
-3.  **`dev-promote-and-deploy`:** (Auf `dev`-Branch)
-    *   Das `promote_service.py`-Skript wird ausgeführt.
-    *   Es klont das zentrale `iac-controller`-Repository.
-    *   Die Konfiguration des Services für die `dev`-Umgebung wird dort hinzugefügt oder aktualisiert.
-    *   Ein Commit wird in das `iac-controller`-Repo gepusht, was wiederum die zentrale Ansible-Deployment-Pipeline für die `dev`-Umgebung auslöst.
+2.  **`aac-template-engine` (Dieses Repository)**
+    *   **Zweck:** Stellt die Logik und die standardisierten Bausteine bereit.
+    *   **Inhalt:** Beinhaltet die Jinja2-Templates zur Generierung der Manifeste und vor allem die zentrale, wiederverwendbare CI/CD-Pipeline (`service-pipeline.yml`).
+    *   **Rolle im Workflow:** Liefert die Intelligenz und den standardisierten Prozess (die "Blaupause") für die CI/CD-Läufe in den Applikations-Repositories.
 
-4.  **`test-promote` & `test-deploy`:** (Manuell auf `dev`-Branch)
-    *   Ein manueller Job, der einen `test`-Branch erstellt und den Service in der `test`-Umgebung im `iac-controller`-Repo registriert.
-    *   Löst das Deployment in der Test-Umgebung aus.
+3.  **`iac-controller`**
+    *   **Zweck:** Das zentrale "State"- oder "Inventory"-Repository. Es repräsentiert den gewünschten Soll-Zustand der gesamten Infrastruktur.
+    *   **Inhalt:** Enthält die *generierten* Konfigurationsdateien (`docker-compose.yml`, `.env`, `stack.env` etc.) für *alle* Services in *allen* Umgebungen (`dev`, `test`, `prod`), abgelegt in einer sauberen Verzeichnisstruktur.
+    *   **Rolle im Workflow:** Dient als alleinige Quelle für die Deployment-Skripte. Es entkoppelt die Service-Definition von der Ausführung.
 
-5.  **`prod-promote` & `prod-deploy`:** (Auf `test`-Branch)
-    *   Befördert die Konfiguration vom `test`- in den `main`-Branch und registriert den Service für die `prod`-Umgebung.
-    *   Löst (manuell) das finale Deployment in der Produktionsumgebung aus.
+4.  **`iac-ansible-automation`**
+    *   **Zweck:** Das "Action"-Repository. Es führt die eigentlichen Deployments durch.
+    *   **Inhalt:** Enthält die Ansible-Playbooks und -Rollen (wie die `docker role`), die den Soll-Zustand aus dem `iac-controller` lesen und auf den Zielsystemen umsetzen.
+    *   **Rolle im Workflow:** Der ausführende Arm. Holt sich den Soll-Zustand und wendet ihn auf den Servern an.
 
-6.  **`publish_to_docs`:** (Manuell auf `main`-Branch)
-    *   Wenn eine `documentation.md` im Service-Repository existiert, wird diese automatisch in das zentrale Dokumentationsportal (`aac-iac-documentation`) publiziert.
+### 6.2 Der Workflow im Detail
+
+Der Prozess wird durch einen einfachen `git push` im Applikations-Repository angestoßen:
+
+1.  **Entwickler-Commit:** Ein Entwickler ändert die `service.yml` (z.B. ein neues Port-Mapping) und pusht die Änderung in den `dev`-Branch des Applikations-Repos.
+
+2.  **CI-Pipeline im App-Repo (Ausgelöst durch den Commit):**
+    *   Die eingebundene `service-pipeline.yml` aus der Template Engine startet.
+    *   **Generate & Validate:** Die Pipeline generiert die `docker-compose.yml` und alle weiteren Artefakte aus der `service.yml`. Anschließend wird die Konfiguration validiert (z.B. `docker-compose config`).
+    *   **Promote (Commit zum `iac-controller`):** Das `promote_service.py`-Skript klont das `iac-controller`-Repository. Es platziert die frisch generierten Dateien in die passende Verzeichnisstruktur (z.B. `inventory/dev/services/aac-firefly-iii/`) und committet diese Änderung mit einer aussagekräftigen Nachricht (z.B. "ci: Promote aac-firefly-iii to dev").
+
+3.  **CI-Pipeline im `iac-controller` (Ausgelöst durch den neuen Commit):**
+    *   Der Push vom vorherigen Schritt löst nun eine Pipeline im `iac-controller` aus.
+    *   Diese Pipeline hat eine Hauptaufgabe: Sie triggert die Deployment-Pipeline im `iac-ansible-automation`-Repository und übergibt dabei wichtige Informationen, wie z.B. den Namen des geänderten Services.
+
+4.  **CI-Pipeline im `iac-ansible-automation` (Deployment):**
+    *   Die ausgelöste Pipeline führt die Ansible-Playbooks aus.
+    *   Das Playbook klont seinerseits das `iac-controller`-Repository, um den finalen Soll-Zustand zu lesen.
+    *   Ansible verbindet sich mit den Ziel-Hosts und wendet die Konfiguration an (z.B. via `docker-compose up -d`).
+
+### 6.3 Deployment-Szenarien
+
+Dieser Aufbau ermöglicht verschiedene, mächtige Deployment-Strategien:
+
+*   **Single-Service-Deployment (Standardfall):** Wie oben beschrieben. Ein Commit in einem App-Repo führt zum Rollout von nur diesem einen Service. Die Ansible-Pipeline wird dabei mit einem `--limit` auf den betroffenen Service beschränkt, um die Ausführung zu beschleunigen und Seiteneffekte zu vermeiden. Dies wird durch die Variable `DEPLOYMENT_TYPE: 'single_service_trigger'` in der CI/CD gesteuert.
+
+*   **Vollständiges Umgebungs-Deployment:** Manuelle Änderungen oder ein getriggerter Lauf im `iac-controller` können die Ansible-Pipeline ohne `--limit` starten. In diesem Fall würde Ansible den Zustand *aller* im `iac-controller` definierten Services auf *allen* Hosts der jeweiligen Umgebung (z.B. `prod`) überprüfen und ggf. korrigieren. Dies ist nützlich, um Konfigurationsdrift zu beheben oder globale Änderungen auszurollen.
+
+*   **Promotion (`dev` -> `test` -> `prod`):** Die CI/CD-Pipeline im App-Repo enthält manuelle Jobs (`test-promote`, `prod-promote`), die genau den oben beschriebenen Prozess für die nächsthöhere Umgebung wiederholen: Sie erstellen den passenden Git-Branch (`test` oder `main`) und committen die generierten Artefakte in den entsprechenden `test`- oder `prod`-Pfad im `iac-controller`.
 
 ---
 
