@@ -38,6 +38,7 @@ stages:
     # This rule is a placeholder and should be overridden in the concrete jobs
     - if: '$CI_COMMIT_BRANCH && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
+
 .validate-base:
   image: docker:latest
   services: [docker:dind]
@@ -50,8 +51,10 @@ stages:
 .commit-artifacts:
   image: alpine:latest
   before_script:
+
     - echo "Adding DNS fix for internal GitLab instance..."
     - echo "$INTERNAL_GITLAB_IP gitlab.int.fam-feser.de" >> /etc/hosts
+
     - apk add --no-cache git
     - git config --global user.email "ci-bot@${CI_SERVER_HOST}"
     - git config --global user.name "GitLab CI Re-committer"
@@ -104,7 +107,10 @@ dev-commit:
   extends: .commit-artifacts
   stage: dev-commit
   needs:
+    # This ensures the job runs after validation is complete
     - dev-validate-docker-compose
+    # These ensure the job gets the artifacts from BOTH generate jobs
+    - dev-generate-docker-compose
     - job: dev-generate-custom-files
       optional: true
   rules:
@@ -157,7 +163,10 @@ test-commit:
   extends: .commit-artifacts
   stage: test-commit
   needs:
+    # This ensures the job runs after validation is complete
     - test-validate-docker-compose
+    # These ensure the job gets the artifacts from BOTH generate jobs
+    - test-generate-docker-compose
     - job: test-generate-custom-files
       optional: true
   rules:
@@ -210,7 +219,10 @@ prod-commit:
   extends: .commit-artifacts
   stage: prod-commit
   needs:
+    # This ensures the job runs after validation is complete
     - prod-validate-docker-compose
+    # These ensure the job gets the artifacts from BOTH generate jobs
+    - prod-generate-docker-compose
     - job: prod-generate-custom-files
       optional: true
   rules:
