@@ -58,16 +58,17 @@ stages:
     - git config --global user.name "GitLab CI Re-committer"
     - git remote set-url origin "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
     - git checkout $CI_COMMIT_BRANCH
-    # --- FIX ---
-    # Sync with the remote branch to avoid non-fast-forward errors
-    - git pull --rebase origin $CI_COMMIT_BRANCH
   script:
     - git add deployments/
     - |
       if ! git diff --staged --quiet; then
         echo "Changes detected in generated artifacts. Committing..."
-        # The [skip ci] tag is crucial to prevent pipeline loops!
         git commit -m "ci: Re-commit ${CI_COMMIT_BRANCH} artifacts [skip ci]"
+
+        echo "Rebasing local commit on top of remote changes..."
+        git pull --rebase origin $CI_COMMIT_BRANCH
+
+        echo "Pushing changes to remote..."
         git push origin $CI_COMMIT_BRANCH
       else
         echo "No changes in generated artifacts to re-commit."
