@@ -190,7 +190,10 @@ prod-recommit:
     - git remote set-url origin "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
     - git checkout $CI_COMMIT_BRANCH
   script:
-    - git add deployments/
+    - |
+      if [ -d "deployments" ]; then
+        git add deployments/
+      fi
     - |
       if ! git diff --staged --quiet; then
         git commit -m "ci: Re-commit prod artifacts for main branch"
