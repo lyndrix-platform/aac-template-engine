@@ -178,13 +178,15 @@ prod-validate-docker-compose:
 
 prod-recommit:
   stage: prod-recommit
-  image: alpine:latest
+  image: python:3.9-slim
   needs:
     - prod-validate-docker-compose
     - job: prod-generate-custom-files
       optional: true
   before_script:
-    - apk add --no-cache git
+    - apt-get update && apt-get install -y --no-install-recommends git
+    - pip install PyYAML
+    - git clone "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
     - git config --global user.email "ci-bot@${CI_SERVER_HOST}"
     - git config --global user.name "GitLab CI Re-committer"
     - git remote set-url origin "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
