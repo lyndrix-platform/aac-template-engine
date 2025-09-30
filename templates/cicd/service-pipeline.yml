@@ -243,7 +243,7 @@ test-deploy:
 prod-promote:
   stage: prod-promote
   extends: .base-script
-  needs: [] # No dependency needed, it just acts on the git branch
+  needs: [test-deploy] # Ensures test environment was successfully deployed before promoting to prod.
   script:
     - echo "Creating main branch from test..."
     - git fetch origin test
@@ -251,6 +251,8 @@ prod-promote:
     - git push -f origin main
   rules:
     - if: '$CI_COMMIT_BRANCH == "test"'
+      when: manual
+      allow_failure: false
 
 # ==========================================================================
 # STAGE 8: PROD DEPLOY (runs on main branch)
