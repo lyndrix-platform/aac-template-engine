@@ -66,7 +66,7 @@ validate-docker-compose:
 # ==========================================================================
 # STAGE 3: DEV COMMIT (runs on dev branch)
 # ==========================================================================
-.promote-base:
+.base-script:
   stage: dev-commit
   image: python:3.9-slim
   before_script:
@@ -75,9 +75,9 @@ validate-docker-compose:
     - git clone "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
   variables:
     IAC_CONTROLLER_REPO_URL: "https://gitlab.int.fam-feser.de/iac-environment/iac-controller.git" # The URL to the central inventory repository.
-
-dev-promote-and-deploy:
-  extends: .promote-base
+    
+dev-promote:
+  extends: .base-script
   needs:
     - job: validate-docker-compose
     - job: generate-custom-files
@@ -95,14 +95,32 @@ dev-promote-and-deploy:
     - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE!~ /ci:/'
 
 # ==========================================================================
+# STAGE 4: DEV DEPLOY (triggers downstream)
+# ==========================================================================
+dev-deploy:
+  stage: dev-deploy
+  needs: [dev-promote]
+  trigger:
+    project: 'iac-environment/iac-ansible-automation'
+    branch: main
+    strategy: depend
+  variables:
+    SERVICE_NAME: $CI_PROJECT_NAME
+    SERVICE_BRANCH: 'dev'
+    DEPLOYMENT_TYPE: 'single_service_trigger'
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE!~ /ci:/'
+
+# ==========================================================================
 # STAGE 5: TEST PROMOTE (runs on dev branch)
 # ==========================================================================
 # This job is now manual. A user can click it to create the 'test' branch
 # and promote the service to the 'test' stage in the central inventory.
 test-promote:
   stage: test-promote
-  extends: .promote-base
-  needs: [dev-promote-and-deploy]
+  extends: .base-script
+  stage: test-promote # Explicitly set stage again to override .base-script
+  needs: [dev-deploy]
   script:
     - echo "Creating test branch..."
     - git fetch origin dev
@@ -180,6 +198,17 @@ prod-recommit:
       else
         echo "No changes in generated artifacts to re-commit."
       fi
+    # This part promotes the service to the central inventory AFTER the artifacts have been re-committed.
+    - echo "Promoting service to prod environment..."
+    - >
+      python aac-template-engine/scripts/promote_service.py
+      --service-name "$CI_PROJECT_NAME"
+      --service-git-repo "$CI_PROJECT_URL.git"
+      --target-stage "prod"
+      --iac-controller-repo-url "$IAC_CONTROLLER_REPO_URL"
+      --iac-controller-token "$CI_GITLAB_TOKEN_GLOBAL_FESER"
+      --inventory-path "deployments/docker_compose" # Path to the generated artifacts
+      --use-local-artifacts # Use the just-generated files
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE!~ /ci:/'
 
@@ -208,21 +237,13 @@ test-deploy:
 # ==========================================================================
 prod-promote:
   stage: prod-promote
-  extends: .promote-base
-  needs: [test-deploy]
+  extends: .base-script
+  needs: [] # No dependency needed, it just acts on the git branch
   script:
     - echo "Creating main branch from test..."
     - git fetch origin test
     - git checkout -B main origin/test
     - git push -f origin main
-    - echo "Promoting service to prod environment..."
-    - >
-      python aac-template-engine/scripts/promote_service.py
-      --service-name "$CI_PROJECT_NAME"
-      --service-git-repo "$CI_PROJECT_URL.git"
-      --target-stage "prod"
-      --iac-controller-repo-url "$IAC_CONTROLLER_REPO_URL"
-      --iac-controller-token "$CI_GITLAB_TOKEN_GLOBAL_FESER"
   rules:
     - if: '$CI_COMMIT_BRANCH == "test"'
 
