@@ -92,11 +92,17 @@ services:
       traefik.http.routers.{{ service.name }}.entrypoints: "{{ config.entrypoint }}"
       traefik.http.routers.{{ service.name }}.tls: "true"
       traefik.http.routers.{{ service.name }}.tls.certresolver: "{{ config.cert_resolver }}"
-      {% set dashboard_port = (ports | selectattr('name', 'equalto', 'dashboard') | list | first) %}
-      {% set web_port = (ports | selectattr('name', 'equalto', 'web') | list | first) %}
-      {% set http_port = (ports | selectattr('name', 'equalto', 'http') | list | first) %}
-      {% set service_port = dashboard_port.port if dashboard_port else (web_port.port if web_port else (http_port.port if http_port else (ports | first).port)) %}
-      traefik.http.services.{{ service.name }}.loadbalancer.server.port: "{{ service_port }}"
+      
+      {# --- Traefik Service Definition --- #}
+      {# If the service uses host networking, we must provide the full URL with the host's IP. #}
+      {# The 'ansible_host_ip' variable is injected by the Ansible deployment role. #}
+      {# If it's not defined during CI generation, it falls back to a placeholder IP. #}
+      {% if config.routing_host_network %}
+      traefik.http.services.{{ service.name }}.loadbalancer.server.url: "http://{{ ansible_host_ip | default('10.111.111.111') }}:{{ ports[0].port }}"
+      {% else %}
+      {# Otherwise, for bridge networking, we just specify the port. #}
+      traefik.http.services.{{ service.name }}.loadbalancer.server.port: "{{ ports[0].port }}"
+      {% endif %}
       {% endif %}
 
       # === AutoDNS Labels (Dynamically selects mode) ===
