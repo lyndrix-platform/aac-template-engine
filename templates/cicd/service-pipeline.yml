@@ -142,8 +142,7 @@ dev-generate-documentation:
     - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --process-documentation --stage "dev"
   artifacts:
     paths:
-      - deployments/
-      - documentation.md # We now pass both artifacts from this job
+      - deployments/ # This now includes deployments/documentation
   needs:
     - dev-generate-docker-compose
     - job: dev-generate-custom-files
@@ -214,8 +213,7 @@ test-generate-documentation:
     - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --process-documentation --stage "test"
   artifacts:
     paths:
-      - deployments/
-      - documentation.md
+      - deployments/ # This now includes deployments/documentation
   needs:
     - test-generate-docker-compose
     - job: test-generate-custom-files
@@ -258,6 +256,7 @@ prod-commit:
   needs:
     - prod-validate-docker-compose
     - prod-generate-docker-compose
+    - prod-generate-documentation
     - job: prod-generate-custom-files
       optional: true
   rules:
@@ -287,8 +286,7 @@ prod-generate-documentation:
     - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --process-documentation --stage "prod"
   artifacts:
     paths:
-      - deployments/
-      - documentation.md
+      - deployments/ # This now includes deployments/documentation
   needs:
     - prod-generate-docker-compose
     - job: prod-generate-custom-files
@@ -308,8 +306,9 @@ publish_to_docs:
   script:
     # Der Skript-Inhalt bleibt unverändert, da er bereits gut funktioniert hat.
     - |
-      if [ ! -f "documentation.md" ]; then
-        echo "Keine 'documentation.md' in diesem Repository gefunden. Überspringe Dokumentations-Update."
+      DOC_SOURCE_FILE="deployments/documentation/documentation.md"
+      if [ ! -f "$DOC_SOURCE_FILE" ]; then
+        echo "Keine '$DOC_SOURCE_FILE' in den Artefakten gefunden. Überspringe Dokumentations-Update."
         exit 0
       fi
       
@@ -334,7 +333,7 @@ publish_to_docs:
         echo "description: \"Automatisch generierte Service-Dokumentation für ${CI_PROJECT_NAME}.\"";
         echo "---";
         echo "";
-        cat ../documentation.md;
+        cat ../${DOC_SOURCE_FILE};
       } > "${DOC_FILE}"
 
       git add "${DOC_FILE}"
