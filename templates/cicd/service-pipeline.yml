@@ -79,19 +79,24 @@ stages:
         exit 0
       fi
 
-      # 2. Den Ziel-Branch explizit auschecken und aktualisieren.
+      # 2. Bereinige das Arbeitsverzeichnis von den entpackten Artefakten, um Checkout-Konflikte zu vermeiden.
+      # Wir verschieben sie temporär, anstatt sie zu löschen.
+      echo "Moving downloaded artifacts out of the way to allow clean checkout..."
+      mv deployments /tmp/new_deployments
+
+      # 3. Den Ziel-Branch explizit auschecken und aktualisieren.
       echo "Checkout des Ziel-Branches '${CI_COMMIT_BRANCH}'..."
       git checkout "${CI_COMMIT_BRANCH}"
       git pull origin "${CI_COMMIT_BRANCH}"
 
-      # 3. Artefakte mit dem Repository synchronisieren (ersetzt den Inhalt komplett).
+      # 4. Artefakte mit dem Repository synchronisieren (ersetzt den Inhalt komplett).
       echo "Ersetze das 'deployments'-Verzeichnis im Repository mit den neuen Artefakten..."
-      rsync -a --delete deployments/ ./deployments/
+      rsync -a --delete /tmp/new_deployments/ ./deployments/
 
-      # 4. Änderungen (neue, geänderte, gelöschte Dateien) zum Commit hinzufügen.
+      # 5. Änderungen (neue, geänderte, gelöschte Dateien) zum Commit hinzufügen.
       git add deployments/
 
-      # 5. Prüfen, ob es Änderungen gibt, und diese committen & pushen.
+      # 6. Prüfen, ob es Änderungen gibt, und diese committen & pushen.
       if ! git diff --staged --quiet; then
         echo "Änderungen erkannt. Erstelle Commit und pushe zu '${CI_COMMIT_BRANCH}'..."
         # Commit-Nachricht aus deinem alten Skript übernommen
