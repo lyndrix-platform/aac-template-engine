@@ -50,18 +50,45 @@ stages:
     - if: '$CI_COMMIT_BRANCH && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
 .commit-artifacts:
-  image: alpine:latest
+  image: python:3.9-slim
   before_script:
     - echo "Adding DNS fix for internal GitLab instance..."
     - echo "$INTERNAL_GITLAB_IP gitlab.int.fam-feser.de" >> /etc/hosts
-    - apk add --no-cache git
+    - apt-get update && apt-get install -y --no-install-recommends git
     - git config --global user.email "ci-bot@${CI_SERVER_HOST}"
     - git config --global user.name "GitLab CI Re-committer"
     - git remote set-url origin "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
     - git checkout $CI_COMMIT_BRANCH
   script:
-    - git add deployments/
     - |
+      # Render documentation if template exists
+      if [ -f "documentation.md" ]; then
+        echo "documentation.md found. Rendering content..."
+        apt-get install -y --no-install-recommends sed
+
+        # Read generated files into variables, handle if they don't exist
+        DOCKER_COMPOSE_CONTENT=$(cat deployments/docker_compose/docker-compose.yml 2>/dev/null || echo "File not generated.")
+        DOT_ENV_CONTENT=$(cat deployments/docker_compose/.env 2>/dev/null || echo "File not generated.")
+        STACK_ENV_CONTENT=$(cat deployments/docker_compose/stack.env 2>/dev/null || echo "File not generated.")
+
+        # Use a temporary file for sed to handle multi-line replacements
+        sed -e "/{{ *DOCKER_COMPOSE_CONTENT *}}/{
+          r deployments/docker_compose/docker-compose.yml
+          d
+        }" documentation.md > documentation.md.tmp && mv documentation.md.tmp documentation.md
+
+        sed -e "/{{ *DOT_ENV_CONTENT *}}/{
+          r deployments/docker_compose/.env
+          d
+        }" documentation.md > documentation.md.tmp && mv documentation.md.tmp documentation.md
+
+        sed -e "/{{ *STACK_ENV_CONTENT *}}/{
+          r deployments/docker_compose/stack.env
+          d
+        }" documentation.md > documentation.md.tmp && mv documentation.md.tmp documentation.md
+      fi
+
+      git add .
       if ! git diff --staged --quiet; then
         echo "Changes detected in generated artifacts. Committing..."
         git commit -m "ci: Re-commit ${CI_COMMIT_BRANCH} artifacts [skip ci]"
