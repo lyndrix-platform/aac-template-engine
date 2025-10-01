@@ -205,3 +205,15 @@ networks:
     driver: "{{ net_def.driver | default('bridge') }}"
     {% endif %}
 {% endfor %}
+
+{% if deployments.docker_compose.volume_definitions is defined and deployments.docker_compose.volume_definitions %}
+volumes:
+{% for vol_name, vol_def in deployments.docker_compose.volume_definitions.items() %}
+  {{ vol_name }}:
+    driver: {{ vol_def.driver }}
+    driver_opts:
+      {% for key, value in vol_def.driver_opts.items() %}
+      {{ key }}: "{{ value }}"
+      {% endfor %}
+{% endfor %}
+{% endif %}
