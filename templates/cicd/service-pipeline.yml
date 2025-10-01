@@ -17,6 +17,7 @@ stages:
   - test-deploy
   - prod-generate
   - prod-validate
+  - prod-notify
   - prod-commit
   - prod-deploy
   - documentation
@@ -280,6 +281,27 @@ prod-commit:
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
+prod-notify-approval:
+  stage: prod-notify
+  image: curlimages/curl:latest
+  needs: [prod-commit]
+  script:
+    - |
+      echo "Sending webhook to n8n: Production deployment is ready for approval."
+      curl -X POST \
+        -H "Content-Type: application/json" \
+        -d '{
+              "status": "ready_for_approval",
+              "service_name": "'"${CI_PROJECT_NAME}"'",
+              "pipeline_url": "'"${CI_PIPELINE_URL}"'",
+              "pipeline_id": "'"${CI_PIPELINE_ID}"'",
+              "project_title": "'"${CI_PROJECT_TITLE}"'",
+              "triggered_by": "'"${GITLAB_USER_NAME}"'"
+            }' \
+        "https://n8n.int.fam-feser.de/webhook-test/fbdbf3f5-e883-41c6-b2a1-93db6d845506"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+
 # ==========================================================================
 # DOCUMENTATION WORKFLOW
 # ==========================================================================
@@ -359,7 +381,7 @@ publish_to_docs:
 
 prod-deploy:
   stage: prod-deploy
-  needs: [prod-commit]
+  needs: [prod-notify-approval]
   trigger:
     project: 'iac-environment/iac-ansible-automation'
     branch: main
