@@ -61,31 +61,11 @@ stages:
     - git checkout $CI_COMMIT_BRANCH
   script:
     - |
-      # Render documentation if template exists
+      # Render documentation by embedding generated artifacts, if documentation.md exists.
+      # This uses a robust Python script instead of fragile sed commands.
       if [ -f "documentation.md" ]; then
-        echo "documentation.md found. Rendering content..."
-        apt-get install -y --no-install-recommends sed
-
-        # Read generated files into variables, handle if they don't exist
-        DOCKER_COMPOSE_CONTENT=$(cat deployments/docker_compose/docker-compose.yml 2>/dev/null || echo "File not generated.")
-        DOT_ENV_CONTENT=$(cat deployments/docker_compose/.env 2>/dev/null || echo "File not generated.")
-        STACK_ENV_CONTENT=$(cat deployments/docker_compose/stack.env 2>/dev/null || echo "File not generated.")
-
-        # Use a temporary file for sed to handle multi-line replacements
-        sed -e "/{{ *DOCKER_COMPOSE_CONTENT *}}/{
-          r deployments/docker_compose/docker-compose.yml
-          d
-        }" documentation.md > documentation.md.tmp && mv documentation.md.tmp documentation.md
-
-        sed -e "/{{ *DOT_ENV_CONTENT *}}/{
-          r deployments/docker_compose/.env
-          d
-        }" documentation.md > documentation.md.tmp && mv documentation.md.tmp documentation.md
-
-        sed -e "/{{ *STACK_ENV_CONTENT *}}/{
-          r deployments/docker_compose/stack.env
-          d
-        }" documentation.md > documentation.md.tmp && mv documentation.md.tmp documentation.md
+        pip install Jinja2
+        python3 aac-template-engine/scripts/render_documentation.py
       fi
 
       git add .
