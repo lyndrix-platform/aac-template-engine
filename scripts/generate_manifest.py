@@ -317,8 +317,9 @@ def main():
             ]
             # Documentation is special: it renders into the root of the repo, not a subdirectory.
             # It also needs the context of the already generated files.
-            output_dir_for_reading = "deployments"
-            process_documentation(template_paths, output_dir_for_reading, data)
+            read_path = "deployments"  # Path to read generated artifacts from
+            write_path = "."           # Path to write the final documentation.md to (root)
+            process_documentation(template_paths, read_path, write_path, data)
 
         print("INFO: Script finished successfully.")
 

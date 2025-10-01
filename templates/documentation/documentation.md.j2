@@ -1,0 +1,68 @@
+# Dokumentation: {{ service.name }}
+
+## 1. Service-Übersicht
+
+*   **Beschreibung:** {{ service.description | default('Keine Beschreibung vorhanden.') }}
+*   **Kategorie:** {{ service.category | default('Unkategorisiert') }}
+*   **Hostname:** `{{ service.hostname }}.{{ config.domain_name }}`
+*   **Docker Image:** `{{ service.image_repo }}:{{ service.image_tag }}`
+
+---
+
+## 2. Deployment-Konfiguration
+
+Die folgenden Konfigurationsdateien werden automatisch von der AAC Template Engine basierend auf der `service.yml` generiert.
+
+### 2.1 Docker Compose (`docker-compose.yml`)
+
+Diese Datei definiert den Hauptservice und seine Abhängigkeiten wie Datenbanken oder Redis.
+
+```yaml
+{{ DOCKER_COMPOSE_CONTENT }}
+```
+
+### 2.2 Nicht-geheime Umgebungsvariablen (`.env`)
+
+Diese Variablen enthalten allgemeine Konfigurationen und sind nicht als geheim eingestuft.
+
+```ini
+{{ DOT_ENV_CONTENT }}
+```
+
+### 2.3 Geheime Umgebungsvariablen (`stack.env`)
+
+Diese Datei enthält sensible Daten wie Passwörter, API-Keys oder Tokens. **Sie sollte niemals in Git eingecheckt werden.**
+
+```ini
+{{ STACK_ENV_CONTENT }}
+```
+
+---
+
+## 3. Volumes und Datenhaltung
+
+Persistente Daten für diesen Service werden auf dem Host-System unter folgendem Basispfad gespeichert: `{{ deployments.docker_compose.host_base_path }}/{{ service.name }}`.
+
+{% if volumes %}
+Definierte Volumes:
+{% for volume in volumes %}
+*   **`{{ volume.name }}`**:
+    *   **Container-Pfad:** `{{ volume.path }}`
+    *   **Host-Pfad:** `{{ deployments.docker_compose.host_base_path }}/{{ service.name }}/{{ volume.name }}`
+    *   **Beschreibung:** {{ volume.description | default('Keine Beschreibung.') }}
+{% endfor %}
+{% endif %}
+
+{% if deployments.docker_compose.raw_volumes %}
+Zusätzlich werden folgende Host-Pfade direkt gemountet (`raw_volumes`):
+{% for raw_volume in deployments.docker_compose.raw_volumes %}
+*   `{{ raw_volume }}`
+{% endfor %}
+{% endif %}
+
+---
+
+## 4. Integrationen
+
+*   **Homepage Dashboard:** `{{ "Aktiviert" if config.integrations.homepage.enabled else "Deaktiviert" }}`
+*   **Automatische DNS-Erstellung:** `{{ "Aktiviert" if config.integrations.autodns.enabled else "Deaktiviert" }}`
