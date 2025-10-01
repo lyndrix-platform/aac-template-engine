@@ -58,9 +58,12 @@ stages:
     - git config --global user.email "ci-bot@${CI_SERVER_HOST}"
     - git config --global user.name "GitLab CI Re-committer"
     - git remote set-url origin "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+    - git stash # Stash any untracked files (like artifacts) before checkout
     - git checkout $CI_COMMIT_BRANCH
+    - git stash pop || true # Re-apply the stashed files. '|| true' prevents failure if there was nothing to stash.
   script:
     - |
+      # The stashed artifacts are now restored. We can add all changes.
       git add .
       if ! git diff --staged --quiet; then
         echo "Changes detected in generated artifacts. Committing..."
@@ -106,21 +109,6 @@ dev-validate-docker-compose:
   rules:
     - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
-dev-generate-documentation:
-  extends: .generate-base
-  stage: dev-validate # Run after generation, before commit
-  script:
-    - SSOT_JSON=$(python3 -c 'import yaml, json; print(json.dumps(yaml.safe_load(open("service.yml"))))')
-    - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --process-documentation --stage "dev"
-  artifacts:
-    paths: [documentation.md] # Pass the generated doc to the commit job
-  needs:
-    - dev-generate-docker-compose
-    - job: dev-generate-custom-files
-      optional: true
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
-
 dev-commit:
   extends: .commit-artifacts
   stage: dev-commit
@@ -128,8 +116,6 @@ dev-commit:
     - dev-validate-docker-compose
     - dev-generate-docker-compose
     - job: dev-generate-custom-files
-      optional: true
-    - job: dev-generate-documentation
       optional: true
   rules:
     - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
@@ -147,6 +133,24 @@ dev-deploy:
     DEPLOYMENT_TYPE: 'single_service_trigger'
   rules:
     - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+
+dev-generate-documentation:
+  extends: .generate-base
+  stage: dev-generate # Moved to generate stage
+  script:
+    - SSOT_JSON=$(python3 -c 'import yaml, json; print(json.dumps(yaml.safe_load(open("service.yml"))))')
+    - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --process-documentation --stage "dev"
+  artifacts:
+    paths:
+      - deployments/
+      - documentation.md # We now pass both artifacts from this job
+  needs:
+    - dev-generate-docker-compose
+    - job: dev-generate-custom-files
+      optional: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+
 
 # ==========================================================================
 # TEST WORKFLOW (runs on 'test' branch)
@@ -177,21 +181,6 @@ test-validate-docker-compose:
   rules:
     - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
-test-generate-documentation:
-  extends: .generate-base
-  stage: test-validate # Run after generation, before commit
-  script:
-    - SSOT_JSON=$(python3 -c 'import yaml, json; print(json.dumps(yaml.safe_load(open("service.yml"))))')
-    - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --process-documentation --stage "test"
-  artifacts:
-    paths: [documentation.md] # Pass the generated doc to the commit job
-  needs:
-    - test-generate-docker-compose
-    - job: test-generate-custom-files
-      optional: true
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
-
 test-commit:
   extends: .commit-artifacts
   stage: test-commit
@@ -199,8 +188,6 @@ test-commit:
     - test-validate-docker-compose
     - test-generate-docker-compose
     - job: test-generate-custom-files
-      optional: true
-    - job: test-generate-documentation
       optional: true
   rules:
     - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
@@ -216,6 +203,23 @@ test-deploy:
     SERVICE_NAME: $CI_PROJECT_NAME
     SERVICE_BRANCH: 'test'
     DEPLOYMENT_TYPE: 'single_service_trigger'
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+
+test-generate-documentation:
+  extends: .generate-base
+  stage: test-generate # Moved to generate stage
+  script:
+    - SSOT_JSON=$(python3 -c 'import yaml, json; print(json.dumps(yaml.safe_load(open("service.yml"))))')
+    - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --process-documentation --stage "test"
+  artifacts:
+    paths:
+      - deployments/
+      - documentation.md
+  needs:
+    - test-generate-docker-compose
+    - job: test-generate-custom-files
+      optional: true
   rules:
     - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
@@ -248,21 +252,6 @@ prod-validate-docker-compose:
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
-prod-generate-documentation:
-  extends: .generate-base
-  stage: prod-validate # Run after generation, before commit
-  script:
-    - SSOT_JSON=$(python3 -c 'import yaml, json; print(json.dumps(yaml.safe_load(open("service.yml"))))')
-    - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --process-documentation --stage "prod"
-  artifacts:
-    paths: [documentation.md] # Pass the generated doc to the commit job
-  needs:
-    - prod-generate-docker-compose
-    - job: prod-generate-custom-files
-      optional: true
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
-
 prod-commit:
   extends: .commit-artifacts
   stage: prod-commit
@@ -270,8 +259,6 @@ prod-commit:
     - prod-validate-docker-compose
     - prod-generate-docker-compose
     - job: prod-generate-custom-files
-      optional: true
-    - job: prod-generate-documentation
       optional: true
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
@@ -291,6 +278,23 @@ prod-deploy:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
       when: manual
       allow_failure: false
+
+prod-generate-documentation:
+  extends: .generate-base
+  stage: prod-generate # Moved to generate stage
+  script:
+    - SSOT_JSON=$(python3 -c 'import yaml, json; print(json.dumps(yaml.safe_load(open("service.yml"))))')
+    - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --process-documentation --stage "prod"
+  artifacts:
+    paths:
+      - deployments/
+      - documentation.md
+  needs:
+    - prod-generate-docker-compose
+    - job: prod-generate-custom-files
+      optional: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
 # ==========================================================================
 # DOCUMENTATION WORKFLOW
