@@ -104,9 +104,6 @@ dependencies:
     name: bookstack-db   # Tatsächlicher Container-Name
     image_repo: mariadb
     image_tag: latest
-    networks_to_join:
-      - bookstack_internal
-      - docker-default
     volumes:
       - name: db
         path: /var/lib/mysql
@@ -120,3 +117,4 @@ dependencies:
       MARIADB_ROOT_PASSWORD: test       # Wird als Secret behandelt
 
 
+ 
