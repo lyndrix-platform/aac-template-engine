@@ -110,16 +110,16 @@ def read_file_content(path: str) -> str:
     except Exception as e:
         return f"Error reading file {path}: {e}"
 
-def process_documentation(template_paths: list, output_base: str, context: dict):
+def process_documentation(template_paths: list, read_base: str, write_base: str, context: dict):
     """
     Renders documentation templates after embedding the content of already
     generated artifacts into the context.
     """
     print("INFO: Preparing to render documentation.", file=sys.stderr)
-    context['DOCKER_COMPOSE_CONTENT'] = read_file_content(os.path.join(output_base, 'docker_compose', 'docker-compose.yml'))
-    context['DOT_ENV_CONTENT'] = read_file_content(os.path.join(output_base, 'docker_compose', '.env'))
-    context['STACK_ENV_CONTENT'] = read_file_content(os.path.join(output_base, 'docker_compose', 'stack.env'))
-    process_templates(template_paths, output_base, context)
+    context['DOCKER_COMPOSE_CONTENT'] = read_file_content(os.path.join(read_base, 'docker_compose', 'docker-compose.yml'))
+    context['DOT_ENV_CONTENT'] = read_file_content(os.path.join(read_base, 'docker_compose', '.env'))
+    context['STACK_ENV_CONTENT'] = read_file_content(os.path.join(read_base, 'docker_compose', 'stack.env'))
+    process_templates(template_paths, write_base, context)
 
 def deep_merge(source, destination):
     """
