@@ -53,32 +53,53 @@ stages:
     - if: '$CI_COMMIT_BRANCH && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
 .commit-artifacts:
-  image: python:3.9-slim
+  image: alpine:latest # Geändert zu alpine, da wir nur git und coreutils brauchen
   before_script:
+    - apk add --no-cache git
     - echo "Adding DNS fix for internal GitLab instance..."
     - echo "$INTERNAL_GITLAB_IP gitlab.int.fam-feser.de" >> /etc/hosts
-    - apt-get update && apt-get install -y --no-install-recommends git
     - git config --global user.email "ci-bot@${CI_SERVER_HOST}"
     - git config --global user.name "GitLab CI Re-committer"
     - git remote set-url origin "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
-    - git stash --include-untracked # Stash modified and untracked files (artifacts)
-    - git checkout $CI_COMMIT_BRANCH
-    - git stash pop || true # Re-apply the stashed files. '|| true' prevents failure if there was nothing to stash.
   script:
     - |
-      # The stashed artifacts are now restored. We can add all changes.
-      git add .
-      if ! git diff --staged --quiet; then
-        echo "Changes detected in generated artifacts. Committing..."
-        git commit -m "ci: Re-commit ${CI_COMMIT_BRANCH} artifacts [skip ci]"
+      echo "Synchronizing artifacts with the branch '${CI_COMMIT_BRANCH}'..."
+      git checkout $CI_COMMIT_BRANCH
 
-        echo "Rebasing local commit on top of remote changes..."
-        git pull --rebase origin $CI_COMMIT_BRANCH
-
-        echo "Pushing changes to remote..."
-        git push origin $CI_COMMIT_BRANCH
+      # 1. Die neuen Artefakte (die vom Runner heruntergeladen wurden) sicher zwischenspeichern.
+      echo "Temporarily moving new artifacts..."
+      # Wir verschieben nur, falls das Verzeichnis überhaupt im Artefakt existiert.
+      if [ -d "deployments" ]; then
+        mv deployments /tmp/new_deployments
       else
-        echo "No changes in generated artifacts to re-commit."
+        echo "No 'deployments' directory found in artifacts. Nothing to update."
+        exit 0
+      fi
+      
+      # 2. Den alten Ordner im Git-Repository komplett entfernen (inkl. aller alten Dateien).
+      echo "Removing old 'deployments' directory from git..."
+      # --ignore-unmatch sorgt dafür, dass es keinen Fehler gibt, wenn der Ordner noch nicht existiert.
+      git rm -r --cached --ignore-unmatch deployments
+      rm -rf deployments
+
+      # 3. Den neuen Ordner aus dem Zwischenspeicher an die richtige Stelle verschieben.
+      echo "Placing new artifacts into the repository..."
+      mv /tmp/new_deployments deployments
+
+      # 4. Alle Änderungen stagen (neue, geänderte und gelöschte Dateien).
+      git add deployments/
+
+      # 5. Prüfen, ob es Änderungen gibt, und diese committen & pushen.
+      if ! git diff --staged --quiet; then
+        echo "Changes detected. Committing and pushing to ${CI_COMMIT_BRANCH}..."
+        git commit -m "ci: Update generated deployments for ${CI_COMMIT_BRANCH} [skip ci]"
+        
+        # Pull mit Rebase, um Konflikte mit parallelen Änderungen zu vermeiden
+        git pull --rebase origin $CI_COMMIT_BRANCH
+        git push origin $CI_COMMIT_BRANCH
+        echo "Successfully committed and pushed artifacts."
+      else
+        echo "No changes in generated artifacts to commit."
       fi
   rules:
     - if: '$CI_COMMIT_BRANCH && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
