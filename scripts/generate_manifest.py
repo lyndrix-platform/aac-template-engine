@@ -197,16 +197,12 @@ def process_traefik_port_logic(data: dict) -> dict:
             }]
     return data
 
-<<<<<<< HEAD
 def process_host_network_flag(data: dict) -> dict:
     """Injects a boolean flag if the service uses host network mode for routing."""
     if data.get('deployments', {}).get('docker_compose', {}).get('raw_options', {}).get('network_mode') == 'host':
         data.setdefault('config', {})['routing_host_network'] = True
         print("INFO: Service is using 'network_mode: host'. Flag 'routing_host_network' set to true.", file=sys.stderr)
     return data
-
-=======
->>>>>>> d224c5e02768c83c876e64637b6f026429c276c9
 def main():
     """Main execution function."""
     parser = argparse.ArgumentParser(description="Generates deployment manifests from a JSON SSoT string.")
@@ -251,12 +247,9 @@ def main():
         # This ensures that if routing is on, a port is available for the templates.
         data_with_overrides = process_traefik_port_logic(data_with_overrides)
 
-<<<<<<< HEAD
         # --- Apply Host Network Flag Logic ---
         data_with_overrides = process_host_network_flag(data_with_overrides)
 
-=======
->>>>>>> d224c5e02768c83c876e64637b6f026429c276c9
         # Resolve Jinja2 templates within the SSoT data
         data = render_ssot_recursively(data_with_overrides)
 
