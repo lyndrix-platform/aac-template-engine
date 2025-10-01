@@ -73,7 +73,7 @@ stages:
       echo "Klonen des Repositories in ein sauberes Verzeichnis..."
       # 2. Das Repository mit dem Token in ein separates Verzeichnis klonen.
       #    Das ist der robusteste Ansatz und vermeidet alle Checkout-Konflikte.
-      git clone "https://gitlab-ci-token:${GIT_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git" repo
+      git clone "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git" repo
       cd repo
 
       # 3. Den Ziel-Branch auschecken.
