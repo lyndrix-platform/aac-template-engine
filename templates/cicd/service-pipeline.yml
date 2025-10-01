@@ -63,36 +63,40 @@ stages:
     - git remote set-url origin "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
   script:
     - |
-      # 1. Überprüfen, ob das Artefakt-Verzeichnis existiert.
+      # 1. Überprüfen, ob das Artefakt-Verzeichnis überhaupt existiert.
+      # Wenn nicht, gibt es nichts zu tun.
       if [ ! -d "deployments" ]; then
-        echo "No 'deployments' directory found in artifacts. Nothing to update."
+        echo "Kein 'deployments'-Verzeichnis in den Artefakten gefunden. Es gibt nichts zu tun."
         exit 0
       fi
 
-      echo "Checking out and updating branch '${CI_COMMIT_BRANCH}'..."
-      # 2. Explizit den Ziel-Branch auschecken und auf den neuesten Stand bringen.
-      # Dies löst das "detached HEAD"-Problem und verhindert "non-fast-forward"-Fehler.
+      echo "Checkout des Ziel-Branches '${CI_COMMIT_BRANCH}'..."
+      # 2. Den Ziel-Branch auschecken und auf den neuesten Stand bringen, um Konflikte zu vermeiden.
       git checkout "${CI_COMMIT_BRANCH}"
       git pull origin "${CI_COMMIT_BRANCH}"
 
-      echo "Synchronizing artifacts with the branch '${CI_COMMIT_BRANCH}'..."
+      echo "ERSETZE das Verzeichnis 'deployments' im Repository mit den neuen Artefakten..."
 
-      # 3. Synchronisiere das Artefakt-Verzeichnis mit dem Arbeitsverzeichnis.
-      # 'rsync' kopiert neue/geänderte Dateien und löscht Dateien, die im Ziel, aber nicht in der Quelle sind.
-      # Dies überschreibt den bestehenden 'deployments'-Ordner sauber.
+      # 3. Vollständige Synchronisierung.
+      # Der Inhalt von 'deployments/' (aus den Artefakten) ersetzt den Inhalt von './deployments/' (im Repository).
+      # - 'rsync -a': Kopiert rekursiv und behält alle Datei-Attribute bei (Rechte, Zeiten etc.).
+      # - '--delete': LÖSCHT alle Dateien im Zielverzeichnis ('./deployments/'), 
+      #   die NICHT im Quellverzeichnis ('deployments/') vorhanden sind.
+      # Dies stellt sicher, dass alte, nicht mehr benötigte Dateien entfernt werden.
       rsync -a --delete deployments/ ./deployments/
 
-      # 4. Alle Änderungen stagen (neue, geänderte und gelöschte Dateien).
+      # 4. Alle Änderungen im Arbeitsverzeichnis für den Commit vormerken.
+      # Dies schließt neue, geänderte UND gelöschte Dateien mit ein.
       git add deployments/
 
-      # 5. Prüfen, ob es Änderungen gibt, und diese committen & pushen.
+      # 5. Prüfen, ob es Änderungen gibt. Wenn ja, committen und pushen.
       if ! git diff --staged --quiet; then
-        echo "Changes detected. Committing and pushing to ${CI_COMMIT_BRANCH}..."
-        git commit -m "ci: Update generated deployments for ${CI_COMMIT_BRANCH} [skip ci]"
+        echo "Änderungen erkannt. Erstelle Commit und pushe zu '${CI_COMMIT_BRANCH}'..."
+        git commit -m "ci: Aktualisiere Deployment-Artefakte für ${CI_COMMIT_BRANCH} [skip ci]"
         git push origin $CI_COMMIT_BRANCH
-        echo "Successfully committed and pushed artifacts."
+        echo "Artefakte erfolgreich committet und gepusht."
       else
-        echo "No changes in generated artifacts to commit."
+        echo "Keine Änderungen in den Artefakten. Nichts zu committen."
       fi
   rules:
     - if: '$CI_COMMIT_BRANCH && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
