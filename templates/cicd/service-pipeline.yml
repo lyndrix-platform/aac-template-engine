@@ -55,6 +55,7 @@ stages:
     - echo "Adding DNS fix for internal GitLab instance..."
     - echo "$INTERNAL_GITLAB_IP gitlab.int.fam-feser.de" >> /etc/hosts
     - apt-get update && apt-get install -y --no-install-recommends git
+    - git clone "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
     - git config --global user.email "ci-bot@${CI_SERVER_HOST}"
     - git config --global user.name "GitLab CI Re-committer"
     - git remote set-url origin "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
