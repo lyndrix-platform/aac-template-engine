@@ -311,22 +311,27 @@ publish_to_docs:
   stage: documentation
   # Verwende ein Image, das Python und Git enthält
   image: python:3.9-slim
-  needs: [prod-commit]
+  needs:
+    - job: prod-commit                  # 1. Stellt die korrekte Reihenfolge in der Pipeline sicher
+      artifacts: false                  #    Wir brauchen aber keine Artefakte von diesem Job
+    - job: prod-generate-documentation  # 2. Holt sich die frischen Doku-Artefakte direkt von der Quelle
+      artifacts: true                   #    (das ist die Standardeinstellung, aber explizit ist es klarer)
   variables:
     DOCS_REPO_URL: "https://gitlab.int.fam-feser.de/documentation/aac-iac-documentation.git"
-    # Die Variable wird jetzt vom Python-Skript intern verwendet
     DOC_SOURCE_DIR: "deployments/documentation"
   before_script:
     # Klonen der Template-Engine, um Zugriff auf das Skript zu haben
     - apt-get update && apt-get install -y --no-install-recommends git
     - git clone "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
   script:
+    - echo "Prüfe den Inhalt des heruntergeladenen Artefakts:"
+    - ls -l deployments/documentation/
+    - cat deployments/documentation/*.md
     - echo "Führe das Python-Skript zum Veröffentlichen der Dokumentation aus..."
     - python3 aac-template-engine/scripts/publish_docs.py
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
       when: on_success
-
 
 prod-deploy:
   stage: prod-deploy
