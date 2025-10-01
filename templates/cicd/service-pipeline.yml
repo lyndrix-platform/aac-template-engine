@@ -298,7 +298,7 @@ prod-notify-approval:
               "project_title": "'"${CI_PROJECT_TITLE}"'",
               "triggered_by": "'"${GITLAB_USER_NAME}"'"
             }' \
-        "https://n8n.int.fam-feser.de/webhook/fbdbf3f5-e883-41c6-b2a1-93db6d845506"
+        "https://n8n.int.fam-feser.de/webhook/fbdbf3f5-e883-41c6-b2a1-93db6d845505"
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
