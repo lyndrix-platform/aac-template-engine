@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Deployment Manifest Generator - v7 (Override-Aware Renderer)
+Deployment Manifest Generator - v8 (Traefik Port-Aware Renderer)
 
 This script generates deployment configurations from a Single Source of Truth (SSoT).
 It intelligently uses templates from the service's own 'custom_templates' directory
@@ -11,6 +11,7 @@ import os
 import sys
 import json
 import argparse
+import re
 import shutil
 from copy import deepcopy
 from jinja2 import Environment, FileSystemLoader, ChoiceLoader
@@ -149,6 +150,60 @@ def process_network_logic(data: dict) -> dict:
 
     return data
 
+def process_traefik_port_logic(data: dict) -> dict:
+    """
+    Ensures a port is available for Traefik routing if enabled, preventing template errors.
+    The port is determined with the following priority:
+    1. `config.routing_port` (explicit override)
+    2. The first entry in the `ports` list.
+    3. A port derived from the `healthcheck` command as a fallback.
+    """
+    # Only run if routing is enabled for docker-compose
+    dc_deployments = data.get('deployments', {}).get('docker_compose', {})
+    config = data.get('config', {})
+    if not config.get('routing_enabled') or not dc_deployments:
+        return data
+
+    # Priority 1: Use explicit `routing_port` from config
+    routing_port = config.get('routing_port')
+    if routing_port:
+        print(f"INFO: Using explicit `routing_port: {routing_port}` for Traefik.", file=sys.stderr)
+        # Overwrite/create the ports list to ensure this one is used by templates.
+        data['ports'] = [{
+            "name": "web-routed",
+            "port": int(routing_port),
+            "protocol": "TCP"
+        }]
+        return data
+
+    # Priority 2: Use existing `ports` list if available
+    if data.get('ports'):
+        # The list is already populated, so we assume the first entry is correct.
+        return data
+
+    # Priority 3 (Fallback): Derive port from healthcheck
+    print("INFO: No `routing_port` or `ports` defined. Attempting to derive port from healthcheck.", file=sys.stderr)
+    healthcheck = dc_deployments.get('healthcheck', {})
+    if healthcheck and isinstance(healthcheck.get('test'), list):
+        test_str = " ".join(healthcheck['test'])
+        match = re.search(r':(\d+)', test_str)
+        if match:
+            port = int(match.group(1))
+            print(f"INFO: Derived port '{port}' from healthcheck. Injecting into 'ports' list for template context.", file=sys.stderr)
+            data['ports'] = [{
+                "name": "web-derived",
+                "port": port,
+                "protocol": "TCP"
+            }]
+    return data
+
+def process_host_network_flag(data: dict) -> dict:
+    """Injects a boolean flag if the service uses host network mode for routing."""
+    if data.get('deployments', {}).get('docker_compose', {}).get('raw_options', {}).get('network_mode') == 'host':
+        data.setdefault('config', {})['routing_host_network'] = True
+        print("INFO: Service is using 'network_mode: host'. Flag 'routing_host_network' set to true.", file=sys.stderr)
+    return data
+
 def main():
     """Main execution function."""
     parser = argparse.ArgumentParser(description="Generates deployment manifests from a JSON SSoT string.")
@@ -183,9 +238,18 @@ def main():
             data_with_overrides = deep_merge(override_data, data_with_overrides)
 
         # --- Apply Default Docker Compose Network Logic (BEFORE recursive rendering) ---
-        if args.deployment_type == 'docker_compose':
+        # We apply this logic if 'docker_compose' is the target deployment type OR if we are processing files
+        # for a service that HAS a docker_compose deployment defined, as templates might reference network data.
+        if 'docker_compose' in data_with_overrides.get('deployments', {}):
             print("INFO: Pre-processing and applying default Docker Compose network logic.", file=sys.stderr)
             data_with_overrides = process_network_logic(data_with_overrides)
+
+        # --- Apply Traefik Port Logic (BEFORE recursive rendering) ---
+        # This ensures that if routing is on, a port is available for the templates.
+        data_with_overrides = process_traefik_port_logic(data_with_overrides)
+
+        # --- Apply Host Network Flag Logic ---
+        data_with_overrides = process_host_network_flag(data_with_overrides)
 
         # Resolve Jinja2 templates within the SSoT data
         data = render_ssot_recursively(data_with_overrides)
