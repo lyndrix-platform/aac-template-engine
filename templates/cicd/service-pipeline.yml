@@ -69,22 +69,26 @@ stages:
         exit 0
       fi
 
+      echo "Checking out and updating branch '${CI_COMMIT_BRANCH}'..."
+      # 2. Explizit den Ziel-Branch auschecken und auf den neuesten Stand bringen.
+      # Dies löst das "detached HEAD"-Problem und verhindert "non-fast-forward"-Fehler.
+      git checkout "${CI_COMMIT_BRANCH}"
+      git pull origin "${CI_COMMIT_BRANCH}"
+
       echo "Synchronizing artifacts with the branch '${CI_COMMIT_BRANCH}'..."
 
-      # 2. Synchronisiere das Artefakt-Verzeichnis mit dem Arbeitsverzeichnis.
+      # 3. Synchronisiere das Artefakt-Verzeichnis mit dem Arbeitsverzeichnis.
       # 'rsync' kopiert neue/geänderte Dateien und löscht Dateien, die im Ziel, aber nicht in der Quelle sind.
       # Dies überschreibt den bestehenden 'deployments'-Ordner sauber.
       rsync -a --delete deployments/ ./deployments/
 
-      # 3. Alle Änderungen stagen (neue, geänderte und gelöschte Dateien).
+      # 4. Alle Änderungen stagen (neue, geänderte und gelöschte Dateien).
       git add deployments/
 
-      # 4. Prüfen, ob es Änderungen gibt, und diese committen & pushen.
+      # 5. Prüfen, ob es Änderungen gibt, und diese committen & pushen.
       if ! git diff --staged --quiet; then
         echo "Changes detected. Committing and pushing to ${CI_COMMIT_BRANCH}..."
         git commit -m "ci: Update generated deployments for ${CI_COMMIT_BRANCH} [skip ci]"
-
-        git pull --rebase origin $CI_COMMIT_BRANCH
         git push origin $CI_COMMIT_BRANCH
         echo "Successfully committed and pushed artifacts."
       else
