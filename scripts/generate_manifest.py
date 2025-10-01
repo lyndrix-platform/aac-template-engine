@@ -321,6 +321,13 @@ def main():
             write_path = os.path.join("deployments", "documentation") # Path to write the final documentation files to
             process_documentation(template_paths, read_path, write_path, data)
 
+        # --- Write final rendered variables for Ansible ---
+        # This allows Ansible to read the fully resolved data after the script has run.
+        if args.deployment_type:
+            ssot_vars_path = os.path.join("deployments", args.deployment_type, ".ssot_vars.json")
+            with open(ssot_vars_path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2)
+
         print("INFO: Script finished successfully.")
 
     except Exception as e:
