@@ -113,10 +113,10 @@ dev-commit:
   extends: .commit-artifacts
   stage: dev-commit
   needs:
-    - dev-validate-docker-compose
-    - dev-generate-docker-compose
-    - job: dev-generate-custom-files
-      optional: true
+    # Stellt sicher, dass die Validierung durchlaufen ist
+    - dev-validate-docker-compose 
+    # Holt sich das KOMPLETTE Artefakt (docker-compose, custom-files & docu)
+    - dev-generate-documentation    
   rules:
     - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
@@ -184,10 +184,10 @@ test-commit:
   extends: .commit-artifacts
   stage: test-commit
   needs:
+    # Stellt sicher, dass die Validierung durchlaufen ist
     - test-validate-docker-compose
-    - test-generate-docker-compose
-    - job: test-generate-custom-files
-      optional: true
+    # Holt sich das KOMPLETTE Artefakt (docker-compose, custom-files & docu)
+    - test-generate-documentation
   rules:
     - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
@@ -254,11 +254,10 @@ prod-commit:
   extends: .commit-artifacts
   stage: prod-commit
   needs:
+    # Stellt sicher, dass die Validierung durchlaufen ist
     - prod-validate-docker-compose
-    - prod-generate-docker-compose
+    # Holt sich das KOMPLETTE Artefakt (docker-compose, custom-files & docu)
     - prod-generate-documentation
-    - job: prod-generate-custom-files
-      optional: true
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
