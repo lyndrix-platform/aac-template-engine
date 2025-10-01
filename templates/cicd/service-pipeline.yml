@@ -18,9 +18,10 @@ stages:
   - prod-generate
   - prod-validate
   - prod-commit
+  - documentation
   - prod-notify
   - prod-deploy
-  - documentation
+
 
 
 # ==========================================================================
@@ -302,81 +303,29 @@ prod-notify-approval:
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
+
 # ==========================================================================
 # DOCUMENTATION WORKFLOW
 # ==========================================================================
 publish_to_docs:
   stage: documentation
-  image: alpine:latest
+  # Verwende ein Image, das Python und Git enthält
+  image: python:3.9-slim
   needs: [prod-commit]
   variables:
     DOCS_REPO_URL: "https://gitlab.int.fam-feser.de/documentation/aac-iac-documentation.git"
+    # Die Variable wird jetzt vom Python-Skript intern verwendet
+    DOC_SOURCE_DIR: "deployments/documentation"
+  before_script:
+    # Klonen der Template-Engine, um Zugriff auf das Skript zu haben
+    - apt-get update && apt-get install -y --no-install-recommends git
+    - git clone "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
   script:
-    - |
-      # 1. Vorbereitung und Überprüfung
-      DOC_SOURCE_DIR="deployments/documentation"
-      
-      # Überprüfen, ob das Quellverzeichnis existiert und .md-Dateien enthält
-      if ! ls -A "${DOC_SOURCE_DIR}"/*.md >/dev/null 2>&1; then
-        echo "Keine .md-Dateien in '${DOC_SOURCE_DIR}' gefunden. Überspringe Dokumentations-Update."
-        exit 0
-      fi
-      
-      echo "Richte Git ein und klone das Dokumentations-Repository..."
-      apk add --no-cache git
-      git config --global user.email "ci-bot@${CI_SERVER_HOST}"
-      git config --global user.name "GitLab CI Documentation Bot"
-      # Klone das Ziel-Repository
-      git clone "https://gitlab-ci-token:${DOCS_REPO_TOKEN}@$(echo "$DOCS_REPO_URL" | sed 's|https://||')" docs_repo
-      cd docs_repo
-
-      # 2. Verarbeite jede Markdown-Datei
-      TARGET_DOC_DIR="site/content/aac-services/${CI_PROJECT_NAME}"
-      mkdir -p "${TARGET_DOC_DIR}"
-
-      echo "Verarbeite alle .md-Dateien aus dem Quellverzeichnis..."
-      # Finde alle .md-Dateien im Quellverzeichnis (außerhalb des geklonten Repos)
-      for SOURCE_FILE in ../${DOC_SOURCE_DIR}/*.md; do
-        # Extrahiere den reinen Dateinamen (z.B. "documentation.md")
-        SOURCE_BASENAME=$(basename "${SOURCE_FILE}")
-        # Erstelle einen Titel aus dem Dateinamen (z.B. "documentation")
-        FILE_TITLE=$(echo "${SOURCE_BASENAME}" | sed 's/\.md$//')
-
-        TARGET_FILE="${TARGET_DOC_DIR}/${SOURCE_BASENAME}"
-        echo "Erstelle '${TARGET_FILE}' mit Hugo-Header..."
-
-        # Erstelle die Zieldatei mit dynamischem Header
-        {
-          echo "---";
-          echo "title: \"${CI_PROJECT_NAME}: $(echo "$FILE_TITLE" | sed 's/.*/\u&/')\""; # Ersten Buchstaben groß
-          echo "date: $(date -u +'%Y-%m-%dT%H:%M:%SZ')";
-          echo "lastmod: $(date -u +'%Y-%m-%dT%H:%M:%SZ')";
-          echo "draft: false";
-          echo "description: \"Automatisch generierte Dokumentation für ${CI_PROJECT_NAME} - ${FILE_TITLE}.\"";
-          echo "---";
-          echo "";
-          cat "${SOURCE_FILE}";
-        } > "${TARGET_FILE}"
-
-        # Füge die erstellte Datei zum Staging-Bereich von Git hinzu
-        git add "${TARGET_FILE}"
-      done
-
-      # 3. Committe und pushe alle Änderungen gesammelt
-      echo "Überprüfe auf Änderungen..."
-      if ! git diff --staged --quiet; then
-        echo "Änderungen gefunden. Erstelle Commit und pushe..."
-        git commit -m "docs: Aktualisiere Service-Dokumentation für ${CI_PROJECT_NAME}"
-        git push origin main
-        echo "Dokumentation erfolgreich aktualisiert."
-      else
-        echo "Keine Änderungen an der Dokumentation festgestellt."
-      fi
+    - echo "Führe das Python-Skript zum Veröffentlichen der Dokumentation aus..."
+    - python3 aac-template-engine/scripts/publish_docs.py
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
       when: on_success
-
-
 
 
 prod-deploy:
