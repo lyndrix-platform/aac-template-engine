@@ -65,8 +65,9 @@ stages:
       # Render documentation by embedding generated artifacts, if documentation.md exists.
       # This uses a robust Python script instead of fragile sed commands.
       if [ -f "documentation.md" ]; then
-        pip install Jinja2
-        python3 aac-template-engine/scripts/render_documentation.py
+        pip install PyYAML Jinja2
+        SSOT_JSON=$(python3 -c 'import sys, yaml, json; print(json.dumps(yaml.safe_load(sys.stdin)))' < service.yml)
+        python3 aac-template-engine/scripts/render_documentation.py --ssot-json "$SSOT_JSON" --stage "$CI_COMMIT_BRANCH"
       fi
 
       git add .
