@@ -262,38 +262,6 @@ prod-commit:
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
-prod-deploy:
-  stage: prod-deploy
-  needs: [prod-commit]
-  trigger:
-    project: 'iac-environment/iac-ansible-automation'
-    branch: main
-    strategy: depend
-  variables:
-    SERVICE_NAME: $CI_PROJECT_NAME
-    SERVICE_BRANCH: 'main'
-    DEPLOYMENT_TYPE: 'single_service_trigger'
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
-      when: manual
-      allow_failure: false
-
-prod-generate-documentation:
-  extends: .generate-base
-  stage: prod-generate # Moved to generate stage
-  script:
-    - SSOT_JSON=$(python3 -c 'import yaml, json; print(json.dumps(yaml.safe_load(open("service.yml"))))')
-    - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --process-documentation --stage "prod"
-  artifacts:
-    paths:
-      - deployments/ # This now includes deployments/documentation
-  needs:
-    - prod-generate-docker-compose
-    - job: prod-generate-custom-files
-      optional: true
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
-
 # ==========================================================================
 # DOCUMENTATION WORKFLOW
 # ==========================================================================
@@ -367,3 +335,39 @@ publish_to_docs:
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
       when: on_success
+
+
+
+
+prod-deploy:
+  stage: prod-deploy
+  needs: [prod-commit]
+  trigger:
+    project: 'iac-environment/iac-ansible-automation'
+    branch: main
+    strategy: depend
+  variables:
+    SERVICE_NAME: $CI_PROJECT_NAME
+    SERVICE_BRANCH: 'main'
+    DEPLOYMENT_TYPE: 'single_service_trigger'
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+      when: manual
+      allow_failure: false
+
+prod-generate-documentation:
+  extends: .generate-base
+  stage: prod-generate # Moved to generate stage
+  script:
+    - SSOT_JSON=$(python3 -c 'import yaml, json; print(json.dumps(yaml.safe_load(open("service.yml"))))')
+    - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --process-documentation --stage "prod"
+  artifacts:
+    paths:
+      - deployments/ # This now includes deployments/documentation
+  needs:
+    - prod-generate-docker-compose
+    - job: prod-generate-custom-files
+      optional: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+
