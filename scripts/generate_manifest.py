@@ -100,6 +100,27 @@ def process_templates(template_paths: list, output_base: str, context: dict):
             print(f"ERROR: Failed to render {template_file}: {e}", file=sys.stderr)
             sys.exit(1)
 
+def read_file_content(path: str) -> str:
+    """Reads the content of a file, returns a placeholder if not found."""
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        return f"File not found at: {path}"
+    except Exception as e:
+        return f"Error reading file {path}: {e}"
+
+def process_documentation(template_paths: list, output_base: str, context: dict):
+    """
+    Renders documentation templates after embedding the content of already
+    generated artifacts into the context.
+    """
+    print("INFO: Preparing to render documentation.", file=sys.stderr)
+    context['DOCKER_COMPOSE_CONTENT'] = read_file_content(os.path.join(output_base, 'docker_compose', 'docker-compose.yml'))
+    context['DOT_ENV_CONTENT'] = read_file_content(os.path.join(output_base, 'docker_compose', '.env'))
+    context['STACK_ENV_CONTENT'] = read_file_content(os.path.join(output_base, 'docker_compose', 'stack.env'))
+    process_templates(template_paths, output_base, context)
+
 def deep_merge(source, destination):
     """
     Recursively merge source dict into destination dict.
@@ -219,6 +240,7 @@ def main():
     action_group = parser.add_mutually_exclusive_group(required=True)
     action_group.add_argument('--deployment-type', help="The deployment type to generate (e.g., 'docker_compose').")
     action_group.add_argument('--process-files', action='store_true', help="Process 'custom_templates/files' only.")
+    action_group.add_argument('--process-documentation', action='store_true', help="Process 'documentation' templates only.")
     
     args = parser.parse_args()
 
@@ -287,6 +309,16 @@ def main():
             ]
             output_dir = os.path.join("deployments", "files")
             process_templates(template_paths, output_dir, data)
+
+        if args.process_documentation:
+            template_paths = [
+                os.path.join(service_repo_path, 'custom_templates', 'documentation'),
+                os.path.join(template_engine_path, 'templates', 'documentation')
+            ]
+            # Documentation is special: it renders into the root of the repo, not a subdirectory.
+            # It also needs the context of the already generated files.
+            output_dir_for_reading = "deployments"
+            process_documentation(template_paths, output_dir_for_reading, data)
 
         print("INFO: Script finished successfully.")
 
