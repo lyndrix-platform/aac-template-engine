@@ -66,10 +66,9 @@ stages:
     - git config --global user.email "ci-bot@${CI_SERVER_HOST}"
     - git config --global user.name "GitLab CI Bot" # Name aus deinem alten Skript übernommen
 
-    # 4. Authentifizierung via .netrc (sicherere Methode aus deinem alten Skript)
-    #    Stellt sicher, dass du eine Projekt- oder Gruppen-Variable namens GIT_PUSH_TOKEN erstellt hast.
-    - echo "machine ${CI_SERVER_HOST} login gitlab-ci-token password ${GIT_PUSH_TOKEN}" > ~/.netrc
-    - git remote set-url origin "https://${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+    # 4. Authentifizierung für PULL und PUSH direkt in die Remote-URL einbetten.
+    #    Dies ist die robusteste Methode, um Authentifizierungsprobleme nach einem Checkout zu vermeiden.
+    - git remote set-url origin "https://gitlab-ci-token:${GIT_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
 
   script:
     - |
