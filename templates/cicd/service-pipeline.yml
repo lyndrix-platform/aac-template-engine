@@ -55,42 +55,35 @@ stages:
 .commit-artifacts:
   image: alpine:latest
   before_script:
-    # 1. Notwendige Pakete installieren (git für Repo-Operationen, rsync für das saubere Ersetzen)
+    # 1. Notwendige Pakete installieren
     - apk add --no-cache git rsync
-
-    # 2. DNS-Fix für deine interne GitLab-Instanz (unverändert)
-    - echo "Adding DNS fix for internal GitLab instance..."
-    - echo "$INTERNAL_GIT_IP gitlab.int.fam-feser.de" >> /etc/hosts # Annahme, dass die Variable so heißt
-
+    # 2. DNS-Fix für deine interne GitLab-Instanz (falls nötig)
+    - echo "$INTERNAL_GIT_IP gitlab.int.fam-feser.de" >> /etc/hosts
     # 3. Git-Benutzer konfigurieren
     - git config --global user.email "ci-bot@${CI_SERVER_HOST}"
-    - git config --global user.name "GitLab CI Bot" # Name aus deinem alten Skript übernommen
-
-    # 4. Authentifizierung für PULL und PUSH direkt in die Remote-URL einbetten.
-    #    Dies ist die robusteste Methode, um Authentifizierungsprobleme nach einem Checkout zu vermeiden.
-    - git remote set-url origin "https://gitlab-ci-token:${GIT_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
-
+    - git config --global user.name "GitLab CI Bot"
   script:
     - |
-      # 1. Sicherstellen, dass die Artefakte (der 'deployments' Ordner) existieren.
+      # 1. Sicherstellen, dass die Artefakte (der 'deployments' Ordner) überhaupt existieren.
       if [ ! -d "deployments" ]; then
         echo "Kein 'deployments'-Verzeichnis in den Artefakten gefunden. Es gibt nichts zu tun."
         exit 0
       fi
 
-      # 2. Bereinige das Arbeitsverzeichnis von den entpackten Artefakten, um Checkout-Konflikte zu vermeiden.
-      # Wir verschieben sie temporär, anstatt sie zu löschen.
-      echo "Moving downloaded artifacts out of the way to allow clean checkout..."
-      mv deployments /tmp/new_deployments
+      echo "Klonen des Repositories in ein sauberes Verzeichnis..."
+      # 2. Das Repository mit dem Token in ein separates Verzeichnis klonen.
+      #    Das ist der robusteste Ansatz und vermeidet alle Checkout-Konflikte.
+      git clone "https://gitlab-ci-token:${GIT_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git" repo
+      cd repo
 
-      # 3. Den Ziel-Branch explizit auschecken und aktualisieren.
+      # 3. Den Ziel-Branch auschecken.
       echo "Checkout des Ziel-Branches '${CI_COMMIT_BRANCH}'..."
       git checkout "${CI_COMMIT_BRANCH}"
-      git pull origin "${CI_COMMIT_BRANCH}"
 
-      # 4. Artefakte mit dem Repository synchronisieren (ersetzt den Inhalt komplett).
-      echo "Ersetze das 'deployments'-Verzeichnis im Repository mit den neuen Artefakten..."
-      rsync -a --delete /tmp/new_deployments/ ./deployments/
+      echo "Ersetze das 'deployments'-Verzeichnis mit den neuen Artefakten..."
+      # 4. Artefakte mit dem geklonten Repository synchronisieren.
+      #    '../deployments/' ist der Pfad zu den ursprünglichen Artefakten.
+      rsync -a --delete ../deployments/ ./deployments/
 
       # 5. Änderungen (neue, geänderte, gelöschte Dateien) zum Commit hinzufügen.
       git add deployments/
@@ -98,20 +91,14 @@ stages:
       # 6. Prüfen, ob es Änderungen gibt, und diese committen & pushen.
       if ! git diff --staged --quiet; then
         echo "Änderungen erkannt. Erstelle Commit und pushe zu '${CI_COMMIT_BRANCH}'..."
-        # Commit-Nachricht aus deinem alten Skript übernommen
         git commit -m "ci: Auto-generate deployment manifests [skip ci]"
-        # Robuste Push-Methode aus deinem alten Skript übernommen
-        git push origin HEAD:$CI_COMMIT_BRANCH
+        git push origin "${CI_COMMIT_BRANCH}"
         echo "Artefakte erfolgreich committet und gepusht."
       else
         echo "Keine Änderungen in den Artefakten. Nichts zu committen."
       fi
-
   rules:
-    # Regel aus deinem alten Skript: Job läuft nur auf dem 'dev'-Branch 
-    # und wird nicht durch seine eigenen Commits ausgelöst.
     - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
-
 # ==========================================================================
 # DEV WORKFLOW (runs on 'dev' branch)
 # ==========================================================================
