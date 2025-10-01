@@ -17,8 +17,8 @@ stages:
   - test-deploy
   - prod-generate
   - prod-validate
-  - prod-notify
   - prod-commit
+  - prod-notify
   - prod-deploy
   - documentation
 
