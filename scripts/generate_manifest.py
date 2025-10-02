@@ -110,6 +110,36 @@ def read_file_content(path: str) -> str:
     except Exception as e:
         return f"Error reading file {path}: {e}"
 
+def read_env_file_as_dict(path: str) -> dict:
+    """
+    Liest eine .env-Datei und wandelt sie in ein Dictionary um.
+    Ignoriert Kommentare und leere Zeilen.
+    """
+    env_vars = {}
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                # Ignoriere Kommentare und leere Zeilen
+                if not line or line.startswith('#'):
+                    continue
+                # Teile die Zeile nur beim ersten '='-Zeichen
+                if '=' in line:
+                    key, value = line.split('=', 1)
+                    key = key.strip()
+                    value = value.strip()
+                    # Entferne optionale Anführungszeichen vom Wert
+                    if len(value) > 1 and value.startswith('"') and value.endswith('"'):
+                        value = value[1:-1]
+                    elif len(value) > 1 and value.startswith("'") and value.endswith("'"):
+                        value = value[1:-1]
+                    env_vars[key] = value
+    except FileNotFoundError:
+        print(f"INFO: Env-Datei unter {path} nicht gefunden, wird als leer behandelt.", file=sys.stderr)
+    except Exception as e:
+        print(f"WARNUNG: Fehler beim Parsen der Env-Datei {path}: {e}", file=sys.stderr)
+    return env_vars
+
 def process_documentation(template_paths: list, read_base: str, write_base: str, context: dict):
     """
     Renders documentation templates after embedding the content of already
@@ -117,8 +147,8 @@ def process_documentation(template_paths: list, read_base: str, write_base: str,
     """
     print("INFO: Preparing to render documentation.", file=sys.stderr)
     context['DOCKER_COMPOSE_CONTENT'] = read_file_content(os.path.join(read_base, 'docker_compose', 'docker-compose.yml'))
-    context['DOT_ENV_CONTENT'] = read_file_content(os.path.join(read_base, 'docker_compose', '.env'))
-    context['STACK_ENV_CONTENT'] = read_file_content(os.path.join(read_base, 'docker_compose', 'stack.env'))
+    context['DOT_ENV_CONTENT'] = read_env_file_as_dict(os.path.join(read_base, 'docker_compose', '.env'))
+    context['STACK_ENV_CONTENT'] = read_env_file_as_dict(os.path.join(read_base, 'docker_compose', 'stack.env'))
     process_templates(template_paths, write_base, context)
 
 def deep_merge(source, destination):

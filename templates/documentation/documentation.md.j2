@@ -26,7 +26,9 @@ Diese Datei definiert den Hauptservice und seine Abhängigkeiten wie Datenbanken
 Diese Variablen enthalten allgemeine Konfigurationen und sind nicht als geheim eingestuft.
 
 ```ini
-{{ DOT_ENV_CONTENT }}
+{%- for key, value in DOT_ENV_CONTENT.items() %}
+{{ key }}="{{ value }}"
+{%- endfor %}
 ```
 
 ### 2.3 Geheime Umgebungsvariablen (`stack.env`)
