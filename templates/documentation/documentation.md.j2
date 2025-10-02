@@ -20,25 +20,34 @@ Diese Datei definiert den Hauptservice und seine Abhängigkeiten wie Datenbanken
 ```yaml
 {{ DOCKER_COMPOSE_CONTENT }}
 ```
-
+{% if DOT_ENV_CONTENT %}
 ### 2.2 Nicht-geheime Umgebungsvariablen (`.env`)
 
 Diese Variablen enthalten allgemeine Konfigurationen und sind nicht als geheim eingestuft.
 
-```ini
-{%- for key, value in DOT_ENV_CONTENT.items() %}
-{{ key }}="{{ value }}"
-{%- endfor %}
-```
 
+```ini
+
+{% for key, value in DOT_ENV_CONTENT.items() -%}
+{{ key }}="{{ value }}"
+{% endfor %}
+
+```
+{% endif %}
+
+{% if STACK_ENV_CONTENT %}
 ### 2.3 Geheime Umgebungsvariablen (`stack.env`)
 
 Diese Datei enthält sensible Daten wie Passwörter, API-Keys oder Tokens. **Sie sollte niemals in Git eingecheckt werden.**
 
 ```ini
-{{ STACK_ENV_CONTENT }}
-```
 
+{% for key, value in STACK_ENV_CONTENT.items() -%}
+{{ key }}="{{ value }}"
+{% endfor %}
+
+```
+{% endif %}
 ---
 
 ## 3. Volumes und Datenhaltung
