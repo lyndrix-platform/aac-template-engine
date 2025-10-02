@@ -26,9 +26,7 @@ Diese Datei definiert den Hauptservice und seine Abhängigkeiten wie Datenbanken
 Diese Variablen enthalten allgemeine Konfigurationen und sind nicht als geheim eingestuft.
 
 ```ini
-{%- for key, value in DOT_ENV_CONTENT.items() %}
-{{ key }}="{{ value }}"
-{%- endfor %}
+{{ DOT_ENV_CONTENT }}
 ```
 
 ### 2.3 Geheime Umgebungsvariablen (`stack.env`)
@@ -36,9 +34,7 @@ Diese Variablen enthalten allgemeine Konfigurationen und sind nicht als geheim e
 Diese Datei enthält sensible Daten wie Passwörter, API-Keys oder Tokens. **Sie sollte niemals in Git eingecheckt werden.**
 
 ```ini
-{%- for key, value in STACK_ENV_CONTENT.items() %}
-{{ key }}="{{ value }}"
-{%- endfor %}
+{{ STACK_ENV_CONTENT }}
 ```
 
 ---
