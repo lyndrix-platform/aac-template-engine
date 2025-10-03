@@ -89,10 +89,8 @@ def process_templates(template_paths: list, output_base: str, context: dict):
             template = env.get_template(template_file)
             rendered_content = template.render(context)
 
-            # Clean up excessive blank lines from the rendered output
-            # This replaces two or more consecutive newlines with just two (one blank line)
-            cleaned_content = re.sub(r'\n{3,}', '\n\n', rendered_content)
-            rendered_content = cleaned_content.strip() + '\n' # Ensure single trailing newline
+            # Ensure single trailing newline, but don't strip internal newlines
+            rendered_content = rendered_content.strip() + '\n'
 
             with open(output_path, 'w', encoding='utf-8') as f:
                 f.write(rendered_content)
