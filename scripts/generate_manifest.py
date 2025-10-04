@@ -219,11 +219,11 @@ def process_traefik_port_logic(data: dict) -> dict:
     if not config.get('routing_enabled') or not dc_deployments:
         return data
 
-    # Priority 1: Use explicit `routing_port` from config
+    # Priority 1: Use explicit `routing_port` from config. This has the highest priority and will
+    # ALWAYS overwrite any existing 'ports' definition to ensure routing consistency.
     routing_port = config.get('routing_port')
     if routing_port:
-        print(f"INFO: Using explicit `routing_port: {routing_port}` for Traefik.", file=sys.stderr)
-        # Overwrite/create the ports list to ensure this one is used by templates.
+        print(f"INFO: Using explicit `routing_port: {routing_port}` for Traefik. Overwriting `ports` list.", file=sys.stderr)
         data['ports'] = [{
             "name": "web-routed",
             "port": int(routing_port),
@@ -231,13 +231,13 @@ def process_traefik_port_logic(data: dict) -> dict:
         }]
         return data
 
-    # Priority 2: Use existing `ports` list if available
+    # Priority 2: Use existing `ports` list if it's not empty.
     if data.get('ports'):
-        # The list is already populated, so we assume the first entry is correct.
+        # The list already exists and has content, so we assume the first entry is correct for routing.
         return data
 
-    # Priority 3 (Fallback): Derive port from healthcheck
-    print("INFO: No `routing_port` or `ports` defined. Attempting to derive port from healthcheck.", file=sys.stderr)
+    # Priority 3 (Fallback): Derive port from healthcheck if 'ports' is missing or empty.
+    print("INFO: No `routing_port` or populated `ports` list found. Attempting to derive port from healthcheck.", file=sys.stderr)
     healthcheck = dc_deployments.get('healthcheck', {})
     if healthcheck and isinstance(healthcheck.get('test'), list):
         test_str = " ".join(healthcheck['test'])
@@ -263,8 +263,11 @@ def main():
     parser = argparse.ArgumentParser(description="Generates deployment manifests from a JSON SSoT string.")
     parser.add_argument('--ssot-json', required=True, help="The complete, pre-rendered SSoT as a JSON string.")
     parser.add_argument('--template-path', required=True, help="The absolute path to the main template engine directory.")
-    
     parser.add_argument('--stage', required=True, help="The deployment stage (e.g., dev, test, prod) to apply overrides for.")
+    
+    # NEUES, OPTIONALES ARGUMENT HINZUGEFÜGT
+    parser.add_argument('--service-path', help="The absolute path to the service repository directory being processed.")
+
     action_group = parser.add_mutually_exclusive_group(required=True)
     action_group.add_argument('--deployment-type', help="The deployment type to generate (e.g., 'docker_compose').")
     action_group.add_argument('--process-files', action='store_true', help="Process 'custom_templates/files' only.")
@@ -293,14 +296,11 @@ def main():
             data_with_overrides = deep_merge(override_data, data_with_overrides)
 
         # --- Apply Default Docker Compose Network Logic (BEFORE recursive rendering) ---
-        # We apply this logic if 'docker_compose' is the target deployment type OR if we are processing files
-        # for a service that HAS a docker_compose deployment defined, as templates might reference network data.
         if 'docker_compose' in data_with_overrides.get('deployments', {}):
             print("INFO: Pre-processing and applying default Docker Compose network logic.", file=sys.stderr)
             data_with_overrides = process_network_logic(data_with_overrides)
 
         # --- Apply Traefik Port Logic (BEFORE recursive rendering) ---
-        # This ensures that if routing is on, a port is available for the templates.
         data_with_overrides = process_traefik_port_logic(data_with_overrides)
 
         # --- Apply Host Network Flag Logic ---
@@ -318,7 +318,10 @@ def main():
             raise ValueError("SSoT data is empty after loading from JSON.")
 
         # --- Define template paths with override priority ---
-        service_repo_path = os.getcwd() 
+        
+        # GEÄNDERTE LOGIK FÜR ABWÄRTSKOMPATIBILITÄT
+        service_repo_path = args.service_path or os.getcwd() 
+        
         template_engine_path = args.template_path
 
         if args.deployment_type:
@@ -343,14 +346,11 @@ def main():
                 os.path.join(service_repo_path, 'custom_templates', 'documentation'),
                 os.path.join(template_engine_path, 'templates', 'documentation')
             ]
-            # Documentation is special: it renders into the root of the repo, not a subdirectory.
-            # It also needs the context of the already generated files.
-            read_path = "deployments"  # Path to read generated artifacts from
-            write_path = os.path.join("deployments", "documentation") # Path to write the final documentation files to
+            read_path = "deployments"
+            write_path = os.path.join("deployments", "documentation")
             process_documentation(template_paths, read_path, write_path, data)
 
         # --- Write final rendered variables for Ansible ---
-        # This allows Ansible to read the fully resolved data after the script has run.
         if args.deployment_type:
             ssot_vars_path = os.path.join("deployments", args.deployment_type, ".ssot_vars.json")
             with open(ssot_vars_path, 'w', encoding='utf-8') as f:

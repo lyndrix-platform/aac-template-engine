@@ -91,7 +91,7 @@ def main():
     args = parser.parse_args()
 
     applications_dir = Path(args.apps_path)
-    template_engine_dir = Path(args.templates)
+    template_engine_dir = Path(args.templates).resolve()
 
     if not applications_dir.is_dir():
         print(f"FEHLER: Das Anwendungsverzeichnis wurde nicht gefunden: {applications_dir}", file=sys.stderr)
