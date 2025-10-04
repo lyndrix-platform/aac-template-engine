@@ -27,25 +27,34 @@ services:
       {% endfor %}
     {% endif %}
 
-    {% if ports is defined and ports %}
+    {# NEUE LOGIK: Nur Ports mit explizitem 'external_port' werden gemappt. #}
+    {% set exposed_ports = ports | selectattr('external_port', 'defined') | list %}
+    {% if exposed_ports %}
     ports:
-      {% for p in ports %}
-      - "{{ p.external_port | default(p.port) }}:{{ p.port }}{% if p.protocol %}/{{ p.protocol }}{% endif %}"
+      {% for p in exposed_ports %}
+      - "{{ p.external_port }}:{{ p.port }}{% if p.protocol %}/{{ p.protocol }}{% endif %}"
       {% endfor %}
     {% endif %}
 
-    {% if (volumes is defined and volumes) or (deployments.docker_compose.raw_volumes is defined and deployments.docker_compose.raw_volumes) %}
+    {# --- NEUE VOLUME-LOGIK für den Hauptservice --- #}
+    {% if deployments.docker_compose.volumes is defined %}
     volumes:
-      {# First, process the standard, named volumes #}
-      {% for v in volumes %}
-      - "{{ deployments.docker_compose.host_base_path }}/{{ service.name | lower }}/{{ v.name }}:{{ v.path }}"
-      {% endfor %}
-      
-      {# Second, process the raw volume mounts like the docker socket #}
-      {% for v in deployments.docker_compose.raw_volumes %}
-      - "{{ v }}"
+      {% for mount in deployments.docker_compose.volumes %}
+        {% set parts = mount.split(':') %}
+        {% set vol_name = parts[0] %}
+        {% set container_path = parts[1] if parts | length > 1 else none %}
+        {% set vol_def = volumes[vol_name] %}
+
+        {% if vol_def.type == 'bind' %}
+          {# Raw/Bind Mount: Nutze source:target direkt aus der Definition #}
+      - "{{ vol_def.source }}:{{ vol_def.target }}"
+        {% else %}
+          {# Standard Named Volume: Baue den Host-Pfad zusammen #}
+      - "{{ deployments.docker_compose.host_base_path }}/{{ service.name | lower }}/{{ vol_name }}:{{ container_path }}"
+        {% endif %}
       {% endfor %}
     {% endif %}
+
     networks:
       {% for net_name in deployments.docker_compose.networks_to_join %}
       - {{ net_name }}
@@ -75,23 +84,26 @@ services:
       {% endfor %}
     {% endif %}
 
-    {% if config.routing_enabled or (config.integrations and (config.integrations.autodns.enabled or config.integrations.homepage.enabled)) %}
+    {# NEUE LOGIK: Prüft auf die neuen Integrations-Flags #}
+    {% if (config.integrations.traefik is defined and config.integrations.traefik.enabled) or (config.integrations.autodns is defined and config.integrations.autodns.enabled) or (config.integrations.homepage is defined and config.integrations.homepage.enabled) %}
     labels:
       {# --- Define FQDN based on DNS mode --- #}
-      {% if config.integrations.autodns.use_custom_hostname %}
+      {# NEUE LOGIK: Die Entscheidung basiert jetzt auf 'generate_hostname' #}
+      {% if not config.generate_hostname %}
         {% set fqdn = service.hostname ~ '.' ~ config.domain_name %}
       {% else %}
         {% set fqdn = service.stage ~ '.' ~ service.name ~ '.' ~ (inventory_hostname | default('ci-validation-host')) ~ '.' ~ config.domain_name %}
       {% endif %}
 
       # === Traefik Labels ===
-      {% if config.routing_enabled %}
+      {# NEUE LOGIK: Liest Konfiguration aus config.integrations.traefik #}
+      {% if config.integrations.traefik is defined and config.integrations.traefik.enabled %}
       traefik.enable: "true"
       traefik.docker.network: "{{ deployments.docker_compose.network_definitions.secured.name }}"
       traefik.http.routers.{{ service.name }}.rule: "Host(`{{ fqdn }}`)"
-      traefik.http.routers.{{ service.name }}.entrypoints: "{{ config.entrypoint }}"
+      traefik.http.routers.{{ service.name }}.entrypoints: "{{ config.integrations.traefik.entrypoint }}"
       traefik.http.routers.{{ service.name }}.tls: "true"
-      traefik.http.routers.{{ service.name }}.tls.certresolver: "{{ config.cert_resolver }}"
+      traefik.http.routers.{{ service.name }}.tls.certresolver: "{{ config.integrations.traefik.cert_resolver }}"
       
       {# --- Traefik Service Definition --- #}
       {# If the service uses host networking, we must provide the full URL with the host's IP. #}
@@ -103,12 +115,18 @@ services:
       {# Otherwise, for bridge networking, we just specify the port. #}
       traefik.http.services.{{ service.name }}.loadbalancer.server.port: "{{ ports[0].port }}"
       {% endif %}
+      
+      {# --- Optional: Set scheme and transport for the service (e.g., for internal HTTPS) --- #}
+      traefik.http.services.{{ service.name }}.loadbalancer.server.scheme: "{{ config.integrations.traefik.service_scheme | default('http') }}"
+      {% if config.integrations.traefik.servers_transport is defined %}
+      traefik.http.services.{{ service.name }}.loadbalancer.serverstransport: "{{ config.integrations.traefik.servers_transport }}"
+      {% endif %}
       {% endif %}
 
       # === AutoDNS Labels (Dynamically selects mode) ===
       {% if config.integrations is defined and config.integrations.autodns is defined and config.integrations.autodns.enabled %}
       auto-dns.createWildcard.{{ service.name }}: "{{ config.integrations.autodns.create_wildcard | lower }}"
-      {% if config.integrations.autodns.use_custom_hostname %}
+      {% if not config.generate_hostname %}
       {# --- Custom Hostname Mode (for Prod) --- #}
       auto-dns.customDNS.{{ service.name }}: "true"
       auto-dns.customDOMAIN.{{ service.name }}: "{{ config.domain_name }}"
@@ -167,10 +185,21 @@ services:
         condition: {{ dep.condition }}
       {% endfor %}
     {% endif %}
+    {# --- NEUE VOLUME-LOGIK für Dependencies --- #}
     {% if dep_config.volumes is defined %}
     volumes:
-      {% for vol in dep_config.volumes %}
-      - "{{ deployments.docker_compose.host_base_path }}/{{ service.name | lower }}/{{ vol.name }}:{{ vol.path }}"
+      {% for mount in dep_config.volumes %}
+        {% set parts = mount.split(':') %}
+        {% set vol_name = parts[0] %}
+        {% set container_path = parts[1] if parts | length > 1 else none %}
+        {% set vol_def = volumes[vol_name] %}
+
+        {% if vol_def.type == 'bind' %}
+      - "{{ vol_def.source }}:{{ vol_def.target }}"
+        {% else %}
+          {# Standard-Volume-Pfad für Dependencies #}
+      - "{{ deployments.docker_compose.host_base_path }}/{{ service.name | lower }}/{{ vol_name }}:{{ container_path }}"
+        {% endif %}
       {% endfor %}
     {% endif %}
     {% if dep_config.networks_to_join is defined %}
