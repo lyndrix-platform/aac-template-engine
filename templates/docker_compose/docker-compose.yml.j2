@@ -37,8 +37,16 @@ services:
     {% endif %}
 
     {# --- NEUE VOLUME-LOGIK für den Hauptservice --- #}
-    {% if deployments.docker_compose.volumes is defined %}
+    {% if deployments.docker_compose.volumes is defined or deployments.docker_compose.raw_volumes is defined %}
     volumes:
+      {# Füge zuerst die raw_volumes direkt ein, falls vorhanden. #}
+      {% if deployments.docker_compose.raw_volumes is defined %}
+      {% for mount in deployments.docker_compose.raw_volumes %}
+      - "{{ mount }}"
+      {% endfor %}
+      {% endif %}
+      {# Behalte die bestehende Logik für die 'volumes'-Liste bei. #}
+      {% if deployments.docker_compose.volumes is defined %}
       {% for mount in deployments.docker_compose.volumes %}
         {% set parts = mount.split(':') %}
         {% set vol_name = parts[0] %}
@@ -53,6 +61,7 @@ services:
       - "{{ deployments.docker_compose.host_base_path }}/{{ service.name | lower }}/{{ vol_name }}:{{ container_path }}"
         {% endif %}
       {% endfor %}
+      {% endif %}
     {% endif %}
 
     networks:
