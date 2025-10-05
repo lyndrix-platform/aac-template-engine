@@ -10,8 +10,16 @@ services:
 
     {% if deployments.docker_compose.command is defined %}
     command:
+      {# Intelligente Verarbeitung von Befehlszeilen. #}
+      {# Wenn ein Element ein Zeilenumbruch enthält, wird es als mehrzeiliger Block behandelt. #}
+      {# Andernfalls wird es sicher in Anführungszeichen gesetzt. #}
       {% for cmd_item in deployments.docker_compose.command %}
+      {% if '\n' in cmd_item %}
+      - |
+{{ cmd_item | indent(8) }}
+      {% else %}
       - "{{ cmd_item }}"
+      {% endif %}
       {% endfor %}
     {% endif %}
 
