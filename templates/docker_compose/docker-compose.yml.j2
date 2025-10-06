@@ -136,7 +136,9 @@ services:
       {% endif %}
       
       {# --- Optional: Set scheme and transport for the service (e.g., for internal HTTPS) --- #}
+      {% if not config.routing_host_network %}
       traefik.http.services.{{ service.name }}.loadbalancer.server.scheme: "{{ config.integrations.traefik.service_scheme | default('http') }}"
+      {% endif %}
       {% if config.integrations.traefik.servers_transport is defined %}
       traefik.http.services.{{ service.name }}.loadbalancer.serverstransport: "{{ config.integrations.traefik.servers_transport }}"
       {% endif %}
