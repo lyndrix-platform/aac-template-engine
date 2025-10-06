@@ -275,9 +275,9 @@ services:
 {% endfor %}
 {% endif %}
 
-networks:
 {# --- NEUE LOGIK: Den gesamten `networks`-Block nur rendern, wenn er benötigt wird --- #}
 {% if (deployments.docker_compose.network_mode is not defined or deployments.docker_compose.network_mode != 'host') or (dependencies is defined and dependencies) %}
+networks:
 {% for net_name, net_def in deployments.docker_compose.network_definitions.items() %}
   {{ net_name }}:
     name: "{{ net_def.name }}"
