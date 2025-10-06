@@ -238,7 +238,8 @@ services:
         {% endif %}
       {% endfor %}
     {% endif %}
-    {% if dep_config.networks_to_join is defined %}
+    {# --- NEUE LOGIK: Netzwerke für Dependencies nur definieren, wenn nicht im Host-Modus --- #}
+    {% if dep_config.networks_to_join is defined and (dep_config.network_mode is not defined or dep_config.network_mode != 'host') %}
     networks:
       {% for net_name in dep_config.networks_to_join %}
       - {{ net_name }}
