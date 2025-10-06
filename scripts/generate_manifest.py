@@ -13,6 +13,7 @@ import json
 import argparse
 import re
 import shutil
+import yaml  # Importiere die YAML-Bibliothek
 from copy import deepcopy
 from jinja2 import Environment, FileSystemLoader, ChoiceLoader
 
@@ -56,6 +57,11 @@ def process_templates(template_paths: list, output_base: str, context: dict):
     Finds all unique .j2 templates across a list of directories,
     and renders them using a loader that respects override priority.
     """
+    # --- NEU: Definiere einen benutzerdefinierten to_yaml Filter ---
+    def to_yaml_filter(data, indent_level=2):
+        # `default_flow_style=False` sorgt für die Block-Darstellung
+        return yaml.dump(data, indent=indent_level, default_flow_style=False, allow_unicode=True)
+
     # Create a loader that checks for templates in the provided paths, in order.
     # e.g., it will look in the service repo's custom path first, then the engine path.
     env = Environment(
@@ -63,6 +69,8 @@ def process_templates(template_paths: list, output_base: str, context: dict):
         trim_blocks=True,
         lstrip_blocks=True
     )
+    # --- NEU: Füge den benutzerdefinierten Filter zur Umgebung hinzu ---
+    env.filters['to_yaml'] = to_yaml_filter
 
     # Gather all unique template filenames from all template paths.
     all_templates = set()
