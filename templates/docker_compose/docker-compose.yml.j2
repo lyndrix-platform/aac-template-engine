@@ -175,6 +175,24 @@ services:
       {% endif %}
     {% endif %}
 
+    {# --- ERWEITERTE LOGIK: Rendere alle unbekannten Top-Level-Schlüssel & `raw_options` für Abwärtskompatibilität --- #}
+    {# 1. Definiere alle Schlüssel, die vom Template bereits explizit verarbeitet werden. #}
+    {% set known_keys = ['command', 'restart_policy', 'host_base_path', 'networks_to_join', 'network_definitions', 'raw_volumes', 'security_opts', 'logging', 'dot_env', 'stack_env', 'volumes', 'healthcheck', 'depends_on', 'raw_options'] %}
+    
+    {# 2. Rendere alle "unbekannten" Schlüssel direkt. Das ist der neue, saubere Weg. #}
+    {% for key, value in deployments.docker_compose.items() %}
+      {% if key not in known_keys %}
+{{ {key: value} | to_yaml(indent=4) | indent(4) }}
+      {% endif %}
+    {% endfor %}
+
+    {# 3. Prüfe auf die alte `raw_options` und rendere deren Inhalt für Abwärtskompatibilität. #}
+    {% if deployments.docker_compose.raw_options is defined %}
+{{ deployments.docker_compose.raw_options | to_yaml(indent=4) | indent(4) }}
+    {% endif %}
+
+
+
 {% if dependencies is defined and dependencies %}
   # --- Service Dependencies ---
 {% for dep_name, dep_config in dependencies.items() %}
@@ -237,6 +255,22 @@ services:
       {% for key, value in dep_config.labels.items() %}
       "{{ key }}": "{{ value }}"
       {% endfor %}
+    {% endif %}
+
+    {# --- ERWEITERTE LOGIK für Dependencies --- #}
+    {# 1. Definiere bekannte Schlüssel für Dependencies. #}
+    {% set known_dep_keys = ['name', 'image_repo', 'image_tag', 'restart_policy', 'command', 'user', 'depends_on', 'volumes', 'networks_to_join', 'healthcheck', 'labels', 'environment', 'raw_options'] %}
+    
+    {# 2. Rendere unbekannte Schlüssel direkt (neuer Weg). #}
+    {% for key, value in dep_config.items() %}
+      {% if key not in known_dep_keys %}
+{{ {key: value} | to_yaml(indent=4) | indent(4) }}
+      {% endif %}
+    {% endfor %}
+
+    {# 3. Prüfe auf `raw_options` für Abwärtskompatibilität. #}
+    {% if dep_config.raw_options is defined %}
+{{ dep_config.raw_options | to_yaml(indent=4) | indent(4) }}
     {% endif %}
 {% endfor %}
 {% endif %}
