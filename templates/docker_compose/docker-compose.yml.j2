@@ -182,13 +182,12 @@ services:
     {# 2. Rendere alle "unbekannten" Schlüssel direkt. Das ist der neue, saubere Weg. #}
     {% for key, value in deployments.docker_compose.items() %}
       {% if key not in known_keys %}
-{{ {key: value} | to_yaml(indent=2) | indent(4) }}
+{{ {key: value} | to_yaml(indent=2) | indent(4, first=true) }}
       {% endif %}
     {% endfor %}
-
     {# 3. Prüfe auf die alte `raw_options` und rendere deren Inhalt für Abwärtskompatibilität. #}
     {% if deployments.docker_compose.raw_options is defined %}
-{{ deployments.docker_compose.raw_options | to_yaml(indent=2) | indent(4) }}
+{{ deployments.docker_compose.raw_options | to_yaml(indent=2) | indent(4, first=true) }}
     {% endif %}
 
 
@@ -264,13 +263,12 @@ services:
     {# 2. Rendere unbekannte Schlüssel direkt (neuer Weg). #}
     {% for key, value in dep_config.items() %}
       {% if key not in known_dep_keys %}
-{{ {key: value} | to_yaml(indent=2) | indent(4) }}
+{{ {key: value} | to_yaml(indent=2) | indent(4, first=true) }}
       {% endif %}
     {% endfor %}
-
     {# 3. Prüfe auf `raw_options` für Abwärtskompatibilität. #}
     {% if dep_config.raw_options is defined %}
-{{ dep_config.raw_options | to_yaml(indent=2) | indent(4) }}
+{{ dep_config.raw_options | to_yaml(indent=2) | indent(4, first=true) }}
     {% endif %}
 {% endfor %}
 {% endif %}
