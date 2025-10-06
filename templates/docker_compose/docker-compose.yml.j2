@@ -72,11 +72,13 @@ services:
       {% endif %}
     {% endif %}
 
+    {# --- NEUE LOGIK: Netzwerke nur definieren, wenn nicht im Host-Modus --- #}
+    {% if deployments.docker_compose.network_mode is not defined or deployments.docker_compose.network_mode != 'host' %}
     networks:
       {% for net_name in deployments.docker_compose.networks_to_join %}
       - {{ net_name }}
       {% endfor %}
-
+    {% endif %}
     {% if deployments.docker_compose.healthcheck is defined %}
     healthcheck:
       test: {{ deployments.docker_compose.healthcheck.test | tojson }}
@@ -274,6 +276,8 @@ services:
 {% endif %}
 
 networks:
+{# --- NEUE LOGIK: Den gesamten `networks`-Block nur rendern, wenn er benötigt wird --- #}
+{% if (deployments.docker_compose.network_mode is not defined or deployments.docker_compose.network_mode != 'host') or (dependencies is defined and dependencies) %}
 {% for net_name, net_def in deployments.docker_compose.network_definitions.items() %}
   {{ net_name }}:
     name: "{{ net_def.name }}"
@@ -283,6 +287,7 @@ networks:
     driver: "{{ net_def.driver | default('bridge') }}"
     {% endif %}
 {% endfor %}
+{% endif %}
 
 {% if deployments.docker_compose.volume_definitions is defined and deployments.docker_compose.volume_definitions %}
 volumes:
