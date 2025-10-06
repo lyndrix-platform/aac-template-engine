@@ -262,7 +262,13 @@ def process_traefik_port_logic(data: dict) -> dict:
 
 def process_host_network_flag(data: dict) -> dict:
     """Injects a boolean flag if the service uses host network mode for routing."""
-    if data.get('deployments', {}).get('docker_compose', {}).get('raw_options', {}).get('network_mode') == 'host':
+    dc_config = data.get('deployments', {}).get('docker_compose', {})
+    
+    # Check for network_mode in the new direct location OR the old raw_options location
+    is_host_mode = (dc_config.get('network_mode') == 'host' or 
+                    dc_config.get('raw_options', {}).get('network_mode') == 'host')
+
+    if is_host_mode:
         data.setdefault('config', {})['routing_host_network'] = True
         print("INFO: Service is using 'network_mode: host'. Flag 'routing_host_network' set to true.", file=sys.stderr)
     return data
