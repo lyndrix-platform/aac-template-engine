@@ -229,6 +229,12 @@ services:
         condition: {{ dep.condition }}
       {% endfor %}
     {% endif %}
+    {% if dep_config.ports is defined %}
+    ports:
+      {% for p in dep_config.ports %}
+      - "{{ p }}"
+      {% endfor %}
+    {% endif %}
     {# --- NEUE VOLUME-LOGIK für Dependencies --- #}
     {% if dep_config.volumes is defined %}
     volumes:
@@ -269,7 +275,7 @@ services:
 
     {# --- ERWEITERTE LOGIK für Dependencies --- #}
     {# 1. Definiere bekannte Schlüssel für Dependencies. #}
-    {% set known_dep_keys = ['name', 'image_repo', 'image_tag', 'restart_policy', 'command', 'user', 'depends_on', 'volumes', 'networks_to_join', 'healthcheck', 'labels', 'environment', 'raw_options'] %}
+    {% set known_dep_keys = ['name', 'image_repo', 'image_tag', 'restart_policy', 'command', 'user', 'depends_on', 'ports', 'volumes', 'networks_to_join', 'healthcheck', 'labels', 'environment', 'raw_options'] %}
     
     {# 2. Rendere unbekannte Schlüssel direkt (neuer Weg). #}
     {% for key, value in dep_config.items() %}
