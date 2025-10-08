@@ -54,17 +54,17 @@ services:
       {%- endif %}
       {%- if deployments.docker_compose.volumes is defined %}
       {% for mount in deployments.docker_compose.volumes %}
-        {% set parts = mount.split(':') %}
-        {% set vol_name = parts[0] %}
-        {% set container_path = parts[1] if parts | length > 1 else none %}
-        {% set vol_def = volumes[vol_name] | default({}) %}
-        {% if vol_def.type == 'bind' %}
-        - "{{ vol_def.source }}:{{ container_path }}"
-        {% elif vol_def.driver is defined %}
-        - "{{ vol_name }}:{{ container_path }}"
-        {% else %}
-        - "{{ deployments.docker_compose.host_base_path }}/{{ service.name | lower }}/{{ vol_name }}:{{ container_path }}"
-        {% endif %}
+      {% set parts = mount.split(':') %}
+      {% set vol_name = parts[0] %}
+      {% set container_path = parts[1] if parts | length > 1 else none %}
+      {% set vol_def = volumes[vol_name] | default({}) %}
+      {% if vol_def.type == 'bind' %}
+      - "{{ vol_def.source }}:{{ container_path }}"
+      {% elif vol_def.driver is defined %}
+      - "{{ vol_name }}:{{ container_path }}"
+      {% else %}
+      - "{{ deployments.docker_compose.host_base_path }}/{{ service.name | lower }}/{{ vol_name }}:{{ container_path }}"
+      {% endif %}
       {% endfor %}
       {% endif %}
     {% endif %}
