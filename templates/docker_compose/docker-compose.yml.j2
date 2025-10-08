@@ -48,15 +48,15 @@ services:
     {% if deployments.docker_compose.volumes is defined or deployments.docker_compose.raw_volumes is defined %}
     volumes:
       {%- if deployments.docker_compose.raw_volumes is defined %}
-      {% for mount in deployments.docker_compose.raw_volumes %}
+      {%- for mount in deployments.docker_compose.raw_volumes %}
       - "{{ mount }}"
-      {% endfor %}
+      {%- endfor %}
       {%- endif %}
       {%- if deployments.docker_compose.volumes is defined %}
-      {% for mount in deployments.docker_compose.volumes %}
-        {% set parts = mount.split(":") %}
+      {%- for mount in deployments.docker_compose.volumes %}
+        {% set parts = mount.split(':') %}
         {% set vol_name = parts[0] %}
-        {% set container_path = parts[1] if parts|length > 1 else none %}
+        {% set container_path = parts[1] if parts | length > 1 else none %}
         {% set vol_def = volumes[vol_name] | default({}) %}
         {% if vol_def.type == 'bind' -%}
         - "{{ vol_def.source }}:{{ container_path }}"
@@ -64,9 +64,10 @@ services:
         - "{{ vol_name }}:{{ container_path }}"
         {% else -%}
         - "{{ deployments.docker_compose.host_base_path }}/{{ service.name | lower }}/{{ vol_name }}:{{ container_path }}"
-        {% endif %}
-      {% endfor %}
+        {%- endif %}
+      {%- endfor %}
       {%- endif %}
+    {% endif %}
 
     {# --- NEUE LOGIK: Netzwerke nur definieren, wenn nicht im Host-Modus --- #}
     {% if deployments.docker_compose.network_mode is not defined or deployments.docker_compose.network_mode != 'host' %}
@@ -74,7 +75,6 @@ services:
       {% for net_name in deployments.docker_compose.networks_to_join %}
       - {{ net_name }}
       {% endfor %}
-    {% endif %}
     {% endif %}
     {% if deployments.docker_compose.healthcheck is defined %}
     healthcheck:
@@ -122,13 +122,9 @@ services:
       traefik.http.routers.{{ service.name }}.tls.certresolver: "{{ config.integrations.traefik.cert_resolver }}"
       
       {# --- Traefik Service Definition --- #}
-      {# If the service uses host networking, we must provide the full URL with the host's IP. #}
-      {# The 'ansible_host_ip' variable is injected by the Ansible deployment role. #}
-      {# If it's not defined during CI generation, it falls back to a placeholder IP. #}
       {% if config.routing_host_network %}
       traefik.http.services.{{ service.name }}.loadbalancer.server.url: "http://{{ ansible_host_ip | default('10.111.111.111') }}:{{ ports[0].port }}"
       {% else %}
-      {# Otherwise, for bridge networking, we just specify the port. #}
       traefik.http.services.{{ service.name }}.loadbalancer.server.port: "{{ ports[0].port }}"
       {% endif %}
       
