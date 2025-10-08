@@ -44,7 +44,7 @@ services:
       {% endfor %}
     {% endif %}
 
-    {# --- NEUE VOLUME-LOGIK für den Hauptservice --- #}
+    {# --- FINALE, INTELLIGENTE VOLUME-LOGIK für den Service --- #}
     {% if deployments.docker_compose.volumes is defined or deployments.docker_compose.raw_volumes is defined %}
     volumes:
       {# Füge zuerst die raw_volumes direkt ein, falls vorhanden. #}
@@ -59,14 +59,16 @@ services:
         {% set parts = mount.split(':') %}
         {% set vol_name = parts[0] %}
         {% set container_path = parts[1] if parts | length > 1 else none %}
-        {% set vol_def = volumes[vol_name] %}
+        {# Wir schauen direkt im Top-Level 'volumes' der SSoT nach der Definition #}
+        {% set vol_def = volumes[vol_name] | default({}) %}
 
-        {% if vol_def.type == 'bind' %}
-          {# Raw/Bind Mount: Nutze source:target direkt aus der Definition #}
-      - "{{ vol_def.source }}:{{ vol_def.target }}"
+        {# ENTSCHEIDUNG: Ist ein Treiber definiert? (z.B. für SMB-Shares) #}
+        {% if vol_def.driver is defined %}
+          {# JA -> Das ist ein Named Volume. Nutze die kurze Docker-Syntax. #}
+        - "{{ vol_name }}:{{ container_path }}"
         {% else %}
-          {# Standard Named Volume: Baue den Host-Pfad zusammen #}
-      - "{{ deployments.docker_compose.host_base_path }}/{{ service.name | lower }}/{{ vol_name }}:{{ container_path }}"
+          {# NEIN -> Das ist ein normales Volume. Erstelle den Host-Bind-Mount wie bisher. #}
+        - "{{ deployments.docker_compose.host_base_path }}/{{ service.name | lower }}/{{ vol_name }}:{{ container_path }}"
         {% endif %}
       {% endfor %}
       {% endif %}
@@ -194,8 +196,6 @@ services:
 {{ deployments.docker_compose.raw_options | to_yaml(indent=2) | indent(4, first=true) }}
     {% endif %}
 
-
-
 {% if dependencies is defined and dependencies %}
   # --- Service Dependencies ---
 {% for dep_name, dep_config in dependencies.items() %}
@@ -292,9 +292,22 @@ networks:
 {% endfor %}
 {% endif %}
 
-{% if deployments.docker_compose.volume_definitions is defined and deployments.docker_compose.volume_definitions %}
+{# --- FINALE, GEFILTERTE TOP-LEVEL VOLUME-LOGIK --- #}
+{# 1. Wir erstellen ein neues, leeres Dictionary nur für die Volumes, die wirklich definiert werden müssen. #}
+{% set named_volumes_to_define = {} %}
+{# 2. Wir durchlaufen den Top-Level 'volumes'-Block und filtern nach denen, die einen Treiber haben. #}
+{% if volumes is defined %}
+  {% for vol_name, vol_def in volumes.items() %}
+    {% if vol_def.driver is defined %}
+      {% set _ = named_volumes_to_define.update({vol_name: vol_def}) %}
+    {% endif %}
+  {% endfor %}
+{% endif %}
+
+{# 3. Nur wenn die gefilterte Liste nicht leer ist, rendern wir den Top-Level 'volumes'-Block. #}
+{% if named_volumes_to_define %}
 volumes:
-{% for vol_name, vol_def in deployments.docker_compose.volume_definitions.items() %}
+{% for vol_name, vol_def in named_volumes_to_define.items() %}
   {{ vol_name }}:
     driver: {{ vol_def.driver }}
     driver_opts:
