@@ -122,9 +122,13 @@ services:
       traefik.http.routers.{{ service.name }}.tls.certresolver: "{{ config.integrations.traefik.cert_resolver }}"
       
       {# --- Traefik Service Definition --- #}
+      {# If the service uses host networking, we must provide the full URL with the host's IP. #}
+      {# The 'ansible_host_ip' variable is injected by the Ansible deployment role. #}
+      {# If it's not defined during CI generation, it falls back to a placeholder IP. #}
       {% if config.routing_host_network %}
       traefik.http.services.{{ service.name }}.loadbalancer.server.url: "http://{{ ansible_host_ip | default('10.111.111.111') }}:{{ ports[0].port }}"
       {% else %}
+      {# Otherwise, for bridge networking, we just specify the port. #}
       traefik.http.services.{{ service.name }}.loadbalancer.server.port: "{{ ports[0].port }}"
       {% endif %}
       
