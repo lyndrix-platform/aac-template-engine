@@ -45,10 +45,9 @@ services:
       {% endfor %}
     {% endif %}
 
-    {# --- FINALE, ERWEITERTE 3-WEGE VOLUME-LOGIK für den Service mit Whitespace-Korrektur --- #}
+    {# --- KORRIGIERTE VOLUME-LOGIK --- #}
     {%- if deployments.docker_compose.volumes is defined or deployments.docker_compose.raw_volumes is defined %}
     volumes:
-
       {%- if deployments.docker_compose.raw_volumes is defined %}
       {%- for mount in deployments.docker_compose.raw_volumes %}
       - "{{ mount }}"
@@ -75,6 +74,7 @@ services:
       {%- endfor %}
       {%- endif %}
     {%- endif %}
+
     
     {# --- NEUE LOGIK: Netzwerke nur definieren, wenn nicht im Host-Modus --- #}
     {% if deployments.docker_compose.network_mode is not defined or deployments.docker_compose.network_mode != 'host' %}
@@ -229,7 +229,7 @@ services:
       - "{{ p }}"
       {% endfor %}
     {% endif %}
-    {# --- VOLUME-LOGIK für Dependencies mit Whitespace-Korrektur --- #}
+    {# --- VOLUME-LOGIK für Dependencies --- #}
     {% if dep_config.volumes is defined %}
     volumes:
       {% for mount in dep_config.volumes %}
@@ -237,7 +237,6 @@ services:
         {% set vol_name = parts[0] %}
         {% set container_path = parts[1] if parts | length > 1 else none %}
         {% set vol_def = volumes[vol_name] %}
-
         {% if vol_def.type == 'bind' %}
       - "{{ vol_def.source }}:{{ vol_def.target }}"
         {% else %}
@@ -245,6 +244,7 @@ services:
         {% endif %}
       {% endfor %}
     {% endif %}
+
     {# --- NEUE LOGIK: Netzwerke für Dependencies nur definieren, wenn nicht im Host-Modus --- #}
     {% if dep_config.networks_to_join is defined and (dep_config.network_mode is not defined or dep_config.network_mode != 'host') %}
     networks:
