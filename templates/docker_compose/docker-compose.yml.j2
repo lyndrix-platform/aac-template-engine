@@ -131,10 +131,11 @@ services:
       traefik.http.routers.{{ service.name }}.tls.certresolver: "{{ config.integrations.traefik.cert_resolver }}"
       
       {# --- Traefik Service Definition --- #}
+      {% set traefik_service_port = config.integrations.traefik.service_port | default(ports[0].port, true) %}
       {% if config.routing_host_network %}
-      traefik.http.services.{{ service.name }}.loadbalancer.server.url: "http://{{ ansible_host_ip | default('10.111.111.111') }}:{{ ports[0].port }}"
+      traefik.http.services.{{ service.name }}.loadbalancer.server.url: "http://{{ ansible_host_ip | default('10.111.111.111') }}:{{ traefik_service_port }}"
       {% else %}
-      traefik.http.services.{{ service.name }}.loadbalancer.server.port: "{{ ports[0].port }}"
+      traefik.http.services.{{ service.name }}.loadbalancer.server.port: "{{ traefik_service_port }}"
       {% endif %}
       
       {# --- Optional: Set scheme and transport for the service (e.g., for internal HTTPS) --- #}
