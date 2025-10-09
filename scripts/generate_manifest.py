@@ -206,6 +206,27 @@ def process_host_network_flag(data: dict) -> dict:
         print("INFO: Service is using 'network_mode: host'. Flag 'routing_host_network' set to true.", file=sys.stderr)
     return data
 
+def process_friendly_names(data: dict) -> dict:
+    """
+    Generates human-readable 'friendly names' for services and hosts
+    without altering the original technical names.
+    """
+    # 1. Process service friendly name
+    service_data = data.setdefault('service', {})
+    if 'friendly_name' not in service_data:
+        original_name = service_data.get('name', 'unknown-service')
+        # Convert to Title-Case, e.g., 'aac-emqx-mqtt' -> 'Aac-Emqx-Mqtt'
+        friendly_name = original_name.title()
+        # Special rule for 'aac-' prefix
+        if original_name.startswith('aac'):
+            friendly_name = friendly_name.replace('Aac', 'AaC', 1)
+        service_data['friendly_name'] = friendly_name
+
+    # 2. Process inventory_hostname friendly name
+    hostname = data.get('inventory_hostname', 'ci-validation-host')
+    data['inventory_hostname_friendly'] = hostname.title()
+    return data
+
 def main():
     """Main execution function."""
     parser = argparse.ArgumentParser(description="Generates deployment manifests from a JSON SSoT string.")
@@ -238,6 +259,7 @@ def main():
 
         data_with_overrides = process_traefik_port_logic(data_with_overrides)
         data_with_overrides = process_host_network_flag(data_with_overrides)
+        data_with_overrides = process_friendly_names(data_with_overrides) # <-- HIER EINFÜGEN
         data = render_ssot_recursively(data_with_overrides)
 
         print("--- SCRIPT: Using the following data for rendering ---", file=sys.stderr)
