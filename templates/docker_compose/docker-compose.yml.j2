@@ -68,7 +68,7 @@ services:
       - "{{ deployments.docker_compose.host_base_path }}/{{ service.name | lower }}/{{ vol_name }}:{{ container_path }}"
       {% endif %}
       {% else %} {# Standardverhalten, wenn 'volumes' nicht definiert ist #}
-        - "{{ deployments.docker_compose.host_base_path }}/{{ service.name | lower }}/{{ vol_name }}:{{ container_path }}"
+      - "{{ deployments.docker_compose.host_base_path }}/{{ service.name | lower }}/{{ vol_name }}:{{ container_path }}"
       {% endif %}
       {% endfor %}
       {% endif %}
