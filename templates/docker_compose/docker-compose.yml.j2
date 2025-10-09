@@ -45,35 +45,35 @@ services:
       {% endfor %}
     {% endif %}
 
-    {# --- FINALE, ERWEITERTE 3-WEGE VOLUME-LOGIK für den Service mit Whitespace-Korrektur --- #}
-{%- if deployments.docker_compose.volumes is defined or deployments.docker_compose.raw_volumes is defined %}
-    volumes:
-{%- if deployments.docker_compose.raw_volumes is defined %}
-{%- for mount in deployments.docker_compose.raw_volumes %}
-      - "{{ mount }}"
-{%- endfor %}
-{%- endif %}
-{%- if deployments.docker_compose.volumes is defined %}
-{%- for mount in deployments.docker_compose.volumes %}
-{% set parts = mount.split(':') %}
-{% set vol_name = parts[0] %}
-{% set container_path = parts[1] if parts | length > 1 else none %}
-      {# Prüfe, ob der Top-Level 'volumes'-Block existiert UND der spezifische Volume-Name darin definiert ist #}
-      {% if volumes is defined and vol_name in volumes %}
-      {% set vol_def = volumes[vol_name] %}
-      {% if vol_def.type == 'bind' %}
-      - "{{ vol_def.source }}:{{ container_path }}"
-      {% elif vol_def.driver is defined %}
-      - "{{ vol_name }}:{{ container_path }}"
-      {% else %} {# Fallback, falls 'type' oder 'driver' fehlen #}
-      - "{{ deployments.docker_compose.host_base_path }}/{{ service.name | lower }}/{{ vol_name }}:{{ container_path }}"
-      {% endif %}
-      {% else %} {# Standardverhalten, wenn 'volumes' nicht definiert ist #}
-      - "{{ deployments.docker_compose.host_base_path }}/{{ service.name | lower }}/{{ vol_name }}:{{ container_path }}"
-      {% endif %}
-{%- endfor %}
-{%- endif %}
-{%- endif %}
+    {# --- FINALE, ERWEITERTE 3-WEGE VOLUME-LOGIK für den Service mit Whitespace-Korrektur --- #}
+    {%- if deployments.docker_compose.volumes is defined or deployments.docker_compose.raw_volumes is defined %}
+    volumes:
+      {%- if deployments.docker_compose.raw_volumes is defined %}
+      {%- for mount in deployments.docker_compose.raw_volumes %}
+      - "{{ mount }}"
+      {%- endfor %}
+      {%- endif %}
+      {%- if deployments.docker_compose.volumes is defined %}
+      {%- for mount in deployments.docker_compose.volumes %}
+      {% set parts = mount.split(':') %}
+      {% set vol_name = parts[0] %}
+      {% set container_path = parts[1] if parts | length > 1 else none %}
+      {# Prüfe, ob der Top-Level 'volumes'-Block existiert UND der spezifische Volume-Name darin definiert ist #}
+      {% if volumes is defined and vol_name in volumes %}
+      {% set vol_def = volumes[vol_name] %}
+      {% if vol_def.type == 'bind' %}
+      - "{{ vol_def.source }}:{{ container_path }}"
+      {% elif vol_def.driver is defined %}
+      - "{{ vol_name }}:{{ container_path }}"
+      {% else %} {# Fallback, falls 'type' oder 'driver' fehlen #}
+      - "{{ deployments.docker_compose.host_base_path }}/{{ service.name | lower }}/{{ vol_name }}:{{ container_path }}"
+      {% endif %}
+      {% else %} {# Standardverhalten, wenn 'volumes' nicht definiert ist #}
+      - "{{ deployments.docker_compose.host_base_path }}/{{ service.name | lower }}/{{ vol_name }}:{{ container_path }}"
+      {% endif %}
+      {%- endfor %}
+      {%- endif %}
+    {%- endif %}
     
     {# --- NEUE LOGIK: Netzwerke nur definieren, wenn nicht im Host-Modus --- #}
     {% if deployments.docker_compose.network_mode is not defined or deployments.docker_compose.network_mode != 'host' %}
