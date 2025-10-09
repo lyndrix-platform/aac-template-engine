@@ -236,15 +236,24 @@ services:
     {% if dep_config.volumes is defined %}
     volumes:
       {% for mount in dep_config.volumes %}
-        {% set parts = mount.split(':') %}
+        {# --- ROBUSTE VOLUME-LOGIK (analog zum Hauptservice) --- #}
+        {% set parts = mount.split(':', 1) %}
         {% set vol_name = parts[0] %}
         {% set container_path = parts[1] if parts | length > 1 else none %}
-        {% set vol_def = volumes[vol_name] %}
-        {% if vol_def.type == 'bind' %}
-      - "{{ vol_def.source }}:{{ vol_def.target }}"
+        {% set final_volume_string = '' %}
+        {% if volumes is defined and vol_name in volumes %}
+          {% set vol_def = volumes[vol_name] %}
+          {% if vol_def.type == 'bind' %}
+            {% set final_volume_string = vol_def.source ~ ':' ~ container_path %}
+          {% elif vol_def.driver is defined %}
+            {% set final_volume_string = vol_name ~ ':' ~ container_path %}
+          {% else %}
+            {% set final_volume_string = deployments.docker_compose.host_base_path ~ '/' ~ (service.name | lower) ~ '/' ~ vol_name ~ ':' ~ container_path %}
+          {% endif %}
         {% else %}
-      - "{{ deployments.docker_compose.host_base_path }}/{{ service.name | lower }}/{{ vol_name }}:{{ container_path }}"
+          {% set final_volume_string = deployments.docker_compose.host_base_path ~ '/' ~ (service.name | lower) ~ '/' ~ vol_name ~ ':' ~ container_path %}
         {% endif %}
+      - "{{ final_volume_string }}"
       {% endfor %}
     {% endif %}
 
