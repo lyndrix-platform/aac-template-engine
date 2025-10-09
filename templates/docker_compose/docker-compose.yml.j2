@@ -59,14 +59,14 @@ services:
       {% set container_path = parts[1] if parts | length > 1 else none %}
       {# Prüfe, ob der Top-Level 'volumes'-Block existiert UND der spezifische Volume-Name darin definiert ist #}
       {% if volumes is defined and vol_name in volumes %}
-        {% set vol_def = volumes[vol_name] %}
-        {% if vol_def.type == 'bind' %}
-        - "{{ vol_def.source }}:{{ container_path }}"
-        {% elif vol_def.driver is defined %}
-        - "{{ vol_name }}:{{ container_path }}"
-        {% else %} {# Fallback, falls 'type' oder 'driver' fehlen #}
-        - "{{ deployments.docker_compose.host_base_path }}/{{ service.name | lower }}/{{ vol_name }}:{{ container_path }}"
-        {% endif %}
+      {% set vol_def = volumes[vol_name] %}
+      {% if vol_def.type == 'bind' %}
+      - "{{ vol_def.source }}:{{ container_path }}"
+      {% elif vol_def.driver is defined %}
+      - "{{ vol_name }}:{{ container_path }}"
+      {% else %} {# Fallback, falls 'type' oder 'driver' fehlen #}
+      - "{{ deployments.docker_compose.host_base_path }}/{{ service.name | lower }}/{{ vol_name }}:{{ container_path }}"
+      {% endif %}
       {% else %} {# Standardverhalten, wenn 'volumes' nicht definiert ist #}
         - "{{ deployments.docker_compose.host_base_path }}/{{ service.name | lower }}/{{ vol_name }}:{{ container_path }}"
       {% endif %}
