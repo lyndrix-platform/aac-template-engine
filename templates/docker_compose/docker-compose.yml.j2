@@ -123,9 +123,16 @@ services:
       # === Traefik Labels ===
       {# NEUE LOGIK: Liest Konfiguration aus config.integrations.traefik #}
       {% if config.integrations.traefik is defined and config.integrations.traefik.enabled %}
+      {# --- Baue die Traefik Host-Regel dynamisch auf --- #}
+      {% set traefik_rule = "Host(`" ~ fqdn ~ "`)" %}
+      {% if config.integrations.traefik.internet_facing and config.public_domain_name is defined %}
+        {% set public_fqdn = service.hostname ~ '.' ~ config.public_domain_name %}
+        {% set traefik_rule = traefik_rule ~ " || Host(`" ~ public_fqdn ~ "`)" %}
+      {% endif %}
+
       traefik.enable: "true"
       traefik.docker.network: "{{ deployments.docker_compose.network_definitions.secured.name }}"
-      traefik.http.routers.{{ service.name }}.rule: "Host(`{{ fqdn }}`)"
+      traefik.http.routers.{{ service.name }}.rule: "{{ traefik_rule }}"
       traefik.http.routers.{{ service.name }}.entrypoints: "{{ config.integrations.traefik.entrypoint }}"
       traefik.http.routers.{{ service.name }}.tls: "true"
       traefik.http.routers.{{ service.name }}.tls.certresolver: "{{ config.integrations.traefik.cert_resolver }}"
@@ -167,9 +174,16 @@ services:
 
       # === Homepage Labels ===
       {% if config.integrations is defined and config.integrations.homepage is defined and config.integrations.homepage.enabled %}
+      {# --- Wähle die primäre URL für Homepage --- #}
+      {% set homepage_href = "https://" ~ fqdn %}
+      {% if config.integrations.traefik.internet_facing and config.public_domain_name is defined %}
+        {% set public_fqdn = service.hostname ~ '.' ~ config.public_domain_name %}
+        {% set homepage_href = "https://" ~ public_fqdn %}
+      {% endif %}
+
       homepage.group: "{{ service.category }}"
       homepage.name: "{{ service.friendly_name }} - {{ inventory_hostname_friendly }}"
-      homepage.href: "https://{{ fqdn }}"
+      homepage.href: "{{ homepage_href }}"
       homepage.icon: "{{ service.icon }}"
       homepage.description: "{{ service.description }}"
       {% if config.integrations.homepage.widget is defined %}
