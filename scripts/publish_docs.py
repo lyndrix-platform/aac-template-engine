@@ -73,8 +73,8 @@ def main():
 
     # --- 4. Dateien verarbeiten und in das geklonte Repository schreiben ---
     # Zielverzeichnis im Doku-Repo
-    # Passe 'aac-services/aac-it-tools' bei Bedarf an
-    target_content_dir = os.path.join(docs_repo_dir, 'site', 'content', 'aac-services', 'aac-it-tools')
+    # Passe 'aac-services/{{service_name}}' bei Bedarf an
+    target_content_dir = os.path.join(docs_repo_dir, 'site', 'content', 'aac-services', ci_project_name)
     os.makedirs(target_content_dir, exist_ok=True)
     
     files_to_add = []
