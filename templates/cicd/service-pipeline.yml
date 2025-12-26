@@ -319,6 +319,7 @@ publish_to_docs:
   variables:
     DOCS_REPO_URL: "https://gitlab.int.fam-feser.de/documentation/aac-iac-documentation.git"
     DOC_SOURCE_DIR: "deployments/documentation"
+    SERVICE_NAME: $CI_PROJECT_NAME
   before_script:
     # Klonen der Template-Engine, um Zugriff auf das Skript zu haben
     - apt-get update && apt-get install -y --no-install-recommends git
