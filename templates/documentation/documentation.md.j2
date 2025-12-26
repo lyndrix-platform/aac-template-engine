@@ -54,12 +54,12 @@ Diese Datei enthält sensible Daten wie Passwörter, API-Keys oder Tokens. **Sie
 
 Persistente Daten für diesen Service werden auf dem Host-System unter folgendem Basispfad gespeichert: `{{ deployments.docker_compose.host_base_path }}/{{ service.name }}`.
 
-{% if volumes %}
+{% if volumes_processed %}
 Definierte Volumes:
-{% for volume in volumes %}
+{% for volume in volumes_processed %}
 *   **`{{ volume.name }}`**:
     *   **Container-Pfad:** `{{ volume.path }}`
-    *   **Host-Pfad:** `{{ deployments.docker_compose.host_base_path }}/{{ service.name }}/{{ volume.name }}`
+    *   **Host-Pfad:** {% if volume.type == 'bind' %}`{{ volume.source }}` (Bind Mount){% else %}`{{ deployments.docker_compose.host_base_path }}/{{ service.name }}/{{ volume.name }}`{% endif %}
     *   **Beschreibung:** {{ volume.description | default('Keine Beschreibung.') }}
 {% endfor %}
 {% endif %}

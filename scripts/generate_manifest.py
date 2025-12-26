@@ -227,6 +227,47 @@ def process_friendly_names(data: dict) -> dict:
     data['inventory_hostname_friendly'] = hostname.title()
     return data
 
+def process_volume_logic(data: dict) -> dict:
+    """
+    Transforms the volume definitions for the main service into a list of
+    structured objects for easier rendering in templates.
+    """
+    dc_deployments = data.get('deployments', {}).get('docker_compose', {})
+    if not dc_deployments or 'volumes' not in dc_deployments:
+        print("INFO: No 'docker_compose.volumes' found to process for documentation.", file=sys.stderr)
+        data['volumes_processed'] = [] # Ensure the key exists
+        return data
+
+    processed_volumes = []
+    all_volume_definitions = data.get('volumes', {}) # Top-level volume definitions
+    service_mounts = dc_deployments.get('volumes', []) # e.g., ['config:/config']
+
+    for mount_string in service_mounts:
+        parts = mount_string.split(':')
+        if len(parts) < 2:
+            print(f"WARN: Skipping malformed volume mount string: {mount_string}", file=sys.stderr)
+            continue
+
+        volume_name = parts[0]
+        container_path = parts[1]
+
+        # Get description and type from the top-level definitions
+        definition = all_volume_definitions.get(volume_name, {})
+
+        processed_volumes.append({
+            'name': volume_name,
+            'path': container_path,
+            'description': definition.get('description', 'No description provided.'),
+            'type': definition.get('type', 'volume'),
+            'source': definition.get('source')
+        })
+
+    # We use a new key 'volumes_processed' to avoid overwriting the original 'volumes' dict
+    # which might be needed by other template parts.
+    data['volumes_processed'] = processed_volumes
+    print(f"INFO: Processed {len(processed_volumes)} service volumes for documentation.", file=sys.stderr)
+    return data
+
 def main():
     """Main execution function."""
     parser = argparse.ArgumentParser(description="Generates deployment manifests from a JSON SSoT string.")
@@ -259,7 +300,8 @@ def main():
 
         data_with_overrides = process_traefik_port_logic(data_with_overrides)
         data_with_overrides = process_host_network_flag(data_with_overrides)
-        data_with_overrides = process_friendly_names(data_with_overrides) # <-- HIER EINFÜGEN
+        data_with_overrides = process_friendly_names(data_with_overrides)
+        data_with_overrides = process_volume_logic(data_with_overrides)
         data = render_ssot_recursively(data_with_overrides)
 
         print("--- SCRIPT: Using the following data for rendering ---", file=sys.stderr)
