@@ -347,8 +347,7 @@ prod-deploy:
     DEPLOYMENT_TYPE: 'single_service_trigger'
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
-      when: manual
-      allow_failure: false
+      when: on_success
 
 prod-generate-documentation:
   extends: .generate-base
