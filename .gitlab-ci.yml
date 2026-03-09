@@ -5,7 +5,7 @@ stages:
 
 yaml-syntax-check:
   stage: test
-  image: python:3.11-slim # A small, efficient Docker image with Python
+  image: python:3.14-slim # A small, efficient Docker image with Python
 
   before_script:
     - pip install PyYAML # Installs the necessary Python library for parsing YAML
