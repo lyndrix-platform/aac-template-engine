@@ -151,7 +151,8 @@ dev-deploy:
     SERVICE_BRANCH: 'dev'
     DEPLOYMENT_TYPE: 'single_service_trigger'
   rules:
-    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+    # ONLY run if it's the dev branch, NOT a skip-ci commit, AND SKIP_DEPLOYMENT is not true
+    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/ && $SKIP_DEPLOYMENT != "true"'
 
 dev-generate-documentation:
   extends: .generate-base
@@ -222,7 +223,7 @@ test-deploy:
     SERVICE_BRANCH: 'test'
     DEPLOYMENT_TYPE: 'single_service_trigger'
   rules:
-    - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+    - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/ && $SKIP_DEPLOYMENT != "true"'
 
 test-generate-documentation:
   extends: .generate-base
@@ -344,9 +345,9 @@ prod-deploy:
     SERVICE_BRANCH: 'main'
     DEPLOYMENT_TYPE: 'single_service_trigger'
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/ && $SKIP_DEPLOYMENT != "true"'
       when: on_success
-
+      
 prod-generate-documentation:
   extends: .generate-base
   stage: prod-generate # Moved to generate stage
