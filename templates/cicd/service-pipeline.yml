@@ -19,7 +19,6 @@ stages:
   - prod-validate
   - prod-commit
   - documentation
-  - prod-notify
   - prod-deploy
 
 
@@ -253,7 +252,7 @@ prod-generate-docker-compose:
     - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --deployment-type "docker_compose" --stage "prod"
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
-
+    
 prod-generate-custom-files:
   extends: .generate-base
   stage: prod-generate
@@ -282,26 +281,26 @@ prod-commit:
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
-prod-notify-approval:
-  stage: prod-notify
-  image: curlimages/curl:latest
-  needs: [prod-commit]
-  script:
-    - |
-      echo "Sending webhook to n8n: Production deployment is ready for approval."
-      curl -X POST \
-        -H "Content-Type: application/json" \
-        -d '{
-              "status": "ready_for_approval",
-              "service_name": "'"${CI_PROJECT_NAME}"'",
-              "pipeline_url": "'"${CI_PIPELINE_URL}"'",
-              "pipeline_id": "'"${CI_PIPELINE_ID}"'",
-              "project_title": "'"${CI_PROJECT_TITLE}"'",
-              "triggered_by": "'"${GITLAB_USER_NAME}"'"
-            }' \
-        "https://n8n.int.fam-feser.de/webhook/fbdbf3f5-e883-41c6-b2a1-93db6d845505"
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+#prod-notify-approval:
+#  stage: prod-notify
+#  image: curlimages/curl:latest
+#  needs: [prod-commit]
+#  script:
+#    - |
+#      echo "Sending webhook to n8n: Production deployment is ready for approval."
+#      curl -X POST \
+#        -H "Content-Type: application/json" \
+#        -d '{
+#              "status": "ready_for_approval",
+#              "service_name": "'"${CI_PROJECT_NAME}"'",
+#              "pipeline_url": "'"${CI_PIPELINE_URL}"'",
+#              "pipeline_id": "'"${CI_PIPELINE_ID}"'",
+#              "project_title": "'"${CI_PROJECT_TITLE}"'",
+#              "triggered_by": "'"${GITLAB_USER_NAME}"'"
+#            }' \
+#        "https://n8n.int.fam-feser.de/webhook/fbdbf3f5-e883-41c6-b2a1-93db6d845505"
+#  rules:
+#    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
 
 # ==========================================================================
@@ -336,7 +335,7 @@ publish_to_docs:
 
 prod-deploy:
   stage: prod-deploy
-  needs: [prod-notify-approval]
+  needs: [prod-commit]
   trigger:
     project: 'iac-environment/iac-ansible-automation'
     branch: main
