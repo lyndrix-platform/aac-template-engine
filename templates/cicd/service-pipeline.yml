@@ -23,6 +23,18 @@ stages:
 
 
 
+
+# Implementation for specific workflows
+dev-notify-start:
+  extends: .notify-start-base
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+
+prod-notify-start:
+  extends: .notify-start-base
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+
 # ==========================================================================
 # REUSABLE TEMPLATES (.generate-base, .validate-base, .commit-artifacts)
 # ==========================================================================
@@ -252,7 +264,7 @@ prod-generate-docker-compose:
     - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --deployment-type "docker_compose" --stage "prod"
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
-    
+
 prod-generate-custom-files:
   extends: .generate-base
   stage: prod-generate
