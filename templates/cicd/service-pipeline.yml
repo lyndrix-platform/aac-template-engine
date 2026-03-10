@@ -22,19 +22,6 @@ stages:
   - prod-deploy
 
 
-
-
-# Implementation for specific workflows
-dev-notify-start:
-  extends: .notify-start-base
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
-
-prod-notify-start:
-  extends: .notify-start-base
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
-
 # ==========================================================================
 # REUSABLE TEMPLATES (.generate-base, .validate-base, .commit-artifacts)
 # ==========================================================================
