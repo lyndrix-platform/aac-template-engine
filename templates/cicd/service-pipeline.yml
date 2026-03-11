@@ -327,3 +327,55 @@ prod-generate-documentation:
       optional: true
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+
+
+# ==========================================================================
+# GITLAB PAGES WORKFLOW (Zensical)
+# ==========================================================================
+pages:
+  stage: documentation
+  image: registry.gitlab.int.fam-feser.de/iac-environment/iac-platform-assets/ansible-ci-image:latest
+  needs:
+    - job: prod-generate-documentation
+      artifacts: true
+  before_script:
+    # Installing Zensical dynamically. This should eventually be moved to the Docker image.
+    - pip install --no-cache-dir zensical
+  script:
+    - echo "Preparing documentation for GitLab Pages..."
+    - mkdir -p docs public
+    
+    # 1. Merge auto-generated documentation into the local docs/ directory
+    - |
+      if [ -d "deployments/documentation" ]; then
+        echo "Merging generated documentation into docs/..."
+        cp -r deployments/documentation/* docs/ || true
+      fi
+
+    # 2. Ensure a mkdocs.yml exists (Fallback mechanism for services without one)
+    - |
+      if [ ! -f "mkdocs.yml" ]; then
+        echo "No mkdocs.yml found. Generating a default configuration..."
+        cat <<EOF > mkdocs.yml
+      site_name: $CI_PROJECT_NAME
+      site_dir: public
+      theme:
+        name: material
+      EOF
+      fi
+
+    # 3. Force the output directory to 'public' to comply with GitLab Pages requirements
+    - sed -i 's/site_dir:.*/site_dir: public/g' mkdocs.yml || true
+
+    # 4. Build the site
+    - echo "Building site with Zensical..."
+    - zensical build
+
+    # 5. Fallback move in case Zensical ignored the sed override
+    - '[ -d ".cache/site" ] && mv .cache/site/* public/ || true'
+    - '[ -d "site" ] && mv site/* public/ || true'
+  artifacts:
+    paths:
+      - public
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
