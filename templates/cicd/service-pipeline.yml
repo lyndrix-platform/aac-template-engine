@@ -29,6 +29,7 @@ stages:
 .generate-base:
   # Use your new image which already has Python, rsync, and passlib
   image: registry.gitlab.int.fam-feser.de/iac-environment/iac-platform-assets/ansible-ci-image:latest
+  pull_policy: always
   before_script:
     # No apt-get needed! Git and Python are already there.
     - git clone "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
@@ -53,6 +54,7 @@ stages:
 .commit-artifacts:
   # Use the same image - it has git and rsync ready to go - it has git and rsync ready to go
   image: registry.gitlab.int.fam-feser.de/iac-environment/iac-platform-assets/ansible-ci-image:latest
+  pull_policy: always
   before_script:
     # Pakete sind bereits im Image!
     - git config --global user.email "ci-bot@${CI_SERVER_HOST}"
@@ -286,6 +288,7 @@ prod-commit:
 publish_to_docs:
   stage: documentation
   image: registry.gitlab.int.fam-feser.de/iac-environment/iac-platform-assets/ansible-ci-image:latest
+  pull_policy: always
   needs:
     - job: prod-generate-documentation
       artifacts: true
@@ -335,6 +338,7 @@ prod-generate-documentation:
 pages:
   stage: documentation
   image: registry.gitlab.int.fam-feser.de/iac-environment/iac-platform-assets/ansible-ci-image:latest
+  pull_policy: always
   needs:
     - job: prod-generate-documentation
       artifacts: true
