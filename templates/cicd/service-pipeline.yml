@@ -27,18 +27,16 @@ stages:
 # ==========================================================================
 
 .generate-base:
-  image: python:3.9-slim
+  # Use your new image which already has Python, rsync, and passlib
+  image: registry.gitlab.int.fam-feser.de/iac-environment/iac-platform-assets/ansible-ci-image:latest
   before_script:
-    - apt-get update && apt-get install -y --no-install-recommends git
-    - pip install PyYAML Jinja2
+    # No apt-get needed! Git and Python are already there.
     - git clone "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
   artifacts:
     paths: [deployments/]
     expire_in: 1 hour
   rules:
-    # This rule is a placeholder and should be overridden in the concrete jobs
     - if: '$CI_COMMIT_BRANCH && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
-
 
 .validate-base:
   image: docker:latest
@@ -53,52 +51,33 @@ stages:
     - if: '$CI_COMMIT_BRANCH && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
 .commit-artifacts:
-  image: alpine:latest
+  # Use the same image - it has git and rsync ready to go - it has git and rsync ready to go
+  image: registry.gitlab.int.fam-feser.de/iac-environment/iac-platform-assets/ansible-ci-image:latest
   before_script:
-    # 1. Notwendige Pakete installieren
-    - apk add --no-cache git rsync
-    # 2. DNS-Fix für deine interne GitLab-Instanz (falls nötig)
-    - echo "$INTERNAL_GIT_IP gitlab.int.fam-feser.de" >> /etc/hosts
-    # 3. Git-Benutzer konfigurieren
+    # Pakete sind bereits im Image!
     - git config --global user.email "ci-bot@${CI_SERVER_HOST}"
     - git config --global user.name "GitLab CI Bot"
+    # Falls der DNS-Fix noch nötig ist, bleibt er hier, 
+    # aber rsync/git Installation fällt weg.
+    - echo "$INTERNAL_GIT_IP gitlab.int.fam-feser.de" >> /etc/hosts
   script:
     - |
-      # 1. Sicherstellen, dass die Artefakte (der 'deployments' Ordner) überhaupt existieren.
       if [ ! -d "deployments" ]; then
-        echo "Kein 'deployments'-Verzeichnis in den Artefakten gefunden. Es gibt nichts zu tun."
+        echo "Kein 'deployments'-Verzeichnis gefunden."
         exit 0
       fi
-
-      echo "Klonen des Repositories in ein sauberes Verzeichnis..."
-      # 2. Das Repository mit dem Token in ein separates Verzeichnis klonen.
-      #    Das ist der robusteste Ansatz und vermeidet alle Checkout-Konflikte.
       git clone "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git" repo
       cd repo
-
-      # 3. Den Ziel-Branch auschecken.
-      echo "Checkout des Ziel-Branches '${CI_COMMIT_BRANCH}'..."
       git checkout "${CI_COMMIT_BRANCH}"
-
-      echo "Ersetze das 'deployments'-Verzeichnis mit den neuen Artefakten..."
-      # 4. Artefakte mit dem geklonten Repository synchronisieren.
-      #    '../deployments/' ist der Pfad zu den ursprünglichen Artefakten.
       rsync -a --delete ../deployments/ ./deployments/
-
-      # 5. Änderungen (neue, geänderte, gelöschte Dateien) zum Commit hinzufügen.
       git add deployments/
-
-      # 6. Prüfen, ob es Änderungen gibt, und diese committen & pushen.
       if ! git diff --staged --quiet; then
-        echo "Änderungen erkannt. Erstelle Commit und pushe zu '${CI_COMMIT_BRANCH}'..."
         git commit -m "ci: Auto-generate deployment manifests [skip ci]"
         git push origin "${CI_COMMIT_BRANCH}"
-        echo "Artefakte erfolgreich committet und gepusht."
-      else
-        echo "Keine Änderungen in den Artefakten. Nichts zu committen."
       fi
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+
+
+
 # ==========================================================================
 # DEV WORKFLOW (runs on 'dev' branch)
 # ==========================================================================
@@ -308,26 +287,16 @@ prod-commit:
 # ==========================================================================
 publish_to_docs:
   stage: documentation
-  # Verwende ein Image, das Python und Git enthält
-  image: python:3.9-slim
+  image: registry.gitlab.int.fam-feser.de/iac-environment/iac-platform-assets/ansible-ci-image:latest
   needs:
-    - job: prod-commit                  # 1. Stellt die korrekte Reihenfolge in der Pipeline sicher
-      artifacts: false                  #    Wir brauchen aber keine Artefakte von diesem Job
-    - job: prod-generate-documentation  # 2. Holt sich die frischen Doku-Artefakte direkt von der Quelle
-      artifacts: true                   #    (das ist die Standardeinstellung, aber explizit ist es klarer)
-  variables:
-    DOCS_REPO_URL: "https://gitlab.int.fam-feser.de/documentation/aac-iac-documentation.git"
-    DOC_SOURCE_DIR: "deployments/documentation"
-    SERVICE_NAME: $CI_PROJECT_NAME
+    - job: prod-commit
+      artifacts: false
+    - job: prod-generate-documentation
+      artifacts: true
   before_script:
-    # Klonen der Template-Engine, um Zugriff auf das Skript zu haben
-    - apt-get update && apt-get install -y --no-install-recommends git
+    # rsync/git/python are already present
     - git clone "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
   script:
-    - echo "Prüfe den Inhalt des heruntergeladenen Artefakts:"
-    - ls -l deployments/documentation/
-    - cat deployments/documentation/*.md
-    - echo "Führe das Python-Skript zum Veröffentlichen der Dokumentation aus..."
     - python3 aac-template-engine/scripts/publish_docs.py
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
@@ -347,7 +316,6 @@ prod-deploy:
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/ && $SKIP_DEPLOYMENT != "true"'
       when: on_success
-      
 prod-generate-documentation:
   extends: .generate-base
   stage: prod-generate # Moved to generate stage
