@@ -253,9 +253,7 @@ prod-commit:
   extends: .commit-artifacts
   stage: prod-commit
   needs:
-    # Stellt sicher, dass die Validierung durchlaufen ist
     - prod-validate-docker-compose
-    # Holt sich das KOMPLETTE Artefakt (docker-compose, custom-files & docu)
     - prod-generate-documentation
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
@@ -289,22 +287,20 @@ publish_to_docs:
   stage: documentation
   image: registry.gitlab.int.fam-feser.de/iac-environment/iac-platform-assets/ansible-ci-image:latest
   needs:
-    - job: prod-commit
-      artifacts: false
     - job: prod-generate-documentation
       artifacts: true
+    # We NO LONGER need prod-commit here because they are independent
   before_script:
-    # rsync/git/python are already present
     - git clone "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
   script:
     - python3 aac-template-engine/scripts/publish_docs.py
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
-      when: on_success
 
 prod-deploy:
   stage: prod-deploy
-  needs: [prod-commit]
+  needs: 
+    - prod-validate-docker-compose
   trigger:
     project: 'iac-environment/iac-ansible-automation'
     branch: main
