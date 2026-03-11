@@ -339,7 +339,6 @@ pages:
     - job: prod-generate-documentation
       artifacts: true
   before_script:
-    # Installing Zensical dynamically. This should eventually be moved to the Docker image.
     - pip install --no-cache-dir zensical
   script:
     - echo "Preparing documentation for GitLab Pages..."
@@ -352,26 +351,54 @@ pages:
         cp -r deployments/documentation/* docs/ || true
       fi
 
-    # 2. Ensure a mkdocs.yml exists (Fallback mechanism for services without one)
+    # 2. PRE-FLIGHT CHECK: Do we actually have any markdown files?
     - |
-      if [ ! -f "mkdocs.yml" ]; then
-        echo "No mkdocs.yml found. Generating a default configuration..."
-        cat <<EOF > mkdocs.yml
-      site_name: $CI_PROJECT_NAME
+      if [ -z "$(ls -A docs/ 2>/dev/null)" ]; then
+        echo "No documentation files found in docs/ or generated artifacts."
+        echo "Skipping Pages deployment to prevent build failure."
+        # Touching an empty file in public/ satisfies the artifact requirement 
+        # without deploying a broken site.
+        touch public/index.html
+        exit 0
+      fi
+
+    # 3. Always Auto-Generate or Override mkdocs.yml for consistency
+    - |
+      echo "Generating standard mkdocs.yml configuration..."
+      cat <<EOF > mkdocs.yml
+      site_name: "${CI_PROJECT_NAME} Documentation"
+      site_description: "Auto-generated internal documentation"
       site_dir: public
       theme:
         name: material
+        features:
+          - navigation.tabs
+          - navigation.sections
+          - toc.integrate
+        palette:
+          - media: "(prefers-color-scheme: dark)"
+            scheme: slate
+            primary: indigo
+            accent: emerald
+            toggle:
+              icon: material/weather-sunny
+              name: Switch to light mode
+          - media: "(prefers-color-scheme: light)"
+            scheme: default
+            primary: indigo
+            accent: emerald
+            toggle:
+              icon: material/weather-night
+              name: Switch to dark mode
+      plugins:
+        - search
       EOF
-      fi
-
-    # 3. Force the output directory to 'public' to comply with GitLab Pages requirements
-    - sed -i 's/site_dir:.*/site_dir: public/g' mkdocs.yml || true
 
     # 4. Build the site
     - echo "Building site with Zensical..."
     - zensical build
 
-    # 5. Fallback move in case Zensical ignored the sed override
+    # 5. Fallback move in case Zensical ignores the configuration
     - '[ -d ".cache/site" ] && mv .cache/site/* public/ || true'
     - '[ -d "site" ] && mv site/* public/ || true'
   artifacts:
