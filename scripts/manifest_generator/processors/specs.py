@@ -1,4 +1,3 @@
-# scripts/manifest_generator/processors/specs.py
 from .base import BaseProcessor
 
 class SpecProcessor(BaseProcessor):
@@ -6,10 +5,10 @@ class SpecProcessor(BaseProcessor):
         """Extracts and sanitizes advanced Docker Compose hardware and privilege specifications."""
         dc = context.get('deployments', {}).get('docker_compose', {})
         
-        # The whitelist of explicitly supported advanced Docker Compose keys
+        # HIER IST DER FIX: 'security_opt' ist jetzt einfach Teil der Whitelist
         advanced_keys = [
             'network_mode', 'user', 'privileged', 'runtime', 
-            'cap_add', 'cap_drop', 'devices', 'security_opts', 'deploy'
+            'cap_add', 'cap_drop', 'devices', 'deploy', 'security_opt' 
         ]
         
         # 1. Process Main Service Specs
@@ -20,7 +19,7 @@ class SpecProcessor(BaseProcessor):
                 
         context['processed_specs'] = processed_specs
         
-        # 2. Process Dependency Specs (Sidecars like Plex or Scrypted hardware acceleration)
+        # 2. Process Dependency Specs (Sidecars)
         for dep_name, dep_cfg in context.get('dependencies', {}).items():
             dep_specs = {}
             for key in advanced_keys:

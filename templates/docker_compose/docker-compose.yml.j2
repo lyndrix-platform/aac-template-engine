@@ -60,8 +60,23 @@ services:
       retries: {{ deployments.docker_compose.healthcheck.retries | default(3) }}
     {% endif %}
 
-    {# Catch-all for extra DC options (e.g., security_opt, logging) #}
-    {% set known_keys = ['command', 'restart_policy', 'host_base_path', 'networks_to_join', 'network_definitions', 'volumes', 'healthcheck', 'depends_on', 'environment', 'secrets'] %}
+    {# --- NEW: Smart Specs Block (cap_add, privileged, security_opt, etc.) --- #}
+    {% if processed_specs %}
+    {% for key, value in processed_specs.items() %}
+    {% if value is mapping or value is iterable and value is not string %}
+    {{ key }}:
+    {% for item in value %}
+      - {{ item }}
+    {% endfor %}
+    {% else %}
+    {{ key }}: {{ value | lower if value is boolean else value }}
+    {% endif %}
+    {% endfor %}
+    {% endif %}
+
+    {# Catch-all for extra DC options (e.g., logging) #}
+    {# CRITICAL FIX: Added advanced keys so the catch-all ignores them and doesn't duplicate them! #}
+    {% set known_keys = ['command', 'restart_policy', 'host_base_path', 'networks_to_join', 'network_definitions', 'volumes', 'healthcheck', 'depends_on', 'environment', 'secrets', 'network_mode', 'user', 'privileged', 'runtime', 'cap_add', 'cap_drop', 'devices', 'deploy', 'security_opt', 'security_opts'] %}
     {% for key, value in deployments.docker_compose.items() %}
       {% if key not in known_keys %}
 {{ {key: value} | to_yaml(indent=2) | indent(4, first=true) }}
@@ -101,6 +116,21 @@ services:
       timeout: {{ dep_config.healthcheck.timeout | default('5s') }}
       retries: {{ dep_config.healthcheck.retries | default(5) }}
     {% endif %}
+
+    {# --- NEW: Smart Specs Block for Sidecars --- #}
+    {% if dep_config.processed_specs %}
+    {% for key, value in dep_config.processed_specs.items() %}
+    {% if value is mapping or value is iterable and value is not string %}
+    {{ key }}:
+    {% for item in value %}
+      - {{ item }}
+    {% endfor %}
+    {% else %}
+    {{ key }}: {{ value | lower if value is boolean else value }}
+    {% endif %}
+    {% endfor %}
+    {% endif %}
+
 {% endfor %}
 {% endif %}
 
