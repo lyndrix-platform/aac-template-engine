@@ -9,7 +9,12 @@ services:
     {% if deployments.docker_compose.command is defined %}
     command:
       {% for cmd_item in deployments.docker_compose.command %}
-      - {{ cmd_item | tojson }}
+      {% if '\n' in cmd_item %}
+      - |
+{{ cmd_item | indent(8) }}
+      {% else %}
+      - "{{ cmd_item }}"
+      {% endif %}
       {% endfor %}
     {% endif %}
 
@@ -19,17 +24,23 @@ services:
 
     {% if processed_ports %}
     ports:
-      {% for p in processed_ports %}- "{{ p }}"{% endfor %}
+      {% for p in processed_ports %}
+      - "{{ p }}"
+      {% endfor %}
     {% endif %}
 
     {% if processed_volumes %}
     volumes:
-      {% for vol in processed_volumes %}- "{{ vol }}"{% endfor %}
+      {% for vol in processed_volumes %}
+      - "{{ vol }}"
+      {% endfor %}
     {% endif %}
 
     {% if processed_networks %}
     networks:
-      {% for net in processed_networks %}- {{ net }}{% endfor %}
+      {% for net in processed_networks %}
+      - {{ net }}
+      {% endfor %}
     {% endif %}
 
     {% if processed_labels %}
@@ -39,7 +50,7 @@ services:
       {% endfor %}
     {% endif %}
 
-    {% if deployments.docker_compose.healthcheck %}
+    {% if deployments.docker_compose.healthcheck is defined %}
     healthcheck:
       test: {{ deployments.docker_compose.healthcheck.test | tojson }}
       interval: {{ deployments.docker_compose.healthcheck.interval | default('30s') }}
@@ -47,43 +58,63 @@ services:
       retries: {{ deployments.docker_compose.healthcheck.retries | default(3) }}
     {% endif %}
 
-    {# --- SMART SPECS (deploy, network_mode, devices, extra_hosts, etc.) --- #}
+    {# --- SMART SPECS (Python handles all other valid DC keys) --- #}
     {% if processed_specs %}
 {{ processed_specs | to_yaml(indent=2) | indent(4, first=true) }}
     {% endif %}
 
-{% if dependencies %}
+{% if dependencies is defined and dependencies %}
   # --- Service Dependencies (Sidecars) ---
 {% for dep_name, dep_config in dependencies.items() %}
   {{ dep_config.name }}:
     image: "{{ dep_config.image_repo }}:{{ dep_config.image_tag }}"
     container_name: "{{ dep_config.name }}"
     restart: "{{ dep_config.restart_policy | default('always') }}"
-    env_file: [.env, stack.env]
+    
+    env_file:
+      - .env
+      - stack.env
 
     {% if dep_config.processed_volumes %}
     volumes:
-      {% for vol in dep_config.processed_volumes %}- "{{ vol }}"{% endfor %}
+      {% for vol in dep_config.processed_volumes %}
+      - "{{ vol }}"
+      {% endfor %}
     {% endif %}
 
     {% if dep_config.processed_networks %}
     networks:
-      {% for net in dep_config.processed_networks %}- {{ net }}{% endfor %}
+      {% for net in dep_config.processed_networks %}
+      - {{ net }}
+      {% endfor %}
     {% endif %}
 
+    {% if dep_config.healthcheck is defined %}
+    healthcheck:
+      test: {{ dep_config.healthcheck.test | tojson }}
+      interval: {{ dep_config.healthcheck.interval | default('30s') }}
+      timeout: {{ dep_config.healthcheck.timeout | default('5s') }}
+      retries: {{ dep_config.healthcheck.retries | default(5) }}
+    {% endif %}
+
+    {# --- SMART SPECS FOR SIDECARS --- #}
     {% if dep_config.processed_specs %}
 {{ dep_config.processed_specs | to_yaml(indent=2) | indent(4, first=true) }}
     {% endif %}
+
 {% endfor %}
 {% endif %}
 
-{# --- Infrastructure Globals --- #}
 {% if network_definitions %}
 networks:
 {% for net_id, net_def in network_definitions.items() %}
   {{ net_id }}:
     name: "{{ net_def.name }}"
-    {% if net_def.external %}external: true{% else %}driver: bridge{% endif %}
+    {% if net_def.external %}
+    external: true
+    {% else %}
+    driver: "{{ net_def.driver | default('bridge') }}"
+    {% endif %}
 {% endfor %}
 {% endif %}
 
@@ -91,6 +122,14 @@ networks:
 volumes:
 {% for vol_id, vol_def in named_volumes.items() %}
   {{ vol_id }}:
-    {% if vol_def.driver %}driver: "{{ vol_def.driver }}"{% endif %}
+    {% if vol_def.driver %}
+    driver: "{{ vol_def.driver }}"
+    {% endif %}
+    {% if vol_def.driver_opts %}
+    driver_opts:
+      {% for k, v in vol_def.driver_opts.items() %}
+      {{ k }}: "{{ v }}"
+      {% endfor %}
+    {% endif %}
 {% endfor %}
 {% endif %}
