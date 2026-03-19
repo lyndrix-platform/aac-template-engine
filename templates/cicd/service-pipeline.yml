@@ -60,14 +60,13 @@ dev-generate-docker-compose:
   extends: .generate-base
   stage: dev-generate
   script:
-    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --deployment-type "docker_compose" --stage "dev"
-    # --- DIFF CHECK START ---
-    - echo -e "\n================================================================="
-    - echo "🔍 IAC DIFF: Comparing newly generated manifests against repository"
-    - echo "================================================================="
-    - git diff --color deployments/docker_compose/ || true
-    - echo -e "=================================================================\n"
-    # --- DIFF CHECK END ---
+    - |
+      python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --deployment-type "docker_compose" --stage "dev"
+      echo -e "\n================================================================="
+      echo "IAC DIFF: Comparing newly generated manifests against repository"
+      echo "================================================================="
+      git diff --color deployments/docker_compose/ || true
+      echo -e "=================================================================\n"
   rules:
     - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
@@ -125,14 +124,13 @@ test-generate-docker-compose:
   extends: .generate-base
   stage: test-generate
   script:
-    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --deployment-type "docker_compose" --stage "test"
-    # --- DIFF CHECK START ---
-    - echo -e "\n================================================================="
-    - echo "🔍 IAC DIFF: Comparing newly generated manifests against repository"
-    - echo "================================================================="
-    - git diff --color deployments/docker_compose/ || true
-    - echo -e "=================================================================\n"
-    # --- DIFF CHECK END ---
+    - |
+      python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --deployment-type "docker_compose" --stage "test"
+      echo -e "\n================================================================="
+      echo "IAC DIFF: Comparing newly generated manifests against repository"
+      echo "================================================================="
+      git diff --color deployments/docker_compose/ || true
+      echo -e "=================================================================\n"
   rules:
     - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
@@ -190,14 +188,13 @@ prod-generate-docker-compose:
   extends: .generate-base
   stage: prod-generate
   script:
-    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --deployment-type "docker_compose" --stage "prod"
-    # --- DIFF CHECK START ---
-    - echo -e "\n================================================================="
-    - echo "🔍 IAC DIFF: Comparing newly generated manifests against repository"
-    - echo "================================================================="
-    - git diff --color deployments/docker_compose/ || true
-    - echo -e "=================================================================\n"
-    # --- DIFF CHECK END ---
+    - |
+      python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --deployment-type "docker_compose" --stage "prod"
+      echo -e "\n================================================================="
+      echo "IAC DIFF: Comparing newly generated manifests against repository"
+      echo "================================================================="
+      git diff --color deployments/docker_compose/ || true
+      echo -e "=================================================================\n"
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
