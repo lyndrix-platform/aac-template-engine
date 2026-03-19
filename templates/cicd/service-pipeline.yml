@@ -1,7 +1,5 @@
 # This is a reusable GitLab CI/CD pipeline for service repositories.
 # It automates generation, validation, and triggers downstream deployments.
-# WARNING: The commit step has been removed. Downstream pipelines MUST retrieve 
-# the 'deployments/' directory via CI artifacts, NOT via Git clone.
 
 default:
   tags:
@@ -11,16 +9,18 @@ stages:
   - dev-generate
   - dev-validate
   - dev-deploy
+  - dev-promote     # NEW: Auto-MR to Test
   - test-generate
   - test-validate
   - test-deploy
+  - test-promote    # NEW: Auto-MR to Main
   - prod-generate
   - prod-validate
   - documentation
   - prod-deploy
 
 # ==========================================================================
-# REUSABLE TEMPLATES (.generate-base, .validate-base)
+# REUSABLE TEMPLATES
 # ==========================================================================
 
 .generate-base:
@@ -29,11 +29,9 @@ stages:
     pull_policy: always
   before_script:
     - rm -rf aac-template-engine/
-    # THE CRITICAL FIX: Explicitly clone the 'dev' branch
-    - git clone -b dev "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
-    # Ensure PyYAML and Jinja2 are installed
+    # FIX: Use the Switchboard variable, default to main if not set!
+    - git clone -b ${ENGINE_BRANCH:-main} "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
     - pip install pyyaml jinja2
-    # Tell Python exactly where the 'manifest_generator' package lives
     - export PYTHONPATH=$PYTHONPATH:$(pwd)/aac-template-engine/scripts
   artifacts:
     paths: [deployments/]
@@ -53,6 +51,26 @@ stages:
   rules:
     - if: '$CI_COMMIT_BRANCH && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
+# NEW: Reusable MR Creator via GitLab API
+.auto-promote-base:
+  image: curlimages/curl:latest
+  script:
+    - |
+      echo "Creating Merge Request from $SOURCE_BRANCH to $TARGET_BRANCH..."
+      # Hit the GitLab API. Write out the HTTP status code so we can handle 409s gracefully.
+      RESPONSE=$(curl --silent --output /dev/stderr --write-out "%{http_code}" --request POST --header "PRIVATE-TOKEN: ${CI_GITLAB_TOKEN_GLOBAL_FESER}" \
+        --data "source_branch=${SOURCE_BRANCH}&target_branch=${TARGET_BRANCH}&title=🚀 Promotion: ${SOURCE_BRANCH} to ${TARGET_BRANCH}&remove_source_branch=false" \
+        "https://${CI_SERVER_HOST}/api/v4/projects/${CI_PROJECT_ID}/merge_requests")
+      
+      if [ "$RESPONSE" -eq 201 ]; then 
+        echo -e "\n✅ Merge Request Created successfully."
+      elif [ "$RESPONSE" -eq 409 ]; then 
+        echo -e "\nℹ️ Merge Request already exists. Skipping."
+      else 
+        echo -e "\n❌ Failed to create MR. HTTP Code: $RESPONSE"
+        exit 1
+      fi
+
 # ==========================================================================
 # DEV WORKFLOW (runs on 'dev' branch)
 # ==========================================================================
@@ -60,13 +78,7 @@ dev-generate-docker-compose:
   extends: .generate-base
   stage: dev-generate
   script:
-    - |
-      python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --deployment-type "docker_compose" --stage "dev"
-      echo -e "\n================================================================="
-      echo "IAC DIFF: Comparing newly generated manifests against repository"
-      echo "================================================================="
-      git diff --color deployments/docker_compose/ || true
-      echo -e "=================================================================\n"
+    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --deployment-type "docker_compose" --stage "dev"
   rules:
     - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
@@ -85,8 +97,7 @@ dev-generate-documentation:
   script:
     - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --process-documentation --stage "dev"
   artifacts:
-    paths:
-      - deployments/
+    paths: [deployments/]
   needs:
     - dev-generate-docker-compose
     - job: dev-generate-custom-files
@@ -108,13 +119,24 @@ dev-deploy:
     - dev-generate-documentation
   trigger:
     project: 'iac-environment/iac-ansible-automation'
-    branch: dev
+    branch: ${ANSIBLE_BRANCH:-main} # Use Switchboard variable
   variables:
     SERVICE_NAME: $CI_PROJECT_NAME
     SERVICE_BRANCH: 'dev'
-    DEPLOYMENT_TYPE: 'single_service_trigger'
+    INVENTORY_BRANCH: ${INVENTORY_BRANCH:-main} # Use Switchboard variable
   rules:
     - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/ && $SKIP_DEPLOYMENT != "true"'
+
+# NEW: Automatically open an MR to 'test' after successful deploy
+dev-promote:
+  extends: .auto-promote-base
+  stage: dev-promote
+  needs: [dev-deploy]
+  variables:
+    SOURCE_BRANCH: "dev"
+    TARGET_BRANCH: "test"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
 # ==========================================================================
 # TEST WORKFLOW (runs on 'test' branch)
@@ -123,13 +145,7 @@ test-generate-docker-compose:
   extends: .generate-base
   stage: test-generate
   script:
-    - |
-      python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --deployment-type "docker_compose" --stage "test"
-      echo -e "\n================================================================="
-      echo "IAC DIFF: Comparing newly generated manifests against repository"
-      echo "================================================================="
-      git diff --color deployments/docker_compose/ || true
-      echo -e "=================================================================\n"
+    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --deployment-type "docker_compose" --stage "test"
   rules:
     - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
@@ -148,8 +164,7 @@ test-generate-documentation:
   script:
     - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --process-documentation --stage "test"
   artifacts:
-    paths:
-      - deployments/
+    paths: [deployments/]
   needs:
     - test-generate-docker-compose
     - job: test-generate-custom-files
@@ -171,14 +186,25 @@ test-deploy:
     - test-generate-documentation
   trigger:
     project: 'iac-environment/iac-ansible-automation'
-    branch: test
+    branch: ${ANSIBLE_BRANCH:-main}
     strategy: depend
   variables:
     SERVICE_NAME: $CI_PROJECT_NAME
     SERVICE_BRANCH: 'test'
-    DEPLOYMENT_TYPE: 'single_service_trigger'
+    INVENTORY_BRANCH: ${INVENTORY_BRANCH:-main}
   rules:
     - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/ && $SKIP_DEPLOYMENT != "true"'
+
+# NEW: Automatically open an MR to 'main' after test validation succeeds
+test-promote:
+  extends: .auto-promote-base
+  stage: test-promote
+  needs: [test-deploy]
+  variables:
+    SOURCE_BRANCH: "test"
+    TARGET_BRANCH: "main"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
 # ==========================================================================
 # PROD WORKFLOW (runs on 'main' branch)
@@ -187,13 +213,7 @@ prod-generate-docker-compose:
   extends: .generate-base
   stage: prod-generate
   script:
-    - |
-      python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --deployment-type "docker_compose" --stage "prod"
-      echo -e "\n================================================================="
-      echo "IAC DIFF: Comparing newly generated manifests against repository"
-      echo "================================================================="
-      git diff --color deployments/docker_compose/ || true
-      echo -e "=================================================================\n"
+    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --deployment-type "docker_compose" --stage "prod"
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
@@ -212,8 +232,7 @@ prod-generate-documentation:
   script:
     - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --process-documentation --stage "prod"
   artifacts:
-    paths:
-      - deployments/
+    paths: [deployments/]
   needs:
     - prod-generate-docker-compose
     - job: prod-generate-custom-files
@@ -235,12 +254,12 @@ prod-deploy:
     - prod-generate-documentation
   trigger:
     project: 'iac-environment/iac-ansible-automation'
-    branch: main
+    branch: ${ANSIBLE_BRANCH:-main}
     strategy: depend
   variables:
     SERVICE_NAME: $CI_PROJECT_NAME
     SERVICE_BRANCH: 'main'
-    DEPLOYMENT_TYPE: 'single_service_trigger'
+    INVENTORY_BRANCH: ${INVENTORY_BRANCH:-main}
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/ && $SKIP_DEPLOYMENT != "true"'
       when: on_success
@@ -258,8 +277,8 @@ publish_to_docs:
       artifacts: true
   before_script:
     - rm -rf aac-template-engine/
-    # THE CRITICAL FIX: Explicitly clone the 'dev' branch here too
-    - git clone -b dev "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
+    # FIX: Use Switchboard variable
+    - git clone -b ${ENGINE_BRANCH:-main} "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
     - export PYTHONPATH=$PYTHONPATH:$(pwd)/aac-template-engine/scripts
   script:
     - python3 aac-template-engine/scripts/publish_docs.py
