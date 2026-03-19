@@ -16,7 +16,25 @@ from .processors.networks import NetworkProcessor
 from .processors.ingress import IngressProcessor
 from .processors.specs import SpecProcessor
 from .processors.volumes import VolumeProcessor
-from .processors.ansible import AnsibleProcessor # <-- NEW: Import Ansible Processor
+from .processors.ansible import AnsibleProcessor
+
+def get_strategy_for_branch(strategy_block, current_branch):
+    """Determines the correct deployment strategy using exact or prefix matching."""
+    if not strategy_block:
+        # Failsafe default if block is completely missing
+        return {'enabled': True, 'target_stage': 'dev'}
+
+    # 1. Exact match (e.g., 'main', 'dev', 'test')
+    if current_branch in strategy_block:
+        return strategy_block[current_branch]
+
+    # 2. Prefix match (e.g., 'ansible-dev-feature' matches 'ansible-dev')
+    for key, strategy in strategy_block.items():
+        if current_branch.startswith(key):
+            return strategy
+
+    # 3. Default fallback if branch is entirely unknown
+    return {'enabled': False, 'target_stage': 'none'}
 
 def main():
     parser = argparse.ArgumentParser(description="Modular Manifest Generator")
@@ -42,9 +60,23 @@ def main():
                 ssot_input = f.read()
 
     try:
-        # 1. Build Data Context
-        builder = ContextBuilder(ssot_input, args.stage)
+        # --- STRATEGY & KILL-SWITCH LOGIC ---
+        raw_ssot_dict = json.loads(ssot_input)
+        strategy_block = raw_ssot_dict.get('deployment_strategy', {})
+        current_branch = os.getenv('SERVICE_BRANCH', 'main')
+        
+        active_strategy = get_strategy_for_branch(strategy_block, current_branch)
+        is_enabled = active_strategy.get('enabled', True)
+        
+        # Override the CLI stage arg with the strategy's target stage
+        calculated_stage = active_strategy.get('target_stage', args.stage)
+
+        # 1. Build Data Context using the correct calculated stage
+        builder = ContextBuilder(ssot_input, calculated_stage)
         context = builder.build()
+
+        # Inject the enabled flag into the context for Ansible to read later
+        context['deployment_enabled'] = is_enabled
 
         # 2. Run Logic Processors (Strict Order Required)
         processors = [
@@ -55,23 +87,28 @@ def main():
             IngressProcessor(),
             SpecProcessor(),
             VolumeProcessor(),
-            AnsibleProcessor() # <-- NEW: Run Ansible calculations last
+            AnsibleProcessor() 
         ]
 
         for proc in processors:
             context = proc.process(context)
 
         # 3. Dump the fully rendered context for Ansible to consume
-        # This creates 'deployments/ansible_context.json'
         output_dir = os.path.join(os.getcwd(), "deployments")
         os.makedirs(output_dir, exist_ok=True)
         with open(os.path.join(output_dir, "ansible_context.json"), "w", encoding="utf-8") as f:
             json.dump(context, f, indent=2)
 
+        # --- THE ABORT GATE ---
+        if not is_enabled:
+            print(f"\n  [!] DEPLOYMENT SKIPPED: Branch '{current_branch}' is disabled by deployment_strategy.")
+            print("  [I] Context written successfully for Ansible evaluation. Exiting cleanly.")
+            sys.exit(0)
+
         # 4. Render Manifests
         engine = ManifestEngine(args.template_path, os.getcwd())
         
-        # 5. Weiche für die CI-Jobs
+        # 5. Switch for the CI jobs
         if args.process_documentation:
             print("  [I] Processing Documentation...")
             if hasattr(engine, 'render_documentation'):
