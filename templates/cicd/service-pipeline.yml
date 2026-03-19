@@ -28,10 +28,12 @@ stages:
     name: registry.gitlab.int.fam-feser.de/iac-environment/iac-platform-assets/ansible-ci-image:latest
     pull_policy: always
   before_script:
-    - git clone "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
+    - rm -rf aac-template-engine/
+    # THE CRITICAL FIX: Explicitly clone the 'dev' branch
+    - git clone -b dev "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
     # Ensure PyYAML and Jinja2 are installed
     - pip install pyyaml jinja2
-    # THE CRITICAL FIX: Tell Python exactly where the 'manifest_generator' package lives
+    # Tell Python exactly where the 'manifest_generator' package lives
     - export PYTHONPATH=$PYTHONPATH:$(pwd)/aac-template-engine/scripts
   artifacts:
     paths: [deployments/]
@@ -238,7 +240,9 @@ publish_to_docs:
     - job: prod-generate-documentation
       artifacts: true
   before_script:
-    - git clone "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
+    - rm -rf aac-template-engine/
+    # THE CRITICAL FIX: Explicitly clone the 'dev' branch here too
+    - git clone -b dev "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
     - export PYTHONPATH=$PYTHONPATH:$(pwd)/aac-template-engine/scripts
   script:
     - python3 aac-template-engine/scripts/publish_docs.py
