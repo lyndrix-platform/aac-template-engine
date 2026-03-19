@@ -182,8 +182,8 @@ dev-deploy:
     SERVICE_BRANCH: 'dev'
     DEPLOYMENT_TYPE: 'single_service_trigger'
   rules:
-    # TEMPORARY HACK: Added && "1" == "0" to ensure this evaluates to false
-    - if: '$CI_COMMIT_BRANCH == "dev" && ... && "1" == "0"'
+    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE == "TRIGGER_FORCE_DISABLED"'
+      when: never
 
 test-deploy:
   stage: test-deploy
