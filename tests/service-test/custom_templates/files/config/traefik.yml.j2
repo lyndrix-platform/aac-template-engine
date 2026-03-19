@@ -1,5 +1,7 @@
 # templates/config/traefik.yml.j2
 
+# templates/config/traefik.yml.j2
+
 global:
   checkNewVersion: false
   sendAnonymousUsage: false
@@ -32,7 +34,7 @@ providers:
     watch: true
     exposedByDefault: false
   file:
-    filename: "{{ combined_vars.docker_service_dir }}/config/traefik-dynamic.yml"
+    filename: "/etc/traefik/traefik-dynamic.yml"
     watch: true
 
 certificatesResolvers:

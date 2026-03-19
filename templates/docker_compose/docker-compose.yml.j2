@@ -1,3 +1,4 @@
+
 version: "3.8"
 
 services:
@@ -10,8 +11,16 @@ services:
 
     {% if deployments.docker_compose.command is defined %}
     command:
+      {# Intelligente Verarbeitung von Befehlszeilen. #}
+      {# Wenn ein Element ein Zeilenumbruch enthält, wird es als mehrzeiliger Block behandelt. #}
+      {# Andernfalls wird es sicher in Anführungszeichen gesetzt. #}
       {% for cmd_item in deployments.docker_compose.command %}
+      {% if '\n' in cmd_item %}
+      - |
+{{ cmd_item | indent(8) }}
+      {% else %}
       - "{{ cmd_item }}"
+      {% endif %}
       {% endfor %}
     {% endif %}
 
@@ -27,25 +36,55 @@ services:
       {% endfor %}
     {% endif %}
 
-    {% if ports is defined and ports %}
+    {# NEUE LOGIK: Nur Ports mit explizitem 'external_port' werden gemappt. #}
+    {% set exposed_ports = ports | selectattr('external_port', 'defined') | list %}
+    {% if exposed_ports %}
     ports:
-      {% for p in ports %}
-      - "{{ p.external_port | default(p.port) }}:{{ p.port }}{% if p.protocol %}/{{ p.protocol }}{% endif %}"
+      {% for p in exposed_ports %}
+      - "{{ p.external_port }}:{{ p.port }}{% if p.protocol %}/{{ p.protocol }}{% endif %}"
       {% endfor %}
     {% endif %}
 
-    {% if volumes is defined and volumes %}
+    {# --- FINALE, ROBUSTE VOLUME-LOGIK (REFACTORED) --- #}
+    {% if deployments.docker_compose.volumes is defined or deployments.docker_compose.raw_volumes is defined %}
     volumes:
-      {% for v in volumes %}
-      - "{{ deployments.docker_compose.host_base_path }}/{{ service.name | lower }}/{{ v.name }}:{{ v.path }}"
+      {% if deployments.docker_compose.raw_volumes is defined %}
+      {% for mount in deployments.docker_compose.raw_volumes %}
+      - "{{ mount }}"
       {% endfor %}
+      {% endif %}
+      {% if deployments.docker_compose.volumes is defined %}
+      {% for mount in deployments.docker_compose.volumes %}
+      {# Logik, um den finalen String zu bestimmen #}
+      {% set parts = mount.split(':', 1) %}
+      {% set vol_name = parts[0] %}
+      {% set container_path = parts[1] if parts | length > 1 else none %}
+      {% set final_volume_string = '' %}
+      {% if volumes is defined and vol_name in volumes %}
+        {% set vol_def = volumes[vol_name] %}
+        {% if vol_def.type == 'bind' %}
+          {% set final_volume_string = vol_def.source ~ ':' ~ container_path %}
+        {% elif vol_def.driver is defined %}
+          {% set final_volume_string = vol_name ~ ':' ~ container_path %}
+        {% else %}
+          {% set final_volume_string = deployments.docker_compose.host_base_path ~ '/' ~ (service.name | lower) ~ '/' ~ vol_name ~ ':' ~ container_path %}
+        {% endif %}
+      {% else %}
+        {% set final_volume_string = deployments.docker_compose.host_base_path ~ '/' ~ (service.name | lower) ~ '/' ~ vol_name ~ ':' ~ container_path %}
+      {% endif %}
+      {# Gib den finalen String genau einmal aus, um Fehler zu vermeiden #}
+      - "{{ final_volume_string }}"
+      {% endfor %}
+      {% endif %}
     {% endif %}
-
+    
+    {# --- NEUE LOGIK: Netzwerke nur definieren, wenn nicht im Host-Modus --- #}
+    {% if deployments.docker_compose.network_mode is not defined or deployments.docker_compose.network_mode != 'host' %}
     networks:
       {% for net_name in deployments.docker_compose.networks_to_join %}
       - {{ net_name }}
       {% endfor %}
-
+    {% endif %}
     {% if deployments.docker_compose.healthcheck is defined %}
     healthcheck:
       test: {{ deployments.docker_compose.healthcheck.test | tojson }}
@@ -61,56 +100,118 @@ services:
       {% endfor %}
     {% endif %}
 
-{% if deployments.docker_compose.logging %}
+    {% if deployments.docker_compose.logging %}
     logging:
       driver: {{ deployments.docker_compose.logging.driver }}
       options:
       {% for key, value in deployments.docker_compose.logging.options.items() %}
         "{{ key }}": "{{ value }}"
       {% endfor %}
-{% endif %}
+    {% endif %}
 
+    {# NEUE LOGIK: Prüft auf die neuen Integrations-Flags #}
+    {% if (config.integrations.traefik is defined and config.integrations.traefik.enabled) or (config.integrations.autodns is defined and config.integrations.autodns.enabled) or (config.integrations.homepage is defined and config.integrations.homepage.enabled) %}
     labels:
-      # === Traefik Labels ===
-{% if config.routing_enabled %}
-      - "traefik.enable=true"
-      - "traefik.docker.network={{ deployments.docker_compose.network_definitions.secured.name }}"
-      - "traefik.http.routers.{{ service.name }}.rule=Host(`{{ service.hostname | default(service.name) }}.{{ config.domain_name }}`)"
-      - "traefik.http.routers.{{ service.name }}.entrypoints={{ config.entrypoint }}"
-      - "traefik.http.routers.{{ service.name }}.tls=true"
-      - "traefik.http.routers.{{ service.name }}.tls.certresolver={{ config.cert_resolver }}"
-{% set dashboard_port = (ports | selectattr('name', 'equalto', 'dashboard') | list | first) %}
-{% set web_port = (ports | selectattr('name', 'equalto', 'web') | list | first) %}
-{% set http_port = (ports | selectattr('name', 'equalto', 'http') | list | first) %}
-{% set service_port = dashboard_port.port if dashboard_port else (web_port.port if web_port else (http_port.port if http_port else (ports | first).port)) %}
-      - "traefik.http.services.{{ service.name }}.loadbalancer.server.port={{ service_port }}"
-{% endif %}
+      {# --- Define FQDN based on DNS mode --- #}
+      {# NEUE LOGIK: Die Entscheidung basiert jetzt auf 'generate_hostname' #}
+      {% if not config.generate_hostname %}
+        {% set fqdn = service.hostname ~ '.' ~ config.domain_name %}
+      {% else %}
+        {% set fqdn = service.stage ~ '.' ~ service.name ~ '.' ~ (inventory_hostname | default('ci-validation-host')) ~ '.' ~ config.domain_name %}
+      {% endif %}
 
-      # === AutoDNS Labels ===
-{% if config.integrations is defined and config.integrations.autodns is defined and config.integrations.autodns.enabled %}
-      - "auto-dns.customDNS.{{ service.name }}=true"
-{% if config.integrations.autodns.create_wildcard %}
-      - "auto-dns.createWildcard.{{ service.name }}=true"
-{% endif %}
-      - "auto-dns.customDOMAIN.{{ service.name }}={{ config.domain_name }}"
-      - "auto-dns.customHost.{{ service.name }}={{ service.hostname | default(service.name) }}"
-{% endif %}
+      # === Traefik Labels ===
+      {# NEUE LOGIK: Liest Konfiguration aus config.integrations.traefik #}
+      {% if config.integrations.traefik is defined and config.integrations.traefik.enabled %}
+      {# --- Baue die Traefik Host-Regel dynamisch auf --- #}
+      {% set traefik_rule = "Host(`" ~ fqdn ~ "`)" %}
+      {% if config.integrations.traefik.internet_facing and config.public_domain_name is defined %}
+        {% set public_fqdn = service.hostname ~ '.' ~ config.public_domain_name %}
+        {% set traefik_rule = traefik_rule ~ " || Host(`" ~ public_fqdn ~ "`)" %}
+      {% endif %}
+
+      traefik.enable: "true"
+      traefik.docker.network: "{{ deployments.docker_compose.network_definitions.secured.name }}"
+      traefik.http.routers.{{ service.name }}.rule: "{{ traefik_rule }}"
+      traefik.http.routers.{{ service.name }}.entrypoints: "{{ config.integrations.traefik.entrypoint }}"
+      traefik.http.routers.{{ service.name }}.tls: "true"
+      traefik.http.routers.{{ service.name }}.tls.certresolver: "{{ config.integrations.traefik.cert_resolver }}"
+      
+      {# --- Traefik Service Definition --- #}
+      {% set traefik_service_port = config.integrations.traefik.service_port | default(ports[0].port, true) %}
+      {% if config.routing_host_network %}
+      traefik.http.services.{{ service.name }}.loadbalancer.server.url: "http://{{ ansible_host_ip | default('10.111.111.111') }}:{{ traefik_service_port }}"
+      {% else %}
+      traefik.http.services.{{ service.name }}.loadbalancer.server.port: "{{ traefik_service_port }}"
+      {% endif %}
+      
+      {# --- Optional: Set scheme and transport for the service (e.g., for internal HTTPS) --- #}
+      {% if not config.routing_host_network %}
+      traefik.http.services.{{ service.name }}.loadbalancer.server.scheme: "{{ config.integrations.traefik.service_scheme | default('http') }}"
+      {% endif %}
+      {% if config.integrations.traefik.servers_transport is defined %}
+      traefik.http.services.{{ service.name }}.loadbalancer.serverstransport: "{{ config.integrations.traefik.servers_transport }}"
+      {% endif %}
+      {% endif %}
+
+      # === AutoDNS Labels (Dynamically selects mode) ===
+      {% if config.integrations is defined and config.integrations.autodns is defined and config.integrations.autodns.enabled %}
+      auto-dns.createWildcard.{{ service.name }}: "{{ config.integrations.autodns.create_wildcard | lower }}"
+      {% if not config.generate_hostname %}
+      {# --- Custom Hostname Mode (for Prod) --- #}
+      auto-dns.customDNS.{{ service.name }}: "true"
+      auto-dns.customDOMAIN.{{ service.name }}: "{{ config.domain_name }}"
+      auto-dns.customHost.{{ service.name }}: "{{ service.hostname }}"
+      {% else %}
+      {# --- Automatic Structured Mode (for Dev/Test) --- #}
+      auto-dns.customDNS.{{ service.name }}: "false"
+      auto-dns.domain.{{ service.name }}: "{{ config.domain_name }}"
+      auto-dns.stage.{{ service.name }}: "{{ service.stage }}"
+      auto-dns.service.{{ service.name }}: "{{ service.name }}"
+      auto-dns.hostname.{{ service.name }}: "{{ inventory_hostname | default('ci-validation-host') }}"
+      {% endif %}
+      {% endif %}
 
       # === Homepage Labels ===
-{% if config.integrations is defined and config.integrations.homepage is defined and config.integrations.homepage.enabled %}
-      - "homepage.group={{ service.category }}"
-      - "homepage.name={{ service.name }}"
-      - "homepage.href=https://{{ service.hostname | default(service.name) }}.{{ config.domain_name }}"
-      - "homepage.icon={{ service.icon }}"
-      - "homepage.description={{ service.description }}"
-{% if config.integrations.homepage.widget is defined %}
-      - "homepage.widget.type={{ config.integrations.homepage.widget.type }}"
-      - "homepage.widget.url=https://{{ service.hostname | default(service.name) }}.{{ config.domain_name }}"
-{% if config.integrations.homepage.widget.key is defined %}
-      - "homepage.widget.key={{ config.integrations.homepage.widget.key }}"
-{% endif %}
-{% endif %}
-{% endif %}
+      {% if config.integrations is defined and config.integrations.homepage is defined and config.integrations.homepage.enabled %}
+      {# --- Wähle die primäre URL für Homepage --- #}
+      {% set homepage_href = "https://" ~ fqdn %}
+      {% if config.integrations.traefik.internet_facing and config.public_domain_name is defined %}
+        {% set public_fqdn = service.hostname ~ '.' ~ config.public_domain_name %}
+        {% set homepage_href = "https://" ~ public_fqdn %}
+      {% endif %}
+
+      homepage.group: "{{ service.category }}"
+      homepage.name: "{{ service.friendly_name }} - {{ inventory_hostname_friendly }}"
+      homepage.href: "{{ homepage_href }}"
+      homepage.icon: "{{ service.icon }}"
+      homepage.description: "{{ service.description }}"
+      {% if config.integrations.homepage.widget is defined %}
+      homepage.widget.type: "{{ config.integrations.homepage.widget.type }}"
+      homepage.widget.url: "https://{{ fqdn }}"
+      {% if config.integrations.homepage.widget.key is defined %}
+      homepage.widget.key: "{{ config.integrations.homepage.widget.key }}"
+      {% endif %}
+      {% endif %}
+      {% endif %}
+    {% endif %}
+
+    {# --- ERWEITERTE LOGIK: Rendere alle unbekannten Top-Level-Schlüssel & `raw_options` für Abwärtskompatibilität --- #}
+    {# 1. Definiere alle Schlüssel, die vom Template bereits explizit verarbeitet werden. #}
+    {% set known_keys = ['command', 'restart_policy', 'host_base_path', 'networks_to_join', 'network_definitions', 'raw_volumes', 'security_opts', 'logging', 'dot_env', 'stack_env', 'volumes', 'healthcheck', 'depends_on', 'raw_options'] %}
+    
+    {# 2. Rendere alle "unbekannten" Schlüssel direkt. Das ist der neue, saubere Weg. #}
+    {% for key, value in deployments.docker_compose.items() %}
+      {% if key not in known_keys %}
+{{ {key: value} | to_yaml(indent=2) | indent(4, first=true) }}
+      {% endif %}
+    {% endfor %}
+    {# 3. Prüfe auf die alte `raw_options` und rendere deren Inhalt für Abwärtskompatibilität. #}
+    {% if deployments.docker_compose.raw_options is defined %}
+{{ deployments.docker_compose.raw_options | to_yaml(indent=2) | indent(4, first=true) }}
+    {% endif %}
+
+
 
 {% if dependencies is defined and dependencies %}
   # --- Service Dependencies ---
@@ -121,7 +222,10 @@ services:
     hostname: "{{ dep_config.name }}"
     restart: "{{ dep_config.restart_policy | default('always') }}"
     {% if dep_config.command is defined %}
-    command: "{{ dep_config.command }}"
+    command:
+      {% for item in dep_config.command %}
+      - {{ item | tojson }}
+      {% endfor %}
     {% endif %}
     {% if dep_config.user is defined %}
     user: "{{ dep_config.user }}"
@@ -136,13 +240,39 @@ services:
         condition: {{ dep.condition }}
       {% endfor %}
     {% endif %}
-    {% if dep_config.volumes is defined %}
-    volumes:
-      {% for vol in dep_config.volumes %}
-      - "{{ deployments.docker_compose.host_base_path }}/{{ service.name | lower }}/{{ vol.name }}:{{ vol.path }}"
+    {% if dep_config.ports is defined %}
+    ports:
+      {% for p in dep_config.ports %}
+      - "{{ p }}"
       {% endfor %}
     {% endif %}
-    {% if dep_config.networks_to_join is defined %}
+    {# --- VOLUME-LOGIK für Dependencies --- #}
+    {% if dep_config.volumes is defined %}
+    volumes:
+      {% for mount in dep_config.volumes %}
+        {# --- ROBUSTE VOLUME-LOGIK (analog zum Hauptservice) --- #}
+        {% set parts = mount.split(':', 1) %}
+        {% set vol_name = parts[0] %}
+        {% set container_path = parts[1] if parts | length > 1 else none %}
+        {% set final_volume_string = '' %}
+        {% if volumes is defined and vol_name in volumes %}
+          {% set vol_def = volumes[vol_name] %}
+          {% if vol_def.type == 'bind' %}
+            {% set final_volume_string = vol_def.source ~ ':' ~ container_path %}
+          {% elif vol_def.driver is defined %}
+            {% set final_volume_string = vol_name ~ ':' ~ container_path %}
+          {% else %}
+            {% set final_volume_string = deployments.docker_compose.host_base_path ~ '/' ~ (service.name | lower) ~ '/' ~ vol_name ~ ':' ~ container_path %}
+          {% endif %}
+        {% else %}
+          {% set final_volume_string = deployments.docker_compose.host_base_path ~ '/' ~ (service.name | lower) ~ '/' ~ vol_name ~ ':' ~ container_path %}
+        {% endif %}
+      - "{{ final_volume_string }}"
+      {% endfor %}
+    {% endif %}
+
+    {# --- NEUE LOGIK: Netzwerke für Dependencies nur definieren, wenn nicht im Host-Modus --- #}
+    {% if dep_config.networks_to_join is defined and (dep_config.network_mode is not defined or dep_config.network_mode != 'host') %}
     networks:
       {% for net_name in dep_config.networks_to_join %}
       - {{ net_name }}
@@ -157,13 +287,30 @@ services:
     {% endif %}
     {% if dep_config.labels is defined %}
     labels:
-      {% for label in dep_config.labels %}
-      - "{{ label }}"
+      {% for key, value in dep_config.labels.items() %}
+      "{{ key }}": "{{ value }}"
       {% endfor %}
+    {% endif %}
+
+    {# --- ERWEITERTE LOGIK für Dependencies --- #}
+    {# 1. Definiere bekannte Schlüssel für Dependencies. #}
+    {% set known_dep_keys = ['name', 'image_repo', 'image_tag', 'restart_policy', 'command', 'user', 'depends_on', 'ports', 'volumes', 'networks_to_join', 'healthcheck', 'labels', 'environment', 'raw_options'] %}
+    
+    {# 2. Rendere unbekannte Schlüssel direkt (neuer Weg). #}
+    {% for key, value in dep_config.items() %}
+      {% if key not in known_dep_keys %}
+{{ {key: value} | to_yaml(indent=2) | indent(4, first=true) }}
+      {% endif %}
+    {% endfor %}
+    {# 3. Prüfe auf `raw_options` für Abwärtskompatibilität. #}
+    {% if dep_config.raw_options is defined %}
+{{ dep_config.raw_options | to_yaml(indent=2) | indent(4, first=true) }}
     {% endif %}
 {% endfor %}
 {% endif %}
 
+{# --- NEUE LOGIK: Den gesamten `networks`-Block nur rendern, wenn er benötigt wird --- #}
+{% if (deployments.docker_compose.network_mode is not defined or deployments.docker_compose.network_mode != 'host') or (dependencies is defined and dependencies) %}
 networks:
 {% for net_name, net_def in deployments.docker_compose.network_definitions.items() %}
   {{ net_name }}:
@@ -174,3 +321,28 @@ networks:
     driver: "{{ net_def.driver | default('bridge') }}"
     {% endif %}
 {% endfor %}
+{% endif %}
+
+{# --- FINALE, GEFILTERTE TOP-LEVEL VOLUME-LOGIK --- #}
+{# Wir filtern aus dem Top-Level 'volumes'-Block nur die Einträge heraus, die einen Treiber haben #}
+{% set named_volumes_to_define = {} %}
+{% if volumes is defined %}
+  {% for vol_name, vol_def in volumes.items() %}
+    {% if vol_def.driver is defined %}
+      {% set _ = named_volumes_to_define.update({vol_name: vol_def}) %}
+    {% endif %}
+  {% endfor %}
+{% endif %}
+
+{# Nur wenn die gefilterte Liste nicht leer ist, rendern wir den Top-Level 'volumes'-Block #}
+{% if named_volumes_to_define %}
+volumes:
+{% for vol_name, vol_def in named_volumes_to_define.items() %}
+  {{ vol_name }}:
+    driver: {{ vol_def.driver }}
+    driver_opts:
+      {% for key, value in vol_def.driver_opts.items() %}
+      {{ key }}: "{{ value }}"
+      {% endfor %}
+{% endfor %}
+{% endif %}
