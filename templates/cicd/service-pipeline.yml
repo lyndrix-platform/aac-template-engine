@@ -108,7 +108,7 @@ dev-deploy:
     - dev-generate-documentation
   trigger:
     project: 'iac-environment/iac-ansible-automation'
-    branch: main
+    branch: dev
     strategy: depend
   variables:
     SERVICE_NAME: $CI_PROJECT_NAME
@@ -172,7 +172,7 @@ test-deploy:
     - test-generate-documentation
   trigger:
     project: 'iac-environment/iac-ansible-automation'
-    branch: main
+    branch: test
     strategy: depend
   variables:
     SERVICE_NAME: $CI_PROJECT_NAME
