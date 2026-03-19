@@ -1,0 +1,91 @@
+version: "3.8"
+
+services:
+  # --- Main Application Service ---
+  aac-orga:
+    image: "vikunja/vikunja:1.0.0-rc4"
+    container_name: "aac-orga"
+    hostname: "orga"
+    restart: "unless-stopped"
+
+
+    env_file: 
+      - .env
+      - stack.env
+
+
+    volumes:
+      - "/export/docker/aac-orga/files:/app/vikunja/files"
+      - "/etc/localtime:/etc/localtime"
+      - "/export/docker/aac-orga/config_file:/etc/vikunja/config.yml"
+
+    networks:
+      - interconnect
+      - secured
+      - stack_internal
+
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: "services-secured"
+      traefik.http.routers.aac-orga.rule: "Host(`dev.aac-orga.ci-host.int.fam-feser.de`)"
+      traefik.http.routers.aac-orga.entrypoints: "websecure"
+      traefik.http.routers.aac-orga.tls: "true"
+      traefik.http.routers.aac-orga.tls.certresolver: "ionos"
+      traefik.http.services.aac-orga.loadbalancer.server.port: "3456"
+      traefik.http.services.aac-orga.loadbalancer.server.scheme: "http"
+      auto-dns.createWildcard.aac-orga: "true"
+      auto-dns.customDNS.aac-orga: "false"
+      auto-dns.domain.aac-orga: "int.fam-feser.de"
+      auto-dns.stage.aac-orga: "dev"
+      auto-dns.service.aac-orga: "aac-orga"
+      auto-dns.hostname.aac-orga: "ci-host"
+      homepage.group: "Finanzen - Dokumente - Organisation"
+      homepage.name: "Taskboard - Ci Validation Host"
+      homepage.href: "https://dev.aac-orga.ci-host.int.fam-feser.de"
+      homepage.icon: "/icons/vikunja.png"
+      homepage.description: "Aufgaben- & Projektmanagement für die Familie"
+
+
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '10'
+
+
+  # --- Service Dependencies (Sidecars) ---
+  aac-orga-db:
+    image: "postgres:18-alpine"
+    container_name: "aac-orga-db"
+    restart: "always"
+    
+    env_file:
+      - .env
+      - stack.env
+
+    volumes:
+      - "/export/docker/aac-orga-db/db_data:/var/lib/postgresql/data"
+
+    networks:
+      - stack_internal
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+networks:
+  secured:
+    name: "services-secured"
+    external: true
+  exposed:
+    name: "services-exposed"
+    external: true
+  interconnect:
+    name: "docker-default"
+    external: true
+  stack_internal:
+    name: "aac-orga_stack_internal"
+    driver: "bridge"
+
