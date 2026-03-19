@@ -1,0 +1,22 @@
+http:
+  serversTransports:
+    my-insecure-transport:
+      insecureSkipVerify: true
+  services:
+    # Service definition for Home Assistant
+    homeassistant:
+      loadBalancer:
+        servers:
+          - url: "http://10.1.130.70:8123"
+
+    # Service definition for Homebridge
+    homebridge:
+      loadBalancer:
+        servers:
+          - url: "http://10.1.130.70:8581"
+
+    # Service definition for Music Assistant
+    musicassistant:
+      loadBalancer:
+        servers:
+          - url: "http://10.1.130.70:8095"

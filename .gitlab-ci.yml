@@ -1,20 +1,31 @@
 # .gitlab-ci.yml
 
 stages:
+  - lint
   - test
 
 yaml-syntax-check:
-  stage: test
-  image: python:3.14-slim # A small, efficient Docker image with Python
-
+  stage: lint
+  image: python:3.11-slim
   before_script:
-    - pip install PyYAML # Installs the necessary Python library for parsing YAML
-
+    - pip install PyYAML
   script:
     - echo "🔎 Checking syntax of all .yml and .yaml files..."
-    # The `find` command is placed in a literal block scalar (`|`) to avoid YAML parsing issues.
     - |
       find . -type f \( -name "*.yml" -o -name "*.yaml" \) -print0 | xargs -0 -n 1 python -c "import yaml, sys; print(f'-- Checking: {sys.argv[1]}'); yaml.safe_load(open(sys.argv[1]))"
     - echo "✅ Syntax check passed for all YAML files."
+  tags:
+    - docker
+
+python-unit-tests:
+  stage: test
+  image: python:3.11-slim
+  before_script:
+    - pip install pytest pyyaml
+    # Ensure the scripts directory is treated as a module
+    - export PYTHONPATH=$PYTHONPATH:$(pwd)/scripts
+  script:
+    - echo "🧪 Running Python Processor Unit Tests..."
+    - pytest tests/ -v
   tags:
     - docker

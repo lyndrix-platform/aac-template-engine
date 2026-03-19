@@ -1,0 +1,103 @@
+version: "3.8"
+
+services:
+  # --- Main Application Service ---
+  aac-nextcloud:
+    image: "nextcloud:33.0.0"
+    container_name: "aac-nextcloud"
+    hostname: "cloud"
+    restart: "always"
+
+
+    env_file: 
+      - .env
+      - stack.env
+
+
+    volumes:
+      - "/export/docker/aac-nextcloud/html:/var/www/html"
+      - "/mnt/nextcloud:/mnt/data"
+
+    networks:
+      - exposed
+      - interconnect
+      - secured
+      - stack_internal
+
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: "services-secured"
+      traefik.http.routers.aac-nextcloud.rule: "Host(`cloud.int.fam-feser.de`) || Host(`cloud.fam-feser.de`)"
+      traefik.http.routers.aac-nextcloud.entrypoints: "websecure"
+      traefik.http.routers.aac-nextcloud.tls: "true"
+      traefik.http.routers.aac-nextcloud.tls.certresolver: "ionos"
+      traefik.http.services.aac-nextcloud.loadbalancer.server.port: "80"
+      traefik.http.services.aac-nextcloud.loadbalancer.server.scheme: "http"
+      auto-dns.createWildcard.aac-nextcloud: "false"
+      auto-dns.customDNS.aac-nextcloud: "true"
+      auto-dns.customDOMAIN.aac-nextcloud: "int.fam-feser.de"
+      auto-dns.customHost.aac-nextcloud: "cloud"
+      homepage.group: "Finanzen - Dokumente - Organisation"
+      homepage.name: "Cloud - Ci Validation Host"
+      homepage.href: "https://cloud.fam-feser.de"
+      homepage.icon: "nextcloud.png"
+      homepage.description: "Selfhosted Cloud Plattform"
+
+
+
+  # --- Service Dependencies (Sidecars) ---
+  aac-nextcloud-db:
+    image: "mariadb:12.3.1-ubi10-rc"
+    container_name: "aac-nextcloud-db"
+    restart: "always"
+    
+    env_file:
+      - .env
+      - stack.env
+
+    volumes:
+      - "/export/docker/aac-nextcloud-db/db:/var/lib/mysql"
+
+    networks:
+      - stack_internal
+
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--su-mysql", "--connect", "--innodb_initialized"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+  aac-nextcloud-redis:
+    image: "redis:8.6.1"
+    container_name: "aac-nextcloud-redis"
+    restart: "always"
+    
+    env_file:
+      - .env
+      - stack.env
+
+    volumes:
+      - "/export/docker/aac-nextcloud-redis/redis-data:/data"
+
+    networks:
+      - stack_internal
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+networks:
+  secured:
+    name: "services-secured"
+    external: true
+  exposed:
+    name: "services-exposed"
+    external: true
+  interconnect:
+    name: "docker-default"
+    external: true
+  stack_internal:
+    name: "aac-nextcloud_stack_internal"
+    driver: "bridge"
+

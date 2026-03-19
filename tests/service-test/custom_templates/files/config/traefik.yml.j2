@@ -1,18 +1,27 @@
 # templates/config/traefik.yml.j2
-
-# templates/config/traefik.yml.j2
-
 global:
   checkNewVersion: false
   sendAnonymousUsage: false
 
 log:
-  level: DEBUG
+  format: common
+  level: {{ deployments.docker_compose.stack_env.LOG_LEVEL | default('ERROR') | upper }}
+
+# Das Access-Log wird deaktiviert, um die Docker-Logs sauber zu halten.
+# Die Prometheus-Metriken sind davon nicht betroffen.
+# accessLog: {}
 
 api:
   dashboard: true
-  debug: true 
+  debug: true
   insecure: true
+
+metrics:
+  prometheus:
+    entryPoint: metrics
+    addEntryPointsLabels: true
+    addServicesLabels: true
+    addRoutersLabels: true
 
 entryPoints:
   web:
@@ -28,13 +37,14 @@ entryPoints:
   metrics:
     address: ":8082"
 
+
 providers:
   docker:
     endpoint: "unix:///var/run/docker.sock"
     watch: true
     exposedByDefault: false
   file:
-    filename: "/etc/traefik/traefik-dynamic.yml"
+    directory: "/etc/traefik/dynamic"
     watch: true
 
 certificatesResolvers:

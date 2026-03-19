@@ -29,6 +29,8 @@ stages:
     pull_policy: always
   before_script:
     - git clone "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
+    # Ensure PyYAML is installed (adjust if your CI image already has it)
+    - pip install pyyaml
   artifacts:
     paths: [deployments/]
     expire_in: 1 hour
@@ -54,8 +56,7 @@ dev-generate-docker-compose:
   extends: .generate-base
   stage: dev-generate
   script:
-    - SSOT_JSON=$(python3 -c 'import yaml, json; print(json.dumps(yaml.safe_load(open("service.yml"))))')
-    - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --deployment-type "docker_compose" --stage "dev"
+    - python3 aac-template-engine/scripts/manifest_generator/main.py --ssot-json "service.yml" --template-path aac-template-engine --deployment-type "docker_compose" --stage "dev"
   rules:
     - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
@@ -63,8 +64,7 @@ dev-generate-custom-files:
   extends: .generate-base
   stage: dev-generate
   script:
-    - SSOT_JSON=$(python3 -c 'import yaml, json; print(json.dumps(yaml.safe_load(open("service.yml"))))')
-    - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --process-files --stage "dev"
+    - python3 aac-template-engine/scripts/manifest_generator/main.py --ssot-json "service.yml" --template-path aac-template-engine --process-files --stage "dev"
   rules:
     - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
       exists: [custom_templates/files/**/*]
@@ -73,8 +73,7 @@ dev-generate-documentation:
   extends: .generate-base
   stage: dev-generate 
   script:
-    - SSOT_JSON=$(python3 -c 'import yaml, json; print(json.dumps(yaml.safe_load(open("service.yml"))))')
-    - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --process-documentation --stage "dev"
+    - python3 aac-template-engine/scripts/manifest_generator/main.py --ssot-json "service.yml" --template-path aac-template-engine --process-documentation --stage "dev"
   artifacts:
     paths:
       - deployments/
@@ -116,8 +115,7 @@ test-generate-docker-compose:
   extends: .generate-base
   stage: test-generate
   script:
-    - SSOT_JSON=$(python3 -c 'import yaml, json; print(json.dumps(yaml.safe_load(open("service.yml"))))')
-    - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --deployment-type "docker_compose" --stage "test"
+    - python3 aac-template-engine/scripts/manifest_generator/main.py --ssot-json "service.yml" --template-path aac-template-engine --deployment-type "docker_compose" --stage "test"
   rules:
     - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
@@ -125,8 +123,7 @@ test-generate-custom-files:
   extends: .generate-base
   stage: test-generate
   script:
-    - SSOT_JSON=$(python3 -c 'import yaml, json; print(json.dumps(yaml.safe_load(open("service.yml"))))')
-    - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --process-files --stage "test"
+    - python3 aac-template-engine/scripts/manifest_generator/main.py --ssot-json "service.yml" --template-path aac-template-engine --process-files --stage "test"
   rules:
     - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
       exists: [custom_templates/files/**/*]
@@ -135,8 +132,7 @@ test-generate-documentation:
   extends: .generate-base
   stage: test-generate 
   script:
-    - SSOT_JSON=$(python3 -c 'import yaml, json; print(json.dumps(yaml.safe_load(open("service.yml"))))')
-    - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --process-documentation --stage "test"
+    - python3 aac-template-engine/scripts/manifest_generator/main.py --ssot-json "service.yml" --template-path aac-template-engine --process-documentation --stage "test"
   artifacts:
     paths:
       - deployments/
@@ -177,8 +173,7 @@ prod-generate-docker-compose:
   extends: .generate-base
   stage: prod-generate
   script:
-    - SSOT_JSON=$(python3 -c 'import yaml, json; print(json.dumps(yaml.safe_load(open("service.yml"))))')
-    - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --deployment-type "docker_compose" --stage "prod"
+    - python3 aac-template-engine/scripts/manifest_generator/main.py --ssot-json "service.yml" --template-path aac-template-engine --deployment-type "docker_compose" --stage "prod"
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
@@ -186,8 +181,7 @@ prod-generate-custom-files:
   extends: .generate-base
   stage: prod-generate
   script:
-    - SSOT_JSON=$(python3 -c 'import yaml, json; print(json.dumps(yaml.safe_load(open("service.yml"))))')
-    - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --process-files --stage "prod"
+    - python3 aac-template-engine/scripts/manifest_generator/main.py --ssot-json "service.yml" --template-path aac-template-engine --process-files --stage "prod"
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
       exists: [custom_templates/files/**/*]
@@ -196,8 +190,7 @@ prod-generate-documentation:
   extends: .generate-base
   stage: prod-generate
   script:
-    - SSOT_JSON=$(python3 -c 'import yaml, json; print(json.dumps(yaml.safe_load(open("service.yml"))))')
-    - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --process-documentation --stage "prod"
+    - python3 aac-template-engine/scripts/manifest_generator/main.py --ssot-json "service.yml" --template-path aac-template-engine --process-documentation --stage "prod"
   artifacts:
     paths:
       - deployments/
