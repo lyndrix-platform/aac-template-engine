@@ -112,6 +112,7 @@ dev-validate-docker-compose:
   rules:
     - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
+# DEV DEPLOY
 dev-deploy:
   stage: dev-deploy
   needs: 
@@ -124,6 +125,8 @@ dev-deploy:
     SERVICE_NAME: $CI_PROJECT_NAME
     SERVICE_BRANCH: 'dev'
     INVENTORY_BRANCH: $INVENTORY_BRANCH
+    # THE MISSING PIECE: Tell Ansible to only run the GitOps role
+    DEPLOYMENT_TYPE: 'single_service_trigger' 
   rules:
     - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/ && $SKIP_DEPLOYMENT != "true"'
 
@@ -179,6 +182,7 @@ test-validate-docker-compose:
   rules:
     - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
+# TEST DEPLOY
 test-deploy:
   stage: test-deploy
   needs: 
@@ -192,6 +196,8 @@ test-deploy:
     SERVICE_NAME: $CI_PROJECT_NAME
     SERVICE_BRANCH: 'test'
     INVENTORY_BRANCH: $INVENTORY_BRANCH
+    # THE MISSING PIECE
+    DEPLOYMENT_TYPE: 'single_service_trigger'
   rules:
     - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/ && $SKIP_DEPLOYMENT != "true"'
 
@@ -247,6 +253,7 @@ prod-validate-docker-compose:
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
+# PROD DEPLOY
 prod-deploy:
   stage: prod-deploy
   needs: 
@@ -254,12 +261,14 @@ prod-deploy:
     - prod-generate-documentation
   trigger:
     project: 'iac-environment/iac-ansible-automation'
-    branch: $ANSIBLE_BRANCH # <--- FIXED
+    branch: $ANSIBLE_BRANCH
     strategy: depend
   variables:
     SERVICE_NAME: $CI_PROJECT_NAME
     SERVICE_BRANCH: 'main'
-    INVENTORY_BRANCH: $INVENTORY_BRANCH # <--- FIXED
+    INVENTORY_BRANCH: $INVENTORY_BRANCH
+    # THE MISSING PIECE
+    DEPLOYMENT_TYPE: 'single_service_trigger'
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/ && $SKIP_DEPLOYMENT != "true"'
       when: on_success
