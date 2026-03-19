@@ -1,0 +1,13 @@
+image_repo: "mongo"
+restart_policy: "always"
+
+volumes:
+  db:
+    description: "MongoDB data"
+    target: "/data/db"
+
+healthcheck:
+  test: ["CMD", "echo 'db.runCommand(\"ping\").ok' | mongosh localhost:27017/test --quiet"]
+  interval: "30s"
+  timeout: "10s"
+  retries: 3

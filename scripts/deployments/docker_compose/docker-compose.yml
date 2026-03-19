@@ -2,11 +2,11 @@ version: "3.8"
 
 services:
   # --- Main Application Service ---
-  aac-orga:
-    image: "vikunja/vikunja:1.0.0-rc4"
-    container_name: "aac-orga"
-    hostname: "orga"
-    restart: "unless-stopped"
+  aac-zigbee2mqtt:
+    image: "koenkk/zigbee2mqtt:latest"
+    container_name: "aac-zigbee2mqtt"
+    hostname: "zigbee"
+    restart: "always"
 
 
     env_file: 
@@ -15,11 +15,10 @@ services:
 
 
     volumes:
-      - "/export/docker/aac-orga/files:/app/vikunja/files"
-      - "/etc/localtime:/etc/localtime"
-      - "/export/docker/aac-orga/config_file:/etc/vikunja/config.yml"
+      - "/export/docker/aac-zigbee2mqtt/data:/app/data"
 
     networks:
+      - exposed
       - interconnect
       - secured
       - stack_internal
@@ -27,53 +26,38 @@ services:
     labels:
       traefik.enable: "true"
       traefik.docker.network: "services-secured"
-      traefik.http.routers.aac-orga.rule: "Host(`dev.aac-orga.ci-host.int.fam-feser.de`)"
-      traefik.http.routers.aac-orga.entrypoints: "websecure"
-      traefik.http.routers.aac-orga.tls: "true"
-      traefik.http.routers.aac-orga.tls.certresolver: "ionos"
-      traefik.http.services.aac-orga.loadbalancer.server.port: "3456"
-      traefik.http.services.aac-orga.loadbalancer.server.scheme: "http"
-      auto-dns.createWildcard.aac-orga: "true"
-      auto-dns.customDNS.aac-orga: "false"
-      auto-dns.domain.aac-orga: "int.fam-feser.de"
-      auto-dns.stage.aac-orga: "dev"
-      auto-dns.service.aac-orga: "aac-orga"
-      auto-dns.hostname.aac-orga: "ci-host"
-      homepage.group: "Finanzen - Dokumente - Organisation"
-      homepage.name: "Taskboard - Ci Validation Host"
-      homepage.href: "https://dev.aac-orga.ci-host.int.fam-feser.de"
-      homepage.icon: "/icons/vikunja.png"
-      homepage.description: "Aufgaben- & Projektmanagement für die Familie"
-
-
-    logging:
-      driver: json-file
-      options:
-        max-size: 10m
-        max-file: '10'
-
-
-  # --- Service Dependencies (Sidecars) ---
-  aac-orga-db:
-    image: "postgres:18-alpine"
-    container_name: "aac-orga-db"
-    restart: "always"
-    
-    env_file:
-      - .env
-      - stack.env
-
-    volumes:
-      - "/export/docker/aac-orga-db/db_data:/var/lib/postgresql/data"
-
-    networks:
-      - stack_internal
+      traefik.http.routers.aac-zigbee2mqtt.rule: "Host(`prod.aac-zigbee2mqtt.ci-host.int.fam-feser.de`)"
+      traefik.http.routers.aac-zigbee2mqtt.entrypoints: "websecure"
+      traefik.http.routers.aac-zigbee2mqtt.tls: "true"
+      traefik.http.routers.aac-zigbee2mqtt.tls.certresolver: "ionos"
+      traefik.http.services.aac-zigbee2mqtt.loadbalancer.server.port: "8181"
+      traefik.http.services.aac-zigbee2mqtt.loadbalancer.server.scheme: "http"
+      auto-dns.createWildcard.aac-zigbee2mqtt: "false"
+      auto-dns.customDNS.aac-zigbee2mqtt: "false"
+      auto-dns.domain.aac-zigbee2mqtt: "int.fam-feser.de"
+      auto-dns.stage.aac-zigbee2mqtt: "prod"
+      auto-dns.service.aac-zigbee2mqtt: "aac-zigbee2mqtt"
+      auto-dns.hostname.aac-zigbee2mqtt: "ci-host"
+      homepage.group: "Smart-Home"
+      homepage.name: "Zigbee Geräte - Ci Validation Host"
+      homepage.href: "https://prod.aac-zigbee2mqtt.ci-host.int.fam-feser.de"
+      homepage.icon: "zigbee2mqtt.png"
+      homepage.description: "Zigbee Bridge für MQTT"
 
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8181"]
       interval: 30s
-      timeout: 5s
-      retries: 5
+      timeout: 10s
+      retries: 3
+
+    privileged: true
+
+    devices:
+    - /dev/ttyACM0:/dev/ttyACM0
+
+    raw_volumes: []
+
+
 
 networks:
   secured:
@@ -86,6 +70,6 @@ networks:
     name: "docker-default"
     external: true
   stack_internal:
-    name: "aac-orga_stack_internal"
+    name: "aac-zigbee2mqtt_stack_internal"
     driver: "bridge"
 

@@ -1,0 +1,20 @@
+image_repo: "eclipse-mosquitto"
+restart_policy: "always"
+
+volumes:
+  config:
+    description: "Mosquitto configuration"
+    target: "/mosquitto/config"
+  data:
+    description: "Mosquitto persistent data"
+    target: "/mosquitto/data"
+  log:
+    description: "Mosquitto logs"
+    target: "/mosquitto/log"
+
+# Mosquitto doesn't have a built-in healthcheck client, so we check the port
+healthcheck:
+  test: ["CMD-SHELL", "timeout 5s sh -c 'nc -z localhost 1883' || exit 1"]
+  interval: "30s"
+  timeout: "10s"
+  retries: 3

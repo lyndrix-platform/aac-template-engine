@@ -1,8 +1,4 @@
-# This is a reusable GitLab CI/CD pipeline for service repositories.
-# It automates generation, validation, and triggers downstream deployments.
-# WARNING: The commit step has been removed. Downstream pipelines MUST retrieve 
-# the 'deployments/' directory via CI artifacts, NOT via Git clone.
-
+# Reusable GitLab CI/CD pipeline for Modular Template Engine v2
 default:
   tags:
     - docker
@@ -20,7 +16,7 @@ stages:
   - prod-deploy
 
 # ==========================================================================
-# REUSABLE TEMPLATES (.generate-base, .validate-base)
+# REUSABLE TEMPLATES
 # ==========================================================================
 
 .generate-base:
@@ -28,9 +24,10 @@ stages:
     name: registry.gitlab.int.fam-feser.de/iac-environment/iac-platform-assets/ansible-ci-image:latest
     pull_policy: always
   before_script:
+    # Cleanup any old engine clones to prevent conflicts
+    - rm -rf aac-template-engine/
     - git clone "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
-    # Ensure PyYAML is installed (adjust if your CI image already has it)
-    - pip install pyyaml
+    - pip install pyyaml jinja2
   artifacts:
     paths: [deployments/]
     expire_in: 1 hour
@@ -50,46 +47,126 @@ stages:
     - if: '$CI_COMMIT_BRANCH && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
 # ==========================================================================
-# DEV WORKFLOW (runs on 'dev' branch)
+# DEV WORKFLOW (Branch: dev)
 # ==========================================================================
 dev-generate-docker-compose:
   extends: .generate-base
   stage: dev-generate
   script:
-    - python3 aac-template-engine/scripts/manifest_generator/main.py --ssot-json "service.yml" --template-path aac-template-engine --deployment-type "docker_compose" --stage "dev"
+    - cd aac-template-engine/scripts && python3 -m manifest_generator.main --ssot-json "../../service.yml" --template-path ".." --deployment-type "docker_compose" --stage "dev"
   rules:
-    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+    - if: '$CI_COMMIT_BRANCH == "dev"'
 
 dev-generate-custom-files:
   extends: .generate-base
   stage: dev-generate
   script:
-    - python3 aac-template-engine/scripts/manifest_generator/main.py --ssot-json "service.yml" --template-path aac-template-engine --process-files --stage "dev"
+    - cd aac-template-engine/scripts && python3 -m manifest_generator.main --ssot-json "../../service.yml" --template-path ".." --process-files --stage "dev"
   rules:
-    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+    - if: '$CI_COMMIT_BRANCH == "dev"'
       exists: [custom_templates/files/**/*]
 
 dev-generate-documentation:
   extends: .generate-base
   stage: dev-generate 
   script:
-    - python3 aac-template-engine/scripts/manifest_generator/main.py --ssot-json "service.yml" --template-path aac-template-engine --process-documentation --stage "dev"
-  artifacts:
-    paths:
-      - deployments/
+    - cd aac-template-engine/scripts && python3 -m manifest_generator.main --ssot-json "../../service.yml" --template-path ".." --process-documentation --stage "dev"
   needs:
     - dev-generate-docker-compose
     - job: dev-generate-custom-files
       optional: true
   rules:
-    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+    - if: '$CI_COMMIT_BRANCH == "dev"'
 
 dev-validate-docker-compose:
   extends: .validate-base
   stage: dev-validate
   needs: [dev-generate-docker-compose]
   rules:
-    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+    - if: '$CI_COMMIT_BRANCH == "dev"'
+
+# ==========================================================================
+# TEST WORKFLOW (Branch: test)
+# ==========================================================================
+test-generate-docker-compose:
+  extends: .generate-base
+  stage: test-generate
+  script:
+    - cd aac-template-engine/scripts && python3 -m manifest_generator.main --ssot-json "../../service.yml" --template-path ".." --deployment-type "docker_compose" --stage "test"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "test"'
+
+test-validate-docker-compose:
+  extends: .validate-base
+  stage: test-validate
+  needs: [test-generate-docker-compose]
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "test"'
+
+# ==========================================================================
+# PROD WORKFLOW (Branch: main)
+# ==========================================================================
+prod-generate-docker-compose:
+  extends: .generate-base
+  stage: prod-generate
+  script:
+    - cd aac-template-engine/scripts && python3 -m manifest_generator.main --ssot-json "../../service.yml" --template-path ".." --deployment-type "docker_compose" --stage "prod"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+prod-validate-docker-compose:
+  extends: .validate-base
+  stage: prod-validate
+  needs: [prod-generate-docker-compose]
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+# ==========================================================================
+# DOCUMENTATION & PAGES (Branch: main)
+# ==========================================================================
+publish_to_docs:
+  stage: documentation
+  image: 
+    name: registry.gitlab.int.fam-feser.de/iac-environment/iac-platform-assets/ansible-ci-image:latest
+    pull_policy: always
+  needs:
+    - job: prod-generate-docker-compose
+      artifacts: true
+  before_script:
+    - git clone "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
+  script:
+    - python3 aac-template-engine/scripts/publish_docs.py
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+pages:
+  stage: documentation
+  image: 
+    name: registry.gitlab.int.fam-feser.de/iac-environment/iac-platform-assets/ansible-ci-image:latest
+    pull_policy: always
+  needs:
+    - job: prod-generate-docker-compose
+      artifacts: true
+  before_script:
+    - pip install --no-cache-dir zensical
+  script:
+    - mkdir -p docs public
+    - '[ -d "deployments/documentation" ] && cp -r deployments/documentation/* docs/ || true'
+    - |
+      cat <<EOF > mkdocs.yml
+      site_name: "${CI_PROJECT_NAME} Docs"
+      theme: { name: material }
+      EOF
+    - zensical build
+    - '[ -d "site" ] && mv site/* public/ || true'
+  artifacts:
+    paths: [public]
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+# ==========================================================================
+# DEPLOYMENT TRIGGERS
+# ==========================================================================
 
 dev-deploy:
   stage: dev-deploy
@@ -106,49 +183,7 @@ dev-deploy:
     DEPLOYMENT_TYPE: 'single_service_trigger'
   rules:
     # TEMPORARY HACK: Added && "1" == "0" to ensure this evaluates to false
-    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/ && $SKIP_DEPLOYMENT != "true" && "1" == "0"'
-
-# ==========================================================================
-# TEST WORKFLOW (runs on 'test' branch)
-# ==========================================================================
-test-generate-docker-compose:
-  extends: .generate-base
-  stage: test-generate
-  script:
-    - python3 aac-template-engine/scripts/manifest_generator/main.py --ssot-json "service.yml" --template-path aac-template-engine --deployment-type "docker_compose" --stage "test"
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
-
-test-generate-custom-files:
-  extends: .generate-base
-  stage: test-generate
-  script:
-    - python3 aac-template-engine/scripts/manifest_generator/main.py --ssot-json "service.yml" --template-path aac-template-engine --process-files --stage "test"
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
-      exists: [custom_templates/files/**/*]
-
-test-generate-documentation:
-  extends: .generate-base
-  stage: test-generate 
-  script:
-    - python3 aac-template-engine/scripts/manifest_generator/main.py --ssot-json "service.yml" --template-path aac-template-engine --process-documentation --stage "test"
-  artifacts:
-    paths:
-      - deployments/
-  needs:
-    - test-generate-docker-compose
-    - job: test-generate-custom-files
-      optional: true
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
-
-test-validate-docker-compose:
-  extends: .validate-base
-  stage: test-validate
-  needs: [test-generate-docker-compose]
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+    - if: '$CI_COMMIT_BRANCH == "dev" && ... && "1" == "0"'
 
 test-deploy:
   stage: test-deploy
@@ -164,49 +199,7 @@ test-deploy:
     SERVICE_BRANCH: 'test'
     DEPLOYMENT_TYPE: 'single_service_trigger'
   rules:
-    - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/ && $SKIP_DEPLOYMENT != "true"'
-
-# ==========================================================================
-# PROD WORKFLOW (runs on 'main' branch)
-# ==========================================================================
-prod-generate-docker-compose:
-  extends: .generate-base
-  stage: prod-generate
-  script:
-    - python3 aac-template-engine/scripts/manifest_generator/main.py --ssot-json "service.yml" --template-path aac-template-engine --deployment-type "docker_compose" --stage "prod"
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
-
-prod-generate-custom-files:
-  extends: .generate-base
-  stage: prod-generate
-  script:
-    - python3 aac-template-engine/scripts/manifest_generator/main.py --ssot-json "service.yml" --template-path aac-template-engine --process-files --stage "prod"
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
-      exists: [custom_templates/files/**/*]
-
-prod-generate-documentation:
-  extends: .generate-base
-  stage: prod-generate
-  script:
-    - python3 aac-template-engine/scripts/manifest_generator/main.py --ssot-json "service.yml" --template-path aac-template-engine --process-documentation --stage "prod"
-  artifacts:
-    paths:
-      - deployments/
-  needs:
-    - prod-generate-docker-compose
-    - job: prod-generate-custom-files
-      optional: true
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
-
-prod-validate-docker-compose:
-  extends: .validate-base
-  stage: prod-validate
-  needs: [prod-generate-docker-compose]
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+    - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
 prod-deploy:
   stage: prod-deploy
@@ -222,103 +215,5 @@ prod-deploy:
     SERVICE_BRANCH: 'main'
     DEPLOYMENT_TYPE: 'single_service_trigger'
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/ && $SKIP_DEPLOYMENT != "true"'
-      when: on_success
-
-# ==========================================================================
-# DOCUMENTATION WORKFLOW
-# ==========================================================================
-publish_to_docs:
-  stage: documentation
-  image: 
-    name: registry.gitlab.int.fam-feser.de/iac-environment/iac-platform-assets/ansible-ci-image:latest
-    pull_policy: always
-  needs:
-    - job: prod-generate-documentation
-      artifacts: true
-  before_script:
-    - git clone "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
-  script:
-    - python3 aac-template-engine/scripts/publish_docs.py
-  rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
-
-# ==========================================================================
-# GITLAB PAGES WORKFLOW (Zensical)
-# ==========================================================================
-pages:
-  stage: documentation
-  image: 
-    name: registry.gitlab.int.fam-feser.de/iac-environment/iac-platform-assets/ansible-ci-image:latest
-    pull_policy: always
-  needs:
-    - job: prod-generate-documentation
-      artifacts: true
-  before_script:
-    - pip install --no-cache-dir zensical
-  script:
-    - echo "Preparing documentation for GitLab Pages..."
-    - mkdir -p docs public
-    
-    # 1. Merge auto-generated documentation into the local docs/ directory
-    - |
-      if [ -d "deployments/documentation" ]; then
-        echo "Merging generated documentation into docs/..."
-        cp -r deployments/documentation/* docs/ || true
-      fi
-
-    # 2. PRE-FLIGHT CHECK: Do we actually have any markdown files?
-    - |
-      if [ -z "$(ls -A docs/ 2>/dev/null)" ]; then
-        echo "No documentation files found in docs/ or generated artifacts."
-        echo "Skipping Pages deployment to prevent build failure."
-        # Touching an empty file in public/ satisfies the artifact requirement 
-        # without deploying a broken site.
-        touch public/index.html
-        exit 0
-      fi
-
-    # 3. Always Auto-Generate or Override mkdocs.yml for consistency
-    - |
-      echo "Generating standard mkdocs.yml configuration..."
-      cat <<EOF > mkdocs.yml
-      site_name: "${CI_PROJECT_NAME} Documentation"
-      site_description: "Auto-generated internal documentation"
-      site_dir: public
-      theme:
-        name: material
-        features:
-          - navigation.tabs
-          - navigation.sections
-          - toc.integrate
-        palette:
-          - media: "(prefers-color-scheme: dark)"
-            scheme: slate
-            primary: indigo
-            accent: emerald
-            toggle:
-              icon: material/weather-sunny
-              name: Switch to light mode
-          - media: "(prefers-color-scheme: light)"
-            scheme: default
-            primary: indigo
-            accent: emerald
-            toggle:
-              icon: material/weather-night
-              name: Switch to dark mode
-      plugins:
-        - search
-      EOF
-
-    # 4. Build the site
-    - echo "Building site with Zensical..."
-    - zensical build
-
-    # 5. Fallback move in case Zensical ignores the configuration
-    - '[ -d ".cache/site" ] && mv .cache/site/* public/ || true'
-    - '[ -d "site" ] && mv site/* public/ || true'
-  artifacts:
-    paths:
-      - public
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+      when: manual  # Recommended: keep PROD deployment manual for safety
