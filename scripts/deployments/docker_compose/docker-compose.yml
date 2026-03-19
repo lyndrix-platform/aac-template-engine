@@ -1,0 +1,75 @@
+version: "3.8"
+
+services:
+  # --- Main Application Service ---
+  aac-zigbee2mqtt:
+    image: "koenkk/zigbee2mqtt:latest"
+    container_name: "aac-zigbee2mqtt"
+    hostname: "zigbee"
+    restart: "always"
+
+
+    env_file: 
+      - .env
+      - stack.env
+
+
+    volumes:
+      - "/export/docker/aac-zigbee2mqtt/data:/app/data"
+
+    networks:
+      - exposed
+      - interconnect
+      - secured
+      - stack_internal
+
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: "services-secured"
+      traefik.http.routers.aac-zigbee2mqtt.rule: "Host(`prod.aac-zigbee2mqtt.ci-host.int.fam-feser.de`)"
+      traefik.http.routers.aac-zigbee2mqtt.entrypoints: "websecure"
+      traefik.http.routers.aac-zigbee2mqtt.tls: "true"
+      traefik.http.routers.aac-zigbee2mqtt.tls.certresolver: "ionos"
+      traefik.http.services.aac-zigbee2mqtt.loadbalancer.server.port: "8181"
+      traefik.http.services.aac-zigbee2mqtt.loadbalancer.server.scheme: "http"
+      auto-dns.createWildcard.aac-zigbee2mqtt: "false"
+      auto-dns.customDNS.aac-zigbee2mqtt: "false"
+      auto-dns.domain.aac-zigbee2mqtt: "int.fam-feser.de"
+      auto-dns.stage.aac-zigbee2mqtt: "prod"
+      auto-dns.service.aac-zigbee2mqtt: "aac-zigbee2mqtt"
+      auto-dns.hostname.aac-zigbee2mqtt: "ci-host"
+      homepage.group: "Smart-Home"
+      homepage.name: "Zigbee Geräte - Ci Validation Host"
+      homepage.href: "https://prod.aac-zigbee2mqtt.ci-host.int.fam-feser.de"
+      homepage.icon: "zigbee2mqtt.png"
+      homepage.description: "Zigbee Bridge für MQTT"
+
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8181"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+    privileged: true
+
+    devices:
+    - /dev/ttyACM0:/dev/ttyACM0
+
+    raw_volumes: []
+
+
+
+networks:
+  secured:
+    name: "services-secured"
+    external: true
+  exposed:
+    name: "services-exposed"
+    external: true
+  interconnect:
+    name: "docker-default"
+    external: true
+  stack_internal:
+    name: "aac-zigbee2mqtt_stack_internal"
+    driver: "bridge"
+

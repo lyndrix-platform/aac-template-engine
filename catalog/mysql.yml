@@ -1,0 +1,14 @@
+# catalog/mysql.yml
+image_repo: "mysql"
+restart_policy: "always"
+
+volumes:
+  db:
+    description: "MySQL data storage"
+    target: "/var/lib/mysql"
+
+healthcheck:
+  test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+  interval: "30s"
+  timeout: "5s"
+  retries: 5

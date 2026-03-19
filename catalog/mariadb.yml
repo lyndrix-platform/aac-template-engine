@@ -1,0 +1,16 @@
+# catalog/mariadb.yml
+image_repo: "mariadb"
+restart_policy: "always"
+
+# Agnostic Storage Definition (The Shape)
+volumes:
+  db:
+    description: "Primary database storage"
+    type: "bind"
+    target: "/var/lib/mysql"
+
+healthcheck:
+  test: ["CMD", "healthcheck.sh", "--su-mysql", "--connect", "--innodb_initialized"]
+  interval: "30s"
+  timeout: "5s"
+  retries: 5

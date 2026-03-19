@@ -1,120 +1,119 @@
-# ----------------------------------------------------------------
-# Haupt-Service: BookStack
-# Definiert Metadaten, die von Integrationen wie Traefik oder Homepage genutzt werden.
-# ----------------------------------------------------------------
+---
+# 1. CORE SERVICE IDENTITY
 service:
-  name: BookStack
-  description: Dokumentations-Wiki für Notizen und Anleitungen.
-  category: Dev & Code        # Gruppe für die Homepage
-  icon: bookstack.png           # Icon für die Homepage
-  hostname: bookstack           # Hostname für den Container und die DNS-Route
-  image_repo: lscr.io/linuxserver/bookstack
-  image_tag: latest
+  name: "aac-nextcloud"
+  friendly_name: "Cloud"
+  description: "Selfhosted Cloud Plattform"
+  category: "Finanzen - Dokumente - Organisation"
+  icon: "nextcloud.png"
+  stage: "prod"
+  hostname: "cloud"
+  image_repo: "nextcloud"
+  image_tag: "33.0.0"
 
-# ----------------------------------------------------------------
-# Ports des Haupt-Services
-# Der Port wird für das Traefik-Routing benötigt.
-# ----------------------------------------------------------------
-ports:
-  - name: web
-    port: 80 # Der interne Port des Containers, den Traefik anspricht
-
-# ----------------------------------------------------------------
-# Volumes des Haupt-Services
-# Der Pfad wird aus 'host_base_path' + 'name' zusammengesetzt.
-# ----------------------------------------------------------------
-volumes:
-  - name: config
-    path: /config
-
-# ----------------------------------------------------------------
-# Globale Konfiguration für Integrationen
-# ----------------------------------------------------------------
+# 2. PLATFORM INTEGRATIONS
 config:
-  domain_name: int.fam-feser.de
-  routing_enabled: true
-  entrypoint: websecure
-  cert_resolver: ionos
+  domain_name: "int.fam-feser.de"
+  generate_hostname: true
   integrations:
     homepage:
       enabled: true
     autodns:
       enabled: true
-      create_wildcard: true
+    traefik:
+      enabled: true
+      internet_facing: true
+      cert_resolver: "ionos"
+      entrypoint: "websecure"
 
-# ----------------------------------------------------------------
-# Deployment-spezifische Konfigurationen
-# ----------------------------------------------------------------
+stage_overrides:
+  prod:
+    config:
+      generate_hostname: false
+      public_domain_name: "fam-feser.de"
+
+# 3. APPLICATION CONFIGURATION (Moved from dot_env)
+environment:
+  PUID: "1000"
+  PGID: "1000"
+  TZ: "Europe/Berlin"
+  NEXTCLOUD_UPDATE: "1"
+  NEXTCLOUD_INIT_LOCK: "true"
+  NEXTCLOUD_INIT_HTACCESS: "true"
+  NEXTCLOUD_DATA_DIR: "/mnt/data"
+  NEXTCLOUD_UPLOAD_MAX_FILESIZE: "10G"
+  NEXTCLOUD_MAX_FILE_UPLOADS: "200"
+  NEXTCLOUD_TRUSTED_DOMAINS: "cloud.fam-feser.de cloud.int.fam-feser.de nextcloud.fam-feser.de"
+  TRUSTED_PROXIES: "10.1.170.4"
+  APACHE_DISABLE_REWRITE_IP: "1"
+  OVERWRITEHOST: "cloud.fam-feser.de"
+  OVERWRITEPROTOCOL: "https"
+  OVERWRITECLIURL: "https://cloud.fam-feser.de"
+  PHP_MEMORY_LIMIT: "1G"
+  PHP_UPLOAD_LIMIT: "10G"
+  REDIS_HOST: "aac-nextcloud-redis"
+  REDIS_PORT: "6379"
+
+# 4. SECRETS (Moved from stack_env)
+secrets:
+  NEXTCLOUD_ADMIN_USER: "admin"
+  NEXTCLOUD_ADMIN_PASSWORD: "CHANGE_ME"
+  MARIADB_DATABASE: "nextcloud"
+  MARIADB_USER: "nextcloud"
+  MARIADB_PASSWORD: "CHANGE_ME"
+  MARIADB_ROOT_PASSWORD: "CHANGE_ME"
+  HOMEPAGE_WIDGET_USERNAME: "CHANGE_ME"
+  HOMEPAGE_WIDGET_PASSWORD: "CHANGE_ME"
+
+# 5. NETWORK & EXPOSURE
+ports:
+  - name: "web"
+    port: 80
+    external_port: 29765
+    protocol: "TCP"
+
+# 6. STORAGE DEFINITIONS (Agnostic)
+volumes:
+  html:
+    description: "Nextcloud application and web root"
+    target: "/var/www/html"
+  db:
+    description: "Data for database"
+    target: "/var/lib/mysql"
+  redis-data:
+    description: "Data for redis"
+    target: "/data"
+  galaxy_01:
+    type: "bind"
+    source: "/mnt/nextcloud"
+    target: "/mnt/data"
+
+# 7. DEPLOYMENT OVERRIDES
 deployments:
   docker_compose:
-    host_base_path: /export/docker   # Basis-Pfad auf dem Host für alle Volumes
-    restart_policy: unless-stopped
-    healthcheck:
-      test: [CMD, curl, -f, http://localhost]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-
-    # Definition der Docker-Netzwerke für diesen Stack
-    dot_env:
-      PUID: '1000'
-      PGID: '1000'
-      TZ: Europe/Berlin
-      APP_PROXIES: '*'
-      APP_URL: https://{{ service.hostname }}.{{ config.domain_name }}
-      DB_HOST: '{{ dependencies.database.name }}' # Dynamischer Verweis auf den DB-Container
-      DB_PORT: '3306'
-      DB_USERNAME: bookstack
-      DB_DATABASE: bookstack
-      MAIL_DRIVER: smtp
-      MAIL_FROM_NAME: BookStack
-      MAIL_FROM: bookstack@example.com
-      MAIL_HOST: localhost
-      MAIL_PORT: '587'
-      MAIL_USERNAME: 'null'
-      MAIL_PASSWORD: 'null'
-      MAIL_ENCRYPTION: 'null'
-      AUTH_AUTO_INITIATE: 'true'
-      AUTH_METHOD: oidc
-      OIDC_NAME: authentik
-      OIDC_ISSUER: https://test.auth.test-test.de/application/o/bookstack-titan/
-      OIDC_ISSUER_DISCOVER: 'true'
-      OIDC_EMAIL_ATTRIBUTE: email
-      OIDC_DISPLAY_NAME_ATTRIBUTES: name
-      OIDC_END_SESSION_ENDPOINT: 
-        https://auth.test.test-test.de/application/o/bookstack-titan/end-session/
-      OIDC_USER_TO_GROUPS: 'true'
-      OIDC_GROUPS_CLAIM: groups
-      OIDC_ADDITIONAL_SCOPES: groups
-      OIDC_REMOVE_FROM_GROUPS: 'true'
-
-    # Sensible Umgebungsvariablen für BookStack
-    # Werden in die stack.env-Datei geschrieben.
-    stack_env:
-      APP_KEY: test
-      DB_PASSWORD: test
-      OIDC_CLIENT_ID: test
-      OIDC_CLIENT_SECRET: test
-
-# ----------------------------------------------------------------
-# Service-Abhängigkeiten (z.B. Datenbanken)
-# ----------------------------------------------------------------
-dependencies:
-  database: # Logischer Name der Abhängigkeit
-    name: bookstack-db   # Tatsächlicher Container-Name
-    image_repo: mariadb
-    image_tag: latest
+    restart_policy: "always"
+    host_base_path: "/export/docker"
+    # Main service mounts
     volumes:
-      - name: db
-        path: /var/lib/mysql
+      - "html:/var/www/html"
+      - "galaxy_01:/mnt/data"
 
-    # Umgebungsvariablen für die Datenbank.
-    # Die Engine sortiert sie automatisch nach '.env' oder 'stack.env'.
-    environment:
-      MARIADB_DATABASE: bookstack
-      MARIADB_USER: bookstack
-      MARIADB_PASSWORD: test   # Wird als Secret behandelt
-      MARIADB_ROOT_PASSWORD: test       # Wird als Secret behandelt
-
-
- 
+# 8. SIDECAR DEPENDENCIES
+dependencies:
+  database:
+    import: "catalog/mariadb.yml"
+    overrides:
+      name: "aac-nextcloud-db"
+      # renovate: datasource=docker depName=mariadb
+      image_tag: "12.3.1-ubi10-rc"
+      # Global database credentials are automatically inherited from stack.env
+      environment:
+        MARIADB_ALLOW_EMPTY_PASSWORD: "false"
+        MARIADB_RANDOM_ROOT_PASSWORD: "false"
+      
+  redis:
+    import: "catalog/redis.yml"
+    overrides:
+      name: "aac-nextcloud-redis"
+      # renovate: datasource=docker depName=redis
+      image_tag: "8.6.1"

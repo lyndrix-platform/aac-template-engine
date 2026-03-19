@@ -28,7 +28,13 @@ stages:
     name: registry.gitlab.int.fam-feser.de/iac-environment/iac-platform-assets/ansible-ci-image:latest
     pull_policy: always
   before_script:
-    - git clone "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
+    - rm -rf aac-template-engine/
+    # THE CRITICAL FIX: Explicitly clone the 'dev' branch
+    - git clone -b dev "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
+    # Ensure PyYAML and Jinja2 are installed
+    - pip install pyyaml jinja2
+    # Tell Python exactly where the 'manifest_generator' package lives
+    - export PYTHONPATH=$PYTHONPATH:$(pwd)/aac-template-engine/scripts
   artifacts:
     paths: [deployments/]
     expire_in: 1 hour
@@ -54,8 +60,13 @@ dev-generate-docker-compose:
   extends: .generate-base
   stage: dev-generate
   script:
-    - SSOT_JSON=$(python3 -c 'import yaml, json; print(json.dumps(yaml.safe_load(open("service.yml"))))')
-    - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --deployment-type "docker_compose" --stage "dev"
+    - |
+      python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --deployment-type "docker_compose" --stage "dev"
+      echo -e "\n================================================================="
+      echo "IAC DIFF: Comparing newly generated manifests against repository"
+      echo "================================================================="
+      git diff --color deployments/docker_compose/ || true
+      echo -e "=================================================================\n"
   rules:
     - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
@@ -63,8 +74,7 @@ dev-generate-custom-files:
   extends: .generate-base
   stage: dev-generate
   script:
-    - SSOT_JSON=$(python3 -c 'import yaml, json; print(json.dumps(yaml.safe_load(open("service.yml"))))')
-    - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --process-files --stage "dev"
+    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --process-files --stage "dev"
   rules:
     - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
       exists: [custom_templates/files/**/*]
@@ -73,8 +83,7 @@ dev-generate-documentation:
   extends: .generate-base
   stage: dev-generate 
   script:
-    - SSOT_JSON=$(python3 -c 'import yaml, json; print(json.dumps(yaml.safe_load(open("service.yml"))))')
-    - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --process-documentation --stage "dev"
+    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --process-documentation --stage "dev"
   artifacts:
     paths:
       - deployments/
@@ -99,8 +108,7 @@ dev-deploy:
     - dev-generate-documentation
   trigger:
     project: 'iac-environment/iac-ansible-automation'
-    branch: main
-    strategy: depend
+    branch: dev
   variables:
     SERVICE_NAME: $CI_PROJECT_NAME
     SERVICE_BRANCH: 'dev'
@@ -115,8 +123,13 @@ test-generate-docker-compose:
   extends: .generate-base
   stage: test-generate
   script:
-    - SSOT_JSON=$(python3 -c 'import yaml, json; print(json.dumps(yaml.safe_load(open("service.yml"))))')
-    - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --deployment-type "docker_compose" --stage "test"
+    - |
+      python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --deployment-type "docker_compose" --stage "test"
+      echo -e "\n================================================================="
+      echo "IAC DIFF: Comparing newly generated manifests against repository"
+      echo "================================================================="
+      git diff --color deployments/docker_compose/ || true
+      echo -e "=================================================================\n"
   rules:
     - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
@@ -124,8 +137,7 @@ test-generate-custom-files:
   extends: .generate-base
   stage: test-generate
   script:
-    - SSOT_JSON=$(python3 -c 'import yaml, json; print(json.dumps(yaml.safe_load(open("service.yml"))))')
-    - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --process-files --stage "test"
+    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --process-files --stage "test"
   rules:
     - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
       exists: [custom_templates/files/**/*]
@@ -134,8 +146,7 @@ test-generate-documentation:
   extends: .generate-base
   stage: test-generate 
   script:
-    - SSOT_JSON=$(python3 -c 'import yaml, json; print(json.dumps(yaml.safe_load(open("service.yml"))))')
-    - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --process-documentation --stage "test"
+    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --process-documentation --stage "test"
   artifacts:
     paths:
       - deployments/
@@ -160,7 +171,7 @@ test-deploy:
     - test-generate-documentation
   trigger:
     project: 'iac-environment/iac-ansible-automation'
-    branch: main
+    branch: test
     strategy: depend
   variables:
     SERVICE_NAME: $CI_PROJECT_NAME
@@ -176,8 +187,13 @@ prod-generate-docker-compose:
   extends: .generate-base
   stage: prod-generate
   script:
-    - SSOT_JSON=$(python3 -c 'import yaml, json; print(json.dumps(yaml.safe_load(open("service.yml"))))')
-    - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --deployment-type "docker_compose" --stage "prod"
+    - |
+      python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --deployment-type "docker_compose" --stage "prod"
+      echo -e "\n================================================================="
+      echo "IAC DIFF: Comparing newly generated manifests against repository"
+      echo "================================================================="
+      git diff --color deployments/docker_compose/ || true
+      echo -e "=================================================================\n"
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
@@ -185,8 +201,7 @@ prod-generate-custom-files:
   extends: .generate-base
   stage: prod-generate
   script:
-    - SSOT_JSON=$(python3 -c 'import yaml, json; print(json.dumps(yaml.safe_load(open("service.yml"))))')
-    - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --process-files --stage "prod"
+    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --process-files --stage "prod"
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
       exists: [custom_templates/files/**/*]
@@ -195,8 +210,7 @@ prod-generate-documentation:
   extends: .generate-base
   stage: prod-generate
   script:
-    - SSOT_JSON=$(python3 -c 'import yaml, json; print(json.dumps(yaml.safe_load(open("service.yml"))))')
-    - python3 aac-template-engine/scripts/generate_manifest.py --ssot-json "$SSOT_JSON" --template-path aac-template-engine --process-documentation --stage "prod"
+    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --process-documentation --stage "prod"
   artifacts:
     paths:
       - deployments/
@@ -243,7 +257,10 @@ publish_to_docs:
     - job: prod-generate-documentation
       artifacts: true
   before_script:
-    - git clone "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
+    - rm -rf aac-template-engine/
+    # THE CRITICAL FIX: Explicitly clone the 'dev' branch here too
+    - git clone -b dev "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
+    - export PYTHONPATH=$PYTHONPATH:$(pwd)/aac-template-engine/scripts
   script:
     - python3 aac-template-engine/scripts/publish_docs.py
   rules:
