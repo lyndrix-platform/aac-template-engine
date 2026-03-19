@@ -106,7 +106,8 @@ dev-deploy:
     SERVICE_BRANCH: 'dev'
     DEPLOYMENT_TYPE: 'single_service_trigger'
   rules:
-    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/ && $SKIP_DEPLOYMENT != "true"'
+    # TEMPORARY HACK: Added && "1" == "0" to ensure this evaluates to false
+    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/ && $SKIP_DEPLOYMENT != "true" && "1" == "0"'
 
 # ==========================================================================
 # TEST WORKFLOW (runs on 'test' branch)
