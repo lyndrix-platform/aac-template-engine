@@ -61,6 +61,13 @@ dev-generate-docker-compose:
   stage: dev-generate
   script:
     - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --deployment-type "docker_compose" --stage "dev"
+    # --- DIFF CHECK START ---
+    - echo -e "\n================================================================="
+    - echo "🔍 IAC DIFF: Comparing newly generated manifests against repository"
+    - echo "================================================================="
+    - git diff --color deployments/docker_compose/ || true
+    - echo -e "=================================================================\n"
+    # --- DIFF CHECK END ---
   rules:
     - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
@@ -119,6 +126,13 @@ test-generate-docker-compose:
   stage: test-generate
   script:
     - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --deployment-type "docker_compose" --stage "test"
+    # --- DIFF CHECK START ---
+    - echo -e "\n================================================================="
+    - echo "🔍 IAC DIFF: Comparing newly generated manifests against repository"
+    - echo "================================================================="
+    - git diff --color deployments/docker_compose/ || true
+    - echo -e "=================================================================\n"
+    # --- DIFF CHECK END ---
   rules:
     - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
@@ -177,6 +191,13 @@ prod-generate-docker-compose:
   stage: prod-generate
   script:
     - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --deployment-type "docker_compose" --stage "prod"
+    # --- DIFF CHECK START ---
+    - echo -e "\n================================================================="
+    - echo "🔍 IAC DIFF: Comparing newly generated manifests against repository"
+    - echo "================================================================="
+    - git diff --color deployments/docker_compose/ || true
+    - echo -e "=================================================================\n"
+    # --- DIFF CHECK END ---
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
