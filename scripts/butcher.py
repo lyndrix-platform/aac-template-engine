@@ -13,11 +13,32 @@ CATALOG_MAP = {
     "postgres": "catalog/postgres.yml"
 }
 
-# Secrets that should ALWAYS be at the root, never in a dependency block
+# Secrets that should ALWAYS be at the root for stack.env inheritance
 GLOBAL_SECRETS = [
+    # PostgreSQL
     "POSTGRES_PASSWORD", "POSTGRES_USER", "POSTGRES_DB",
+    
+    # MariaDB / MySQL
     "MARIADB_PASSWORD", "MARIADB_ROOT_PASSWORD", "MARIADB_USER", "MARIADB_DATABASE",
-    "REDIS_PASSWORD"
+    "MYSQL_PASSWORD", "MYSQL_ROOT_PASSWORD", "MYSQL_USER", "MYSQL_DATABASE",
+    
+    # Redis
+    "REDIS_PASSWORD",
+    
+    # MongoDB
+    "MONGO_INITDB_ROOT_USERNAME", "MONGO_INITDB_ROOT_PASSWORD",
+    
+    # InfluxDB
+    "DOCKER_INFLUXDB_INIT_PASSWORD", "DOCKER_INFLUXDB_INIT_ADMIN_TOKEN",
+    
+    # Meilisearch / Search
+    "MEILI_MASTER_KEY", "TYPESENSE_API_KEY",
+    
+    # MQTT
+    "MQTT_PASSWORD", "MQTT_USER",
+    
+    # General / Common
+    "DB_PASSWORD", "DATABASE_URL", "JWT_SECRET"
 ]
 
 # Legacy Jinja variables that the new engine handles natively (we delete these)
@@ -52,23 +73,32 @@ def normalize_volumes(vol_data):
     return normalized
 
 def clean_environment(env_dict, target_secrets=None):
-    """Removes redundant variables and siphons secrets to a target dict."""
+    """
+    1. Removes redundant Jinja variables.
+    2. Siphons 'Global Secrets' to the root secrets dictionary.
+    3. Strips legacy Jinja interpolation strings.
+    """
     if not isinstance(env_dict, dict):
         return {}
     
     cleaned = {}
     for k, v in env_dict.items():
+        # Rule 1: Delete redundant engine variables
         if k in REDUNDANT_VARS:
             continue
         
-        # Siphon to global secrets if target_secrets is provided
-        if target_secrets is not None and k in GLOBAL_SECRETS:
-            target_secrets[k] = str(v)
-            continue
+        # Rule 2: Siphon secrets to the root level
+        if target_secrets is not None:
+            if k in GLOBAL_SECRETS or "PASSWORD" in k or "SECRET" in k or "TOKEN" in k:
+                target_secrets[k] = str(v)
+                continue
 
-        # Strip legacy Jinja interpolation
-        if isinstance(v, str) and '{{' in v and ('stack_env' in v or 'service.name' in v):
-            continue
+        # Rule 3: Strip legacy Jinja strings
+        if isinstance(v, str) and '{{' in v:
+            # If the variable was just a pointer to another env var, we drop it
+            # because the new engine handles inheritance natively.
+            if 'stack_env' in v or 'dot_env' in v or 'service.name' in v:
+                continue
             
         cleaned[k] = str(v)
     return cleaned
