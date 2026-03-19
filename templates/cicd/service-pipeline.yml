@@ -24,7 +24,6 @@ stages:
     name: registry.gitlab.int.fam-feser.de/iac-environment/iac-platform-assets/ansible-ci-image:latest
     pull_policy: always
   before_script:
-    # Cleanup any old engine clones to prevent conflicts
     - rm -rf aac-template-engine/
     - git clone "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
     - pip install pyyaml jinja2
@@ -47,7 +46,7 @@ stages:
     - if: '$CI_COMMIT_BRANCH && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
 # ==========================================================================
-# DEV WORKFLOW (Branch: dev)
+# DEV WORKFLOW
 # ==========================================================================
 dev-generate-docker-compose:
   extends: .generate-base
@@ -57,24 +56,12 @@ dev-generate-docker-compose:
   rules:
     - if: '$CI_COMMIT_BRANCH == "dev"'
 
-dev-generate-custom-files:
-  extends: .generate-base
-  stage: dev-generate
-  script:
-    - cd aac-template-engine/scripts && python3 -m manifest_generator.main --ssot-json "../../service.yml" --template-path ".." --process-files --stage "dev"
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "dev"'
-      exists: [custom_templates/files/**/*]
-
 dev-generate-documentation:
   extends: .generate-base
   stage: dev-generate 
   script:
     - cd aac-template-engine/scripts && python3 -m manifest_generator.main --ssot-json "../../service.yml" --template-path ".." --process-documentation --stage "dev"
-  needs:
-    - dev-generate-docker-compose
-    - job: dev-generate-custom-files
-      optional: true
+  needs: [dev-generate-docker-compose]
   rules:
     - if: '$CI_COMMIT_BRANCH == "dev"'
 
@@ -85,14 +72,37 @@ dev-validate-docker-compose:
   rules:
     - if: '$CI_COMMIT_BRANCH == "dev"'
 
+dev-deploy:
+  stage: dev-deploy
+  needs: [dev-validate-docker-compose, dev-generate-documentation]
+  trigger:
+    project: 'iac-environment/iac-ansible-automation'
+    branch: main
+    strategy: depend
+  variables:
+    SERVICE_NAME: $CI_PROJECT_NAME
+    SERVICE_BRANCH: 'dev'
+    DEPLOYMENT_TYPE: 'single_service_trigger'
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+
 # ==========================================================================
-# TEST WORKFLOW (Branch: test)
+# TEST WORKFLOW
 # ==========================================================================
 test-generate-docker-compose:
   extends: .generate-base
   stage: test-generate
   script:
     - cd aac-template-engine/scripts && python3 -m manifest_generator.main --ssot-json "../../service.yml" --template-path ".." --deployment-type "docker_compose" --stage "test"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "test"'
+
+test-generate-documentation:
+  extends: .generate-base
+  stage: test-generate 
+  script:
+    - cd aac-template-engine/scripts && python3 -m manifest_generator.main --ssot-json "../../service.yml" --template-path ".." --process-documentation --stage "test"
+  needs: [test-generate-docker-compose]
   rules:
     - if: '$CI_COMMIT_BRANCH == "test"'
 
@@ -103,14 +113,37 @@ test-validate-docker-compose:
   rules:
     - if: '$CI_COMMIT_BRANCH == "test"'
 
+test-deploy:
+  stage: test-deploy
+  needs: [test-validate-docker-compose, test-generate-documentation]
+  trigger:
+    project: 'iac-environment/iac-ansible-automation'
+    branch: main
+    strategy: depend
+  variables:
+    SERVICE_NAME: $CI_PROJECT_NAME
+    SERVICE_BRANCH: 'test'
+    DEPLOYMENT_TYPE: 'single_service_trigger'
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+
 # ==========================================================================
-# PROD WORKFLOW (Branch: main)
+# PROD WORKFLOW
 # ==========================================================================
 prod-generate-docker-compose:
   extends: .generate-base
   stage: prod-generate
   script:
     - cd aac-template-engine/scripts && python3 -m manifest_generator.main --ssot-json "../../service.yml" --template-path ".." --deployment-type "docker_compose" --stage "prod"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+prod-generate-documentation:
+  extends: .generate-base
+  stage: prod-generate 
+  script:
+    - cd aac-template-engine/scripts && python3 -m manifest_generator.main --ssot-json "../../service.yml" --template-path ".." --process-documentation --stage "prod"
+  needs: [prod-generate-docker-compose]
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
 
@@ -121,17 +154,30 @@ prod-validate-docker-compose:
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
 
+prod-deploy:
+  stage: prod-deploy
+  needs: [prod-validate-docker-compose, prod-generate-documentation]
+  trigger:
+    project: 'iac-environment/iac-ansible-automation'
+    branch: main
+    strategy: depend
+  variables:
+    SERVICE_NAME: $CI_PROJECT_NAME
+    SERVICE_BRANCH: 'main'
+    DEPLOYMENT_TYPE: 'single_service_trigger'
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+      when: manual
+
 # ==========================================================================
-# DOCUMENTATION & PAGES (Branch: main)
+# DOCUMENTATION & PAGES
 # ==========================================================================
 publish_to_docs:
   stage: documentation
   image: 
     name: registry.gitlab.int.fam-feser.de/iac-environment/iac-platform-assets/ansible-ci-image:latest
     pull_policy: always
-  needs:
-    - job: prod-generate-docker-compose
-      artifacts: true
+  needs: [prod-generate-documentation]
   before_script:
     - git clone "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
   script:
@@ -144,9 +190,7 @@ pages:
   image: 
     name: registry.gitlab.int.fam-feser.de/iac-environment/iac-platform-assets/ansible-ci-image:latest
     pull_policy: always
-  needs:
-    - job: prod-generate-docker-compose
-      artifacts: true
+  needs: [prod-generate-documentation]
   before_script:
     - pip install --no-cache-dir zensical
   script:
@@ -163,57 +207,3 @@ pages:
     paths: [public]
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
-
-# ==========================================================================
-# DEPLOYMENT TRIGGERS
-# ==========================================================================
-
-dev-deploy:
-  stage: dev-deploy
-  needs: 
-    - dev-validate-docker-compose
-    - dev-generate-documentation
-  trigger:
-    project: 'iac-environment/iac-ansible-automation'
-    branch: main
-    strategy: depend
-  variables:
-    SERVICE_NAME: $CI_PROJECT_NAME
-    SERVICE_BRANCH: 'dev'
-    DEPLOYMENT_TYPE: 'single_service_trigger'
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE == "TRIGGER_FORCE_DISABLED"'
-      when: never
-
-test-deploy:
-  stage: test-deploy
-  needs: 
-    - test-validate-docker-compose
-    - test-generate-documentation
-  trigger:
-    project: 'iac-environment/iac-ansible-automation'
-    branch: main
-    strategy: depend
-  variables:
-    SERVICE_NAME: $CI_PROJECT_NAME
-    SERVICE_BRANCH: 'test'
-    DEPLOYMENT_TYPE: 'single_service_trigger'
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
-
-prod-deploy:
-  stage: prod-deploy
-  needs: 
-    - prod-validate-docker-compose
-    - prod-generate-documentation
-  trigger:
-    project: 'iac-environment/iac-ansible-automation'
-    branch: main
-    strategy: depend
-  variables:
-    SERVICE_NAME: $CI_PROJECT_NAME
-    SERVICE_BRANCH: 'main'
-    DEPLOYMENT_TYPE: 'single_service_trigger'
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
-      when: manual  # Recommended: keep PROD deployment manual for safety
