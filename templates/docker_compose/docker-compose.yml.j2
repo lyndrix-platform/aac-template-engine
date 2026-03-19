@@ -1,4 +1,3 @@
-
 services:
   # --- Main Application Service ---
   {{ service.name | lower }}:
@@ -10,12 +9,7 @@ services:
     {% if deployments.docker_compose.command is defined %}
     command:
       {% for cmd_item in deployments.docker_compose.command %}
-      {% if '\n' in cmd_item %}
-      - |
-{{ cmd_item | indent(8) }}
-      {% else %}
-      - "{{ cmd_item }}"
-      {% endif %}
+      - {{ cmd_item | tojson }}
       {% endfor %}
     {% endif %}
 
@@ -25,23 +19,17 @@ services:
 
     {% if processed_ports %}
     ports:
-      {% for p in processed_ports %}
-      - "{{ p }}"
-      {% endfor %}
+      {% for p in processed_ports %}- "{{ p }}"{% endfor %}
     {% endif %}
 
     {% if processed_volumes %}
     volumes:
-      {% for vol in processed_volumes %}
-      - "{{ vol }}"
-      {% endfor %}
+      {% for vol in processed_volumes %}- "{{ vol }}"{% endfor %}
     {% endif %}
 
     {% if processed_networks %}
     networks:
-      {% for net in processed_networks %}
-      - {{ net }}
-      {% endfor %}
+      {% for net in processed_networks %}- {{ net }}{% endfor %}
     {% endif %}
 
     {% if processed_labels %}
@@ -51,7 +39,7 @@ services:
       {% endfor %}
     {% endif %}
 
-    {% if deployments.docker_compose.healthcheck is defined %}
+    {% if deployments.docker_compose.healthcheck %}
     healthcheck:
       test: {{ deployments.docker_compose.healthcheck.test | tojson }}
       interval: {{ deployments.docker_compose.healthcheck.interval | default('30s') }}
@@ -59,72 +47,43 @@ services:
       retries: {{ deployments.docker_compose.healthcheck.retries | default(3) }}
     {% endif %}
 
-    {# --- NEW: Smart Specs Block (Zero Logic) --- #}
+    {# --- SMART SPECS (deploy, network_mode, devices, extra_hosts, etc.) --- #}
     {% if processed_specs %}
 {{ processed_specs | to_yaml(indent=2) | indent(4, first=true) }}
     {% endif %}
 
-    {# Catch-all for extra DC options (e.g., logging) #}
-    {# CRITICAL FIX: Added advanced keys so the catch-all ignores them and doesn't duplicate them! #}
-    {% set known_keys = ['command', 'restart_policy', 'host_base_path', 'networks_to_join', 'network_definitions', 'volumes', 'healthcheck', 'depends_on', 'environment', 'secrets', 'network_mode', 'user', 'working_dir', 'privileged', 'runtime', 'cap_add', 'cap_drop', 'devices', 'deploy', 'security_opt', 'security_opts'] %}
-    {% for key, value in deployments.docker_compose.items() %}
-      {% if key not in known_keys %}
-{{ {key: value} | to_yaml(indent=2) | indent(4, first=true) }}
-      {% endif %}
-    {% endfor %}
-
-{% if dependencies is defined and dependencies %}
+{% if dependencies %}
   # --- Service Dependencies (Sidecars) ---
 {% for dep_name, dep_config in dependencies.items() %}
   {{ dep_config.name }}:
     image: "{{ dep_config.image_repo }}:{{ dep_config.image_tag }}"
     container_name: "{{ dep_config.name }}"
     restart: "{{ dep_config.restart_policy | default('always') }}"
-    
-    env_file:
-      - .env
-      - stack.env
+    env_file: [.env, stack.env]
 
     {% if dep_config.processed_volumes %}
     volumes:
-      {% for vol in dep_config.processed_volumes %}
-      - "{{ vol }}"
-      {% endfor %}
+      {% for vol in dep_config.processed_volumes %}- "{{ vol }}"{% endfor %}
     {% endif %}
 
     {% if dep_config.processed_networks %}
     networks:
-      {% for net in dep_config.processed_networks %}
-      - {{ net }}
-      {% endfor %}
+      {% for net in dep_config.processed_networks %}- {{ net }}{% endfor %}
     {% endif %}
 
-    {% if dep_config.healthcheck %}
-    healthcheck:
-      test: {{ dep_config.healthcheck.test | tojson }}
-      interval: {{ dep_config.healthcheck.interval | default('30s') }}
-      timeout: {{ dep_config.healthcheck.timeout | default('5s') }}
-      retries: {{ dep_config.healthcheck.retries | default(5) }}
-    {% endif %}
-
-    {# --- NEW: Smart Specs Block for Sidecars (Zero Logic) --- #}
     {% if dep_config.processed_specs %}
 {{ dep_config.processed_specs | to_yaml(indent=2) | indent(4, first=true) }}
     {% endif %}
-
 {% endfor %}
 {% endif %}
 
+{# --- Infrastructure Globals --- #}
 {% if network_definitions %}
 networks:
 {% for net_id, net_def in network_definitions.items() %}
   {{ net_id }}:
     name: "{{ net_def.name }}"
-    {% if net_def.external %}
-    external: true
-    {% else %}
-    driver: "{{ net_def.driver | default('bridge') }}"
-    {% endif %}
+    {% if net_def.external %}external: true{% else %}driver: bridge{% endif %}
 {% endfor %}
 {% endif %}
 
@@ -132,14 +91,6 @@ networks:
 volumes:
 {% for vol_id, vol_def in named_volumes.items() %}
   {{ vol_id }}:
-    {% if vol_def.driver %}
-    driver: "{{ vol_def.driver }}"
-    {% endif %}
-    {% if vol_def.driver_opts %}
-    driver_opts:
-      {% for k, v in vol_def.driver_opts.items() %}
-      {{ k }}: "{{ v }}"
-      {% endfor %}
-    {% endif %}
+    {% if vol_def.driver %}driver: "{{ vol_def.driver }}"{% endif %}
 {% endfor %}
 {% endif %}

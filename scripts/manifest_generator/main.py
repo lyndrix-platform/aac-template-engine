@@ -1,3 +1,4 @@
+# scripts/manifest_generator/main.py
 import argparse
 import sys
 import os
@@ -52,7 +53,8 @@ def main():
     ssot_input = args.ssot_json
     if os.path.isfile(ssot_input):
         print(f"  [I] Reading SSoT from file: {ssot_input}")
-        with open(ssot_input, 'r', encoding='utf-8') as f:
+        # CRITICAL FIX: utf-8-sig ignores the Windows/PowerShell BOM
+        with open(ssot_input, 'r', encoding='utf-8-sig') as f:
             if ssot_input.endswith(('.yml', '.yaml')):
                 parsed_yaml = yaml.safe_load(f)
                 ssot_input = json.dumps(parsed_yaml)
