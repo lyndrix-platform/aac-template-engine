@@ -109,7 +109,6 @@ dev-deploy:
   trigger:
     project: 'iac-environment/iac-ansible-automation'
     branch: dev
-    strategy: depend
   variables:
     SERVICE_NAME: $CI_PROJECT_NAME
     SERVICE_BRANCH: 'dev'
