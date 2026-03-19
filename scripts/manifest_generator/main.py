@@ -1,4 +1,3 @@
-# scripts/manifest_generator/main.py
 import argparse
 import sys
 import os
@@ -17,6 +16,7 @@ from .processors.networks import NetworkProcessor
 from .processors.ingress import IngressProcessor
 from .processors.specs import SpecProcessor
 from .processors.volumes import VolumeProcessor
+from .processors.ansible import AnsibleProcessor # <-- NEW: Import Ansible Processor
 
 def main():
     parser = argparse.ArgumentParser(description="Modular Manifest Generator")
@@ -25,7 +25,6 @@ def main():
     parser.add_argument('--stage', required=True, help="Deployment stage (dev, prod)")
     parser.add_argument('--deployment-type', default='docker_compose')
     
-    # HIER IST DER FIX: Die CI-Pipeline schickt diese Argumente mit!
     parser.add_argument('--process-documentation', action='store_true', help="Generate documentation")
     parser.add_argument('--process-files', action='store_true', help="Process custom files")
     
@@ -55,22 +54,29 @@ def main():
             NetworkProcessor(),
             IngressProcessor(),
             SpecProcessor(),
-            VolumeProcessor()
+            VolumeProcessor(),
+            AnsibleProcessor() # <-- NEW: Run Ansible calculations last
         ]
 
         for proc in processors:
             context = proc.process(context)
 
-        # 3. Render Manifests
+        # 3. Dump the fully rendered context for Ansible to consume
+        # This creates 'deployments/ansible_context.json'
+        output_dir = os.path.join(os.getcwd(), "deployments")
+        os.makedirs(output_dir, exist_ok=True)
+        with open(os.path.join(output_dir, "ansible_context.json"), "w", encoding="utf-8") as f:
+            json.dump(context, f, indent=2)
+
+        # 4. Render Manifests
         engine = ManifestEngine(args.template_path, os.getcwd())
         
-        # 4. Weiche für die CI-Jobs
+        # 5. Weiche für die CI-Jobs
         if args.process_documentation:
             print("  [I] Processing Documentation...")
             if hasattr(engine, 'render_documentation'):
                 engine.render_documentation(context)
             else:
-                # Fallback, falls die Methode im neuen Engine-Code fehlt
                 engine.render_all(context, args.deployment_type)
                 
         elif args.process_files:
