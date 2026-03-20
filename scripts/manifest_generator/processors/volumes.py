@@ -39,6 +39,9 @@ class VolumeProcessor(BaseProcessor):
 
         context['processed_volumes'] = []
         context['named_volumes'] = {}
+        
+        
+        
 
         # 1. Process Main Service Volumes
         for mount_str in dc.get('volumes', []):
@@ -48,8 +51,12 @@ class VolumeProcessor(BaseProcessor):
             v_id = mount_str.split(':')[0]
             v_def = vol_defs.get(v_id, {})
 
+            # FIX: This must use 'mount_str', NOT 'mock_mount_str'
             vol_string = self._generate_volume_string(v_id, v_def, main_svc, base_path, context, mount_str)
             context['processed_volumes'].append(vol_string)
+            
+            
+            
 
         # 2. Automatically lift any lingering 'raw_volumes' and append them directly 
         #    This ensures backward compatibility during the migration phase
@@ -57,7 +64,7 @@ class VolumeProcessor(BaseProcessor):
             if raw_vol not in context['processed_volumes']:
                 context['processed_volumes'].append(raw_vol)
 
-        # 3. Process Dependency Volumes (Sidecars)
+            # 3. Process Dependency Volumes (Sidecars)
         deps = context.get('dependencies', {})
         if isinstance(deps, dict):
             for dep_name, dep_cfg in deps.items():
@@ -79,7 +86,8 @@ class VolumeProcessor(BaseProcessor):
                     if flags:
                         mock_mount_str += f":{flags}"
                         
-                    vol_string = self._generate_volume_string(v_id, v_def, dep_svc_name, base_path, context, mock_mount_str)
+                    # THE ACTUAL FIX: Change 'dep_svc_name' to 'main_svc' here
+                    vol_string = self._generate_volume_string(v_id, v_def, main_svc, base_path, context, mock_mount_str)
                     dep_cfg['processed_volumes'].append(vol_string)
 
         return context
