@@ -20,9 +20,12 @@ class IngressProcessor(BaseProcessor):
         else:
             fqdn = f"{stage}.{name}.{host}.{domain}"
             
+        # PUBLIC FQDN LOGIC (Updated to support custom public_hostname)
         public_fqdn = None
         if ints.get('traefik', {}).get('internet_facing') and cfg.get('public_domain_name'):
-            public_fqdn = f"{svc.get('hostname', name)}.{cfg['public_domain_name']}"
+            # Grab the custom public hostname if it exists, otherwise fall back to the internal hostname
+            pub_host = cfg.get('public_hostname', svc.get('hostname', name))
+            public_fqdn = f"{pub_host}.{cfg['public_domain_name']}"
 
         labels = {}
 
@@ -30,6 +33,8 @@ class IngressProcessor(BaseProcessor):
         if ints.get('traefik', {}).get('enabled'):
             t = ints['traefik']
             rule = f"Host(`{fqdn}`)"
+            
+            # If a public FQDN was generated, append it to the Traefik rule
             if public_fqdn:
                 rule += f" || Host(`{public_fqdn}`)"
                 
@@ -71,6 +76,7 @@ class IngressProcessor(BaseProcessor):
             labels.update({
                 "homepage.group": svc.get('category', 'Management'),
                 "homepage.name": f"{svc.get('friendly_name', name)} - {inv_friendly}",
+                # Homepage will now correctly link to the public FQDN if it exists
                 "homepage.href": h.get('href', f"https://{public_fqdn if public_fqdn else fqdn}"),
                 "homepage.icon": svc.get('icon', 'default.png'),
                 "homepage.description": svc.get('description', '')
