@@ -121,6 +121,7 @@ dev-deploy:
   trigger:
     project: 'iac-environment/iac-ansible-automation'
     branch: $ANSIBLE_BRANCH
+    strategy: depend
   variables:
     SERVICE_NAME: $CI_PROJECT_NAME
     SERVICE_BRANCH: 'dev'
@@ -140,7 +141,7 @@ dev-promote:
     TARGET_BRANCH: "test"
   rules:
     - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
-
+      when: on_success
 # ==========================================================================
 # TEST WORKFLOW (runs on 'test' branch)
 # ==========================================================================
@@ -211,6 +212,7 @@ test-promote:
     TARGET_BRANCH: "main"
   rules:
     - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+      when: on_success
 
 # ==========================================================================
 # PROD WORKFLOW (runs on 'main' branch)
