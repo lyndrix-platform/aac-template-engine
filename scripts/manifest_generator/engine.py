@@ -68,3 +68,33 @@ class ManifestEngine:
             with open(output_file, 'w', encoding='utf-8') as f:
                 f.write(template.render(context))
                 
+    def render_files(self, context: dict):
+        base_src_dir = os.path.join(self.service_path, 'custom_templates', 'files')
+        if not os.path.exists(base_src_dir):
+            print("  [>] No custom files directory found. Skipping.")
+            return
+
+        # Load templates directly from the custom files directory
+        loader = FileSystemLoader(base_src_dir)
+        env = Environment(loader=loader, trim_blocks=True, lstrip_blocks=True)
+        env.filters['to_yaml'] = self._to_yaml_filter
+
+        output_base_dir = os.path.join("deployments", "files")
+
+        for template_name in env.list_templates():
+            if not template_name.endswith('.j2'): 
+                continue
+                
+            print(f"  [>] Rendering Custom File: {template_name}")
+            template = env.get_template(template_name)
+            
+            # This preserves subdirectory structures (e.g. data/seatcupra.netrc.j2 -> data/seatcupra.netrc)
+            relative_out_path = template_name.replace('.j2', '')
+            output_file = os.path.join(output_base_dir, relative_out_path)
+            
+            # Ensure the target subdirectories exist
+            os.makedirs(os.path.dirname(output_file), exist_ok=True)
+            
+            with open(output_file, 'w', encoding='utf-8') as f:
+                f.write(template.render(context))
+                
