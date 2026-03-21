@@ -27,7 +27,7 @@ Diese Datei definiert den Hauptservice und seine Abhängigkeiten wie Datenbanken
 Diese Variablen enthalten allgemeine Konfigurationen und sind nicht als geheim eingestuft.
 
 ```ini
-{% for key, value in processed_env.items() -%}
+{% for key, value in processed_env.items() %}
 {{ key }}="{{ value }}"
 {% endfor %}
 ```
@@ -39,11 +39,12 @@ Diese Variablen enthalten allgemeine Konfigurationen und sind nicht als geheim e
 Diese Datei enthält sensible Daten wie Passwörter, API-Keys oder Tokens. **Sie sollte niemals in Git eingecheckt werden.**
 
 ```ini
-{% for key, value in processed_secrets.items() -%}
+{% for key, value in processed_secrets.items() %}
 {{ key }}="********"
 {% endfor %}
 ```
 {% endif %}
+
 ---
 
 ## 3. Volumes und Datenhaltung
@@ -52,10 +53,11 @@ Persistente Daten für diesen Service werden auf dem Host-System unter folgendem
 
 {% if ansible_directories %}
 Definierte Mount-Pfade und Berechtigungen:
+
 {% for dir in ansible_directories %}
 * **Host-Pfad:** `{{ dir.path }}`
-    * **Besitzer (UID):** `{{ dir.owner }}`
-    * **Gruppe (GID):** `{{ dir.group }}`
+  * **Besitzer (UID):** `{{ dir.owner }}`
+  * **Gruppe (GID):** `{{ dir.group }}`
 {% endfor %}
 {% endif %}
 
