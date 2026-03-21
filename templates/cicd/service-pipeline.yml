@@ -80,6 +80,7 @@ dev-generate-docker-compose:
   script:
     - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --deployment-type "docker_compose" --stage "dev"
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "dev"'
     - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
 dev-generate-custom-files:
@@ -88,6 +89,7 @@ dev-generate-custom-files:
   script:
     - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --process-files --stage "dev"
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "dev"'
     - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
       exists: [custom_templates/files/**/*]
 
@@ -103,6 +105,7 @@ dev-generate-documentation:
     - job: dev-generate-custom-files
       optional: true
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "dev"'
     - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
 dev-validate-docker-compose:
@@ -110,6 +113,7 @@ dev-validate-docker-compose:
   stage: dev-validate
   needs: [dev-generate-docker-compose]
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "dev"'
     - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
 # DEV DEPLOY
@@ -151,6 +155,7 @@ test-generate-docker-compose:
   script:
     - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --deployment-type "docker_compose" --stage "test"
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "test"'
     - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
 test-generate-custom-files:
@@ -159,6 +164,7 @@ test-generate-custom-files:
   script:
     - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --process-files --stage "test"
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "test"'
     - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
       exists: [custom_templates/files/**/*]
 
@@ -174,6 +180,7 @@ test-generate-documentation:
     - job: test-generate-custom-files
       optional: true
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "test"'
     - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
 test-validate-docker-compose:
@@ -181,6 +188,7 @@ test-validate-docker-compose:
   stage: test-validate
   needs: [test-generate-docker-compose]
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "test"'
     - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
 # TEST DEPLOY
@@ -223,6 +231,7 @@ prod-generate-docker-compose:
   script:
     - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --deployment-type "docker_compose" --stage "prod"
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
 prod-generate-custom-files:
@@ -231,6 +240,7 @@ prod-generate-custom-files:
   script:
     - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --process-files --stage "prod"
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
       exists: [custom_templates/files/**/*]
 
@@ -246,6 +256,7 @@ prod-generate-documentation:
     - job: prod-generate-custom-files
       optional: true
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
 prod-validate-docker-compose:
@@ -253,6 +264,7 @@ prod-validate-docker-compose:
   stage: prod-validate
   needs: [prod-generate-docker-compose]
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
 # PROD DEPLOY
