@@ -6,7 +6,7 @@ stages:
 
 yaml-syntax-check:
   stage: lint
-  image: python:3.11-slim
+  image: python:3.14-slim
   before_script:
     - pip install PyYAML
   script:
@@ -19,7 +19,7 @@ yaml-syntax-check:
 
 python-unit-tests:
   stage: test
-  image: python:3.11-slim
+  image: python:3.14-slim
   before_script:
     - pip install pytest pyyaml
     # Ensure the scripts directory is treated as a module
