@@ -2,10 +2,10 @@
 
 ## 1. Service-Übersicht
 
-*   **Beschreibung:** {{ service.description | default('Keine Beschreibung vorhanden.') }}
-*   **Kategorie:** {{ service.category | default('Unkategorisiert') }}
-*   **Hostname:** `{{ service.hostname }}.{{ config.domain_name }}`
-*   **Docker Image:** `{{ service.image_repo }}:{{ service.image_tag }}`
+* **Beschreibung:** {{ service.description | default('Keine Beschreibung vorhanden.') }}
+* **Kategorie:** {{ service.category | default('Unkategorisiert') }}
+* **Hostname:** `{{ service.hostname }}.{{ config.domain_name }}`
+* **Docker Image:** `{{ service.image_repo }}:{{ service.image_tag }}`
 
 ---
 
@@ -18,56 +18,44 @@ Die folgenden Konfigurationsdateien werden automatisch von der AAC Template Engi
 Diese Datei definiert den Hauptservice und seine Abhängigkeiten wie Datenbanken oder Redis.
 
 ```yaml
-{{ DOCKER_COMPOSE_CONTENT }}
+{{ deployments.docker_compose | to_yaml }}
 ```
-{% if DOT_ENV_CONTENT %}
+
+{% if processed_env %}
 ### 2.2 Nicht-geheime Umgebungsvariablen (`.env`)
 
 Diese Variablen enthalten allgemeine Konfigurationen und sind nicht als geheim eingestuft.
 
-
 ```ini
-
-{% for key, value in DOT_ENV_CONTENT.items() -%}
+{% for key, value in processed_env.items() -%}
 {{ key }}="{{ value }}"
 {% endfor %}
-
 ```
 {% endif %}
 
-{% if STACK_ENV_CONTENT %}
+{% if processed_secrets %}
 ### 2.3 Geheime Umgebungsvariablen (`stack.env`)
 
 Diese Datei enthält sensible Daten wie Passwörter, API-Keys oder Tokens. **Sie sollte niemals in Git eingecheckt werden.**
 
 ```ini
-
-{% for key, value in STACK_ENV_CONTENT.items() -%}
-{{ key }}="{{ value }}"
+{% for key, value in processed_secrets.items() -%}
+{{ key }}="********"
 {% endfor %}
-
 ```
 {% endif %}
 ---
 
 ## 3. Volumes und Datenhaltung
 
-Persistente Daten für diesen Service werden auf dem Host-System unter folgendem Basispfad gespeichert: `{{ deployments.docker_compose.host_base_path }}/{{ service.name }}`.
+Persistente Daten für diesen Service werden auf dem Host-System unter folgendem Basispfad gespeichert: `{{ deployments.docker_compose.host_base_path }}/{{ service.name | lower }}`.
 
-{% if volumes_processed %}
-Definierte Volumes:
-{% for volume in volumes_processed %}
-*   **`{{ volume.name }}`**:
-    *   **Container-Pfad:** `{{ volume.path }}`
-    *   **Host-Pfad:** {% if volume.type == 'bind' %}`{{ volume.source }}` (Bind Mount){% else %}`{{ deployments.docker_compose.host_base_path }}/{{ service.name }}/{{ volume.name }}`{% endif %}
-    *   **Beschreibung:** {{ volume.description | default('Keine Beschreibung.') }}
-{% endfor %}
-{% endif %}
-
-{% if deployments.docker_compose.raw_volumes %}
-Zusätzlich werden folgende Host-Pfade direkt gemountet (`raw_volumes`):
-{% for raw_volume in deployments.docker_compose.raw_volumes %}
-*   `{{ raw_volume }}`
+{% if ansible_directories %}
+Definierte Mount-Pfade und Berechtigungen:
+{% for dir in ansible_directories %}
+* **Host-Pfad:** `{{ dir.path }}`
+    * **Besitzer (UID):** `{{ dir.owner }}`
+    * **Gruppe (GID):** `{{ dir.group }}`
 {% endfor %}
 {% endif %}
 
@@ -75,5 +63,6 @@ Zusätzlich werden folgende Host-Pfade direkt gemountet (`raw_volumes`):
 
 ## 4. Integrationen
 
-*   **Homepage Dashboard:** `{{ "Aktiviert" if config.integrations.homepage.enabled else "Deaktiviert" }}`
-*   **Automatische DNS-Erstellung:** `{{ "Aktiviert" if config.integrations.autodns.enabled else "Deaktiviert" }}`
+* **Homepage Dashboard:** `{{ "Aktiviert" if config.integrations.homepage.enabled else "Deaktiviert" }}`
+* **Automatische DNS-Erstellung:** `{{ "Aktiviert" if config.integrations.autodns.enabled else "Deaktiviert" }}`
+

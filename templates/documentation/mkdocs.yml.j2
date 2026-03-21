@@ -1,0 +1,32 @@
+site_name: "{{ service.name | default('AAC Service') }} Documentation"
+site_description: "Auto-generated internal documentation for {{ service.name | default('this service') }}"
+site_dir: public
+
+# Das Leerlassen erzwingt die Erkennung relativer Pfade (falls nicht gesetzt)
+# Optional kann die Variable in der CI via sed/envsubst injiziert werden.
+use_directory_urls: true
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - toc.integrate
+  palette:
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: emerald
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: emerald
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+
+plugins:
+  - search

@@ -308,68 +308,27 @@ pages:
     - job: prod-generate-documentation
       artifacts: true
   before_script:
-    - pip install --no-cache-dir zensical
+    - pip install --no-cache-dir zensical mkdocs-material
   script:
     - echo "Preparing documentation for GitLab Pages..."
-    - mkdir -p docs public
     
-    # 1. Merge auto-generated documentation into the local docs/ directory
+    # Verschiebe die fertige MkDocs-Struktur in das aktuelle Verzeichnis
+    - if [ -d "deployments/documentation" ]; then cp -r deployments/documentation/* ./ ; fi
+    
+    # Pre-Flight Check: Abbrechen, falls nichts generiert wurde
     - |
-      if [ -d "deployments/documentation" ]; then
-        echo "Merging generated documentation into docs/..."
-        cp -r deployments/documentation/* docs/ || true
-      fi
-
-    # 2. PRE-FLIGHT CHECK: Do we actually have any markdown files?
-    - |
-      if [ -z "$(ls -A docs/ 2>/dev/null)" ]; then
-        echo "No documentation files found in docs/ or generated artifacts."
-        echo "Skipping Pages deployment to prevent build failure."
-        # Touching an empty file in public/ satisfies the artifact requirement 
-        # without deploying a broken site.
-        touch public/index.html
+      if [ ! -f "docs/index.md" ]; then
+        echo "No documentation generated. Skipping build."
+        mkdir public && touch public/index.html
         exit 0
       fi
-
-    # 3. Always Auto-Generate or Override mkdocs.yml for consistency
-    - |
-      echo "Generating standard mkdocs.yml configuration..."
-      cat <<EOF > mkdocs.yml
-      site_name: "${CI_PROJECT_NAME} Documentation"
-      site_description: "Auto-generated internal documentation"
-      site_dir: public
-      theme:
-        name: material
-        features:
-          - navigation.tabs
-          - navigation.sections
-          - toc.integrate
-        palette:
-          - media: "(prefers-color-scheme: dark)"
-            scheme: slate
-            primary: indigo
-            accent: emerald
-            toggle:
-              icon: material/weather-sunny
-              name: Switch to light mode
-          - media: "(prefers-color-scheme: light)"
-            scheme: default
-            primary: indigo
-            accent: emerald
-            toggle:
-              icon: material/weather-night
-              name: Switch to dark mode
-      plugins:
-        - search
-      EOF
-
-    # 4. Build the site
+      
     - echo "Building site with Zensical..."
     - zensical build
-
-    # 5. Fallback move in case Zensical ignores the configuration
-    - '[ -d ".cache/site" ] && mv .cache/site/* public/ || true'
-    - '[ -d "site" ] && mv site/* public/ || true'
+    
+    # Stelle sicher, dass die Ausgabe im public/ Ordner für GitLab Pages liegt
+    - '[ -d "site" ] && mv site public || true'
+    - '[ -d ".cache/site" ] && mv .cache/site public || true'
   artifacts:
     paths:
       - public

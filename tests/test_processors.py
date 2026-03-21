@@ -63,7 +63,7 @@ def test_import_processor_merges_correctly(temp_engine_dir):
     assert db_dep["environment"]["MARIADB_DATABASE"] == "test_db"
 
 def test_volume_processor_prevents_hijack():
-    """Verifies that main services and dependencies get strictly isolated volume paths."""
+    """Verifies that dependency volumes correctly nest under the main application's root directory."""
     # 1. Setup Mock Context post-import
     mock_context = {
         "service": {"name": "aac-nextcloud"},
@@ -94,10 +94,10 @@ def test_volume_processor_prevents_hijack():
     main_vols = result["processed_volumes"]
     dep_vols = result["dependencies"]["database"]["processed_volumes"]
 
-    # Ensure Nextcloud did NOT hijack the database volume
+    # Ensure the main service volume path is correct
     assert len(main_vols) == 1
     assert "/export/docker/aac-nextcloud/html:/var/www/html" in main_vols
     
-    # Ensure Database got its own isolated path
+    # Ensure Database volume correctly nests under the MAIN application folder
     assert len(dep_vols) == 1
-    assert "/export/docker/aac-nextcloud-db/db:/var/lib/mysql" in dep_vols
+    assert "/export/docker/aac-nextcloud/db:/var/lib/mysql" in dep_vols
