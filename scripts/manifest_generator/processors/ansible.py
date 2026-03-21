@@ -23,6 +23,12 @@ class AnsibleProcessor(BaseProcessor):
                 'group': '999' if is_db else default_pgid
             })
 
+        # Helper function to evaluate if a mount is likely a file
+        def is_file_mount(source_path: str) -> bool:
+            # If the source string has an extension, it's a file mount.
+            # Example: /export/docker/app/config.json
+            return '.' in source_path.split('/')[-1]
+
         # 2. Add the main service base directory
         service_target_dir = f"{base_path}/{main_svc.lower()}"
         add_dir(service_target_dir, is_db=False)
@@ -30,8 +36,8 @@ class AnsibleProcessor(BaseProcessor):
         # 3. Process Main Service Volumes
         for vol_str in context.get('processed_volumes', []):
             source = vol_str.split(':')[0]
-            # Only track absolute paths (bind mounts), not Docker named volumes
-            if source.startswith('/'):
+            # Only track absolute paths (bind mounts), not Docker named volumes OR files
+            if source.startswith('/') and not is_file_mount(source):
                 add_dir(source, is_db=False)
 
         # 4. Process Dependency Volumes (Sidecars)
@@ -42,7 +48,7 @@ class AnsibleProcessor(BaseProcessor):
 
             for vol_str in dep_cfg.get('processed_volumes', []):
                 source = vol_str.split(':')[0]
-                if source.startswith('/'):
+                if source.startswith('/') and not is_file_mount(source):
                     add_dir(source, is_db=is_db)
 
         # 5. Deduplicate (in case paths overlap) while preserving the first assignment
