@@ -18,6 +18,7 @@ from .processors.ingress import IngressProcessor
 from .processors.specs import SpecProcessor
 from .processors.volumes import VolumeProcessor
 from .processors.ansible import AnsibleProcessor
+from .processors.ports import PortProcessor
 
 def get_strategy_for_branch(strategy_block, current_branch):
     """Determines the correct deployment strategy using exact or prefix matching."""
@@ -84,6 +85,7 @@ def main():
         processors = [
             ImportProcessor(args.template_path),
             MetadataProcessor(),
+            PortProcessor(),
             EnvironmentProcessor(),
             NetworkProcessor(),
             IngressProcessor(),
