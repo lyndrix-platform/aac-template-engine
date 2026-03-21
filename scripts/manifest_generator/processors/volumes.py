@@ -4,29 +4,28 @@ from .base import BaseProcessor
 class VolumeProcessor(BaseProcessor):
     def _generate_volume_string(self, v_id, v_def, svc_name, base_path, context, mount_str):
         """Helper to generate the final source:target string and register named volumes."""
-        # Check if the original mount string had read-only or other flags (e.g., id:/target:ro)
         parts = mount_str.split(':')
         target = v_def.get('target', f"/{v_id}")
         flags = ""
         
-        # If the mount_str provided a target, override the default
         if len(parts) >= 2:
             target = parts[1]
-        # If the mount_str provided flags (like :ro), capture them
         if len(parts) >= 3:
             flags = f":{parts[2]}"
 
         v_type = v_def.get('type', 'bind')
 
         if v_type == 'bind':
-            # Use explicit source if provided (this replaces raw_volumes!), otherwise use standard path
-            source = v_def.get('source', f"{base_path}/{svc_name}/{v_id}")
+            # NEU: Native Unterstützung für Single-File Mounts ohne Jinja-Variablen!
+            if 'file' in v_def:
+                source = f"{base_path}/{svc_name}/{v_def['file']}"
+            else:
+                # Standard-Verhalten für Ordner oder explizite 'source' Strings
+                source = v_def.get('source', f"{base_path}/{svc_name}/{v_id}")
         elif v_def.get('driver'):
-            # It's a Docker named volume
             source = v_id
             context['named_volumes'][v_id] = v_def
         else:
-            # Fallback
             source = f"{base_path}/{svc_name}/{v_id}"
 
         return f"{source}:{target}{flags}"
