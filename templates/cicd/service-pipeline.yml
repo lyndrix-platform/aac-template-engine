@@ -73,7 +73,7 @@ dev-generate-docker-compose:
   extends: .generate-base
   stage: dev-generate
   script:
-    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --deployment-type "docker_compose" --stage "dev"
+    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "/opt/aac-template-engine" --deployment-type "docker_compose" --stage "dev"
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "dev"'
     - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
@@ -82,7 +82,7 @@ dev-generate-custom-files:
   extends: .generate-base
   stage: dev-generate
   script:
-    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --process-files --stage "dev"
+    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "/opt/aac-template-engine" --process-files --stage "dev"
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "dev"'
     - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
@@ -141,7 +141,7 @@ test-generate-custom-files:
   extends: .generate-base
   stage: test-generate
   script:
-    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --process-files --stage "test"
+    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "/opt/aac-template-engine" --process-files --stage "test"
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "test"'
     - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
@@ -201,7 +201,7 @@ prod-generate-custom-files:
   extends: .generate-base
   stage: prod-generate
   script:
-    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --process-files --stage "prod"
+    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "/opt/aac-template-engine" --process-files --stage "prod"
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
@@ -212,7 +212,7 @@ prod-generate-documentation:
   stage: prod-generate
   resource_group: central_docs_publishing
   script:
-    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --process-documentation --stage "prod"
+    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "/opt/aac-template-engine" --process-documentation --stage "prod"
   artifacts:
     paths: [deployments/]
   needs:
@@ -258,22 +258,21 @@ publish_to_docs:
   stage: documentation
   resource_group: central_docs_publishing
   image: 
-    # Point directly to your new custom template engine image
     name: registry.gitlab.int.fam-feser.de/aac-application-definitions/aac-template-engine:latest
     pull_policy: always
   needs:
     - job: prod-generate-documentation
       artifacts: true
-  
-  # WARNING: The before_script is completely DELETED here. 
-  # No git clone. No pip install. No PYTHONPATH exporting.
-
+  variables:
+    DOCS_REPO_URL: "https://gitlab.int.fam-feser.de/documentation/aac-iac-documentation.git"
+    DOC_SOURCE_DIR: "deployments/documentation"
   script:
-    # Execute the standalone script using the absolute container path
+    # Run the generator first (already handled by 'needs' usually, but good to be explicit)
+    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "/opt/aac-template-engine" --process-documentation --stage "prod"
+    # Then run the publisher baked into the image
     - python3 /opt/aac-template-engine/scripts/publish_docs.py
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
-
+    - if: '$CI_COMMIT_BRANCH == "main"'
 # ==========================================================================
 # GITLAB PAGES WORKFLOW (Zensical)
 # ==========================================================================
