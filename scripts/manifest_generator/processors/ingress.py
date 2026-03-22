@@ -34,13 +34,16 @@ class IngressProcessor(BaseProcessor):
             t = ints['traefik']
             rule = f"Host(`{fqdn}`)"
             
-            # If a public FQDN was generated, append it to the Traefik rule
             if public_fqdn:
                 rule += f" || Host(`{public_fqdn}`)"
                 
             ports = context.get('ports', [])
             default_port = ports[0].get('port') if ports else 80
             svc_port = str(t.get('service_port', default_port))
+            
+            # Extract the new variables with safe defaults
+            scheme = t.get('service_scheme', 'http')
+            transport = t.get('servers_transport')
 
             labels.update({
                 "traefik.enable": "true",
@@ -53,11 +56,18 @@ class IngressProcessor(BaseProcessor):
             # Check if we route to Host or Container
             if dc.get('network_mode') == 'host' or cfg.get('routing_host_network'):
                 ansible_ip = context.get('ansible_host_ip', '10.111.111.111')
-                labels[f"traefik.http.services.{name}.loadbalancer.server.url"] = f"http://{ansible_ip}:{svc_port}"
+                # Fixed: Use the dynamic scheme instead of hardcoded 'http'
+                labels[f"traefik.http.services.{name}.loadbalancer.server.url"] = f"{scheme}://{ansible_ip}:{svc_port}"
             else:
                 net_name = dc.get('network_definitions', {}).get('secured', {}).get('name', 'services-secured')
                 labels["traefik.docker.network"] = net_name
                 labels[f"traefik.http.services.{name}.loadbalancer.server.port"] = svc_port
+                # Fixed: Tell Traefik to use https inside the docker network if requested
+                labels[f"traefik.http.services.{name}.loadbalancer.server.scheme"] = scheme
+
+            # Fixed: Apply the servers_transport if it was defined in the config
+            if transport:
+                labels[f"traefik.http.services.{name}.loadbalancer.serverstransport"] = transport
 
         # 3. AutoDNS Automation
         if ints.get('autodns', {}).get('enabled'):
