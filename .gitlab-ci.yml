@@ -45,7 +45,12 @@ build-engine-image:
   stage: build-image
   image: docker:latest@sha256:1ba18449911d01f477a3fc104123c85d677addc60701b14b3fcb5381f9c4a537
   services:
-    - docker:dind
+    - name: docker:dind
+      alias: docker
+  variables:
+    # THE FIX: Explicitly disable TLS and force the host port
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_HOST: "tcp://docker:2375"
   needs: ["python-unit-tests"]
   script:
     - echo "Authenticating with GitLab Container Registry..."
@@ -61,6 +66,4 @@ build-engine-image:
     - docker push "$IMAGE_SHA"
     - docker push "$IMAGE_LATEST"
   rules:
-    # Only push 'latest' when code is merged to main. 
-    # For branches, you might want to build (but not push) to verify Dockerfile health.
     - if: '$CI_COMMIT_BRANCH == "main"'
