@@ -48,13 +48,15 @@ build-engine-image:
     - name: docker:dind
       alias: docker
   variables:
-    # THE FIX: Explicitly disable TLS and force the host port
     DOCKER_TLS_CERTDIR: ""
     DOCKER_HOST: "tcp://docker:2375"
   needs: ["python-unit-tests"]
   script:
     - echo "Authenticating with GitLab Container Registry..."
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    
+    # Ensure Docker pulls the absolute latest base image we just built upstream
+    - docker pull registry.gitlab.int.fam-feser.de/iac-environment/iac-platform-assets/ansible-ci-image:latest
     
     - IMAGE_SHA="$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
     - IMAGE_LATEST="$CI_REGISTRY_IMAGE:latest"
@@ -65,5 +67,21 @@ build-engine-image:
     - echo "Pushing images to registry..."
     - docker push "$IMAGE_SHA"
     - docker push "$IMAGE_LATEST"
+  rules:
+    # NEW: Run when code is merged to main OR when the base image triggers it
+    - if: '$CI_COMMIT_BRANCH == "main" || $TRIGGER_SOURCE == "base-image-update"'
+
+publish-image-rebuild-trigger:
+  stage: deploy
+  image: curlimages/curl:latest
+  script:
+    - |
+      echo "🚀 Triggering rebuild of the Ansible CI Image in the downstream repository..."
+      curl --request POST \
+        --form token=$ANSIBLE_REBUILD_TOKEN \
+        --form ref=main \
+        --form "variables[TRIGGER_SOURCE]=template-engine-update" \
+        --form "variables[ENGINE_COMMIT_MSG]=$CI_COMMIT_MESSAGE" \
+        "https://gitlab.int.fam-feser.de/api/v4/projects/105/trigger/pipeline"
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
