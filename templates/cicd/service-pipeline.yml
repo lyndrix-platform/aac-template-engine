@@ -93,21 +93,6 @@ dev-generate-custom-files:
     - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
       exists: [custom_templates/files/**/*]
 
-dev-generate-documentation:
-  extends: .generate-base
-  stage: dev-generate 
-  script:
-    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --process-documentation --stage "dev"
-  artifacts:
-    paths: [deployments/]
-  needs:
-    - dev-generate-docker-compose
-    - job: dev-generate-custom-files
-      optional: true
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "dev"'
-    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
-
 dev-validate-docker-compose:
   extends: .validate-base
   stage: dev-validate
@@ -121,7 +106,6 @@ dev-deploy:
   stage: dev-deploy
   needs: 
     - dev-validate-docker-compose
-    - dev-generate-documentation
   trigger:
     project: 'iac-environment/iac-ansible-automation'
     branch: $ANSIBLE_BRANCH
@@ -168,21 +152,6 @@ test-generate-custom-files:
     - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
       exists: [custom_templates/files/**/*]
 
-test-generate-documentation:
-  extends: .generate-base
-  stage: test-generate 
-  script:
-    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --process-documentation --stage "test"
-  artifacts:
-    paths: [deployments/]
-  needs:
-    - test-generate-docker-compose
-    - job: test-generate-custom-files
-      optional: true
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "test"'
-    - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
-
 test-validate-docker-compose:
   extends: .validate-base
   stage: test-validate
@@ -196,7 +165,6 @@ test-deploy:
   stage: test-deploy
   needs: 
     - test-validate-docker-compose
-    - test-generate-documentation
   trigger:
     project: 'iac-environment/iac-ansible-automation'
     branch: $ANSIBLE_BRANCH
@@ -247,6 +215,7 @@ prod-generate-custom-files:
 prod-generate-documentation:
   extends: .generate-base
   stage: prod-generate
+  resource_group: central_docs_publishing
   script:
     - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --process-documentation --stage "prod"
   artifacts:
