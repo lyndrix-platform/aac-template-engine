@@ -1,5 +1,5 @@
 # This is a reusable GitLab CI/CD pipeline for service repositories.
-# It automates generation, validation, and triggers downstream deployments.
+# Optimized for the absolute-path Docker Engine architecture.
 
 default:
   tags:
@@ -9,11 +9,11 @@ stages:
   - dev-generate
   - dev-validate
   - dev-deploy
-  - dev-promote     # NEW: Auto-MR to Test
+  - dev-promote
   - test-generate
   - test-validate
   - test-deploy
-  - test-promote    # NEW: Auto-MR to Main
+  - test-promote
   - prod-generate
   - prod-validate
   - documentation
@@ -27,7 +27,6 @@ stages:
   image: 
     name: registry.gitlab.int.fam-feser.de/aac-application-definitions/aac-template-engine:latest
     pull_policy: always
-  # NO before_script. The image already contains the engine and dependencies.
   artifacts:
     paths: [deployments/]
     expire_in: 1 hour
@@ -46,13 +45,11 @@ stages:
   rules:
     - if: '$CI_COMMIT_BRANCH && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
-# NEW: Reusable MR Creator via GitLab API
 .auto-promote-base:
   image: curlimages/curl:latest
   script:
     - |
       echo "Creating Merge Request from $SOURCE_BRANCH to $TARGET_BRANCH..."
-      # Hit the GitLab API. Write out the HTTP status code so we can handle 409s gracefully.
       RESPONSE=$(curl --silent --output /dev/stderr --write-out "%{http_code}" --request POST --header "PRIVATE-TOKEN: ${CI_GITLAB_TOKEN_GLOBAL_FESER}" \
         --data "source_branch=${SOURCE_BRANCH}&target_branch=${TARGET_BRANCH}&title=🚀 Promotion: ${SOURCE_BRANCH} to ${TARGET_BRANCH}&remove_source_branch=false" \
         "https://${CI_SERVER_HOST}/api/v4/projects/${CI_PROJECT_ID}/merge_requests")
@@ -67,7 +64,7 @@ stages:
       fi
 
 # ==========================================================================
-# DEV WORKFLOW (runs on 'dev' branch)
+# DEV WORKFLOW
 # ==========================================================================
 dev-generate-docker-compose:
   extends: .generate-base
@@ -96,11 +93,9 @@ dev-validate-docker-compose:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "dev"'
     - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
-# DEV DEPLOY
 dev-deploy:
   stage: dev-deploy
-  needs: 
-    - dev-validate-docker-compose
+  needs: [dev-validate-docker-compose]
   trigger:
     project: 'iac-environment/iac-ansible-automation'
     branch: $ANSIBLE_BRANCH
@@ -109,12 +104,10 @@ dev-deploy:
     SERVICE_NAME: $CI_PROJECT_NAME
     SERVICE_BRANCH: 'dev'
     INVENTORY_BRANCH: $INVENTORY_BRANCH
-    # THE MISSING PIECE: Tell Ansible to only run the GitOps role
     DEPLOYMENT_TYPE: 'single_service_trigger' 
   rules:
     - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/ && $SKIP_DEPLOYMENT != "true"'
 
-# NEW: Automatically open an MR to 'test' after successful deploy
 dev-promote:
   extends: .auto-promote-base
   stage: dev-promote
@@ -125,14 +118,15 @@ dev-promote:
   rules:
     - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
       when: on_success
+
 # ==========================================================================
-# TEST WORKFLOW (runs on 'test' branch)
+# TEST WORKFLOW
 # ==========================================================================
 test-generate-docker-compose:
   extends: .generate-base
   stage: test-generate
   script:
-    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "/opt/aac-template-engine" --deployment-type "docker_compose" --stage "dev"
+    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "/opt/aac-template-engine" --deployment-type "docker_compose" --stage "test"
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "test"'
     - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
@@ -155,11 +149,9 @@ test-validate-docker-compose:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "test"'
     - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
-# TEST DEPLOY
 test-deploy:
   stage: test-deploy
-  needs: 
-    - test-validate-docker-compose
+  needs: [test-validate-docker-compose]
   trigger:
     project: 'iac-environment/iac-ansible-automation'
     branch: $ANSIBLE_BRANCH
@@ -168,12 +160,10 @@ test-deploy:
     SERVICE_NAME: $CI_PROJECT_NAME
     SERVICE_BRANCH: 'test'
     INVENTORY_BRANCH: $INVENTORY_BRANCH
-    # THE MISSING PIECE
     DEPLOYMENT_TYPE: 'single_service_trigger'
   rules:
     - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/ && $SKIP_DEPLOYMENT != "true"'
 
-# NEW: Automatically open an MR to 'main' after test validation succeeds
 test-promote:
   extends: .auto-promote-base
   stage: test-promote
@@ -186,13 +176,13 @@ test-promote:
       when: on_success
 
 # ==========================================================================
-# PROD WORKFLOW (runs on 'main' branch)
+# PROD WORKFLOW
 # ==========================================================================
 prod-generate-docker-compose:
   extends: .generate-base
   stage: prod-generate
   script:
-    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "/opt/aac-template-engine" --deployment-type "docker_compose" --stage "dev"
+    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "/opt/aac-template-engine" --deployment-type "docker_compose" --stage "prod"
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
@@ -231,7 +221,6 @@ prod-validate-docker-compose:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
-# PROD DEPLOY
 prod-deploy:
   stage: prod-deploy
   needs: 
@@ -245,7 +234,6 @@ prod-deploy:
     SERVICE_NAME: $CI_PROJECT_NAME
     SERVICE_BRANCH: 'main'
     INVENTORY_BRANCH: $INVENTORY_BRANCH
-    # THE MISSING PIECE
     DEPLOYMENT_TYPE: 'single_service_trigger'
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/ && $SKIP_DEPLOYMENT != "true"'
@@ -267,15 +255,10 @@ publish_to_docs:
     DOCS_REPO_URL: "https://gitlab.int.fam-feser.de/documentation/aac-iac-documentation.git"
     DOC_SOURCE_DIR: "deployments/documentation"
   script:
-    # Run the generator first (already handled by 'needs' usually, but good to be explicit)
-    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "/opt/aac-template-engine" --process-documentation --stage "prod"
-    # Then run the publisher baked into the image
     - python3 /opt/aac-template-engine/scripts/publish_docs.py
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
-# ==========================================================================
-# GITLAB PAGES WORKFLOW (Zensical)
-# ==========================================================================
+
 pages:
   stage: documentation
   image: 
@@ -284,25 +267,17 @@ pages:
   needs:
     - job: prod-generate-documentation
       artifacts: true
-  # NO before_script. Zensical is already installed in the image.
   script:
     - echo "Preparing documentation for GitLab Pages..."
-    
-    # Verschiebe die fertige MkDocs-Struktur in das aktuelle Verzeichnis
     - if [ -d "deployments/documentation" ]; then cp -r deployments/documentation/* ./ ; fi
-    
-    # Pre-Flight Check: Abbrechen, falls nichts generiert wurde
     - |
       if [ ! -f "docs/index.md" ]; then
         echo "No documentation generated. Skipping build."
         mkdir public && touch public/index.html
         exit 0
       fi
-      
     - echo "Building site with Zensical..."
     - zensical build
-    
-    # Stelle sicher, dass die Ausgabe im public/ Ordner für GitLab Pages liegt
     - '[ -d "site" ] && mv site public || true'
     - '[ -d ".cache/site" ] && mv .cache/site public || true'
   artifacts:
