@@ -25,14 +25,9 @@ stages:
 
 .generate-base:
   image: 
-    name: registry.gitlab.int.fam-feser.de/iac-environment/iac-platform-assets/ansible-ci-image:latest
+    name: registry.gitlab.int.fam-feser.de/aac-application-definitions/aac-template-engine:latest
     pull_policy: always
-  before_script:
-    - rm -rf aac-template-engine/
-    # FIX: Use the Switchboard variable, default to main if not set!
-    - git clone -b ${ENGINE_BRANCH:-main} "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
-    - pip install pyyaml jinja2
-    - export PYTHONPATH=$PYTHONPATH:$(pwd)/aac-template-engine/scripts
+  # NO before_script. The image already contains the engine and dependencies.
   artifacts:
     paths: [deployments/]
     expire_in: 1 hour
@@ -137,7 +132,7 @@ test-generate-docker-compose:
   extends: .generate-base
   stage: test-generate
   script:
-    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --deployment-type "docker_compose" --stage "test"
+    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "/opt/aac-template-engine" --deployment-type "docker_compose" --stage "dev"
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "test"'
     - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
@@ -197,7 +192,7 @@ prod-generate-docker-compose:
   extends: .generate-base
   stage: prod-generate
   script:
-    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "aac-template-engine" --deployment-type "docker_compose" --stage "prod"
+    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "/opt/aac-template-engine" --deployment-type "docker_compose" --stage "dev"
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
@@ -261,19 +256,21 @@ prod-deploy:
 # ==========================================================================
 publish_to_docs:
   stage: documentation
+  resource_group: central_docs_publishing
   image: 
-    name: registry.gitlab.int.fam-feser.de/iac-environment/iac-platform-assets/ansible-ci-image:latest
+    # Point directly to your new custom template engine image
+    name: registry.gitlab.int.fam-feser.de/aac-application-definitions/aac-template-engine:latest
     pull_policy: always
   needs:
     - job: prod-generate-documentation
       artifacts: true
-  before_script:
-    - rm -rf aac-template-engine/
-    # FIX: Use Switchboard variable
-    - git clone -b ${ENGINE_BRANCH:-main} "https://gitlab-ci-token:${CI_GITLAB_TOKEN_GLOBAL_FESER}@${CI_SERVER_HOST}/aac-application-definitions/aac-template-engine.git"
-    - export PYTHONPATH=$PYTHONPATH:$(pwd)/aac-template-engine/scripts
+  
+  # WARNING: The before_script is completely DELETED here. 
+  # No git clone. No pip install. No PYTHONPATH exporting.
+
   script:
-    - python3 aac-template-engine/scripts/publish_docs.py
+    # Execute the standalone script using the absolute container path
+    - python3 /opt/aac-template-engine/scripts/publish_docs.py
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
@@ -283,13 +280,12 @@ publish_to_docs:
 pages:
   stage: documentation
   image: 
-    name: registry.gitlab.int.fam-feser.de/iac-environment/iac-platform-assets/ansible-ci-image:latest
+    name: registry.gitlab.int.fam-feser.de/aac-application-definitions/aac-template-engine:latest
     pull_policy: always
   needs:
     - job: prod-generate-documentation
       artifacts: true
-  before_script:
-    - pip install --no-cache-dir zensical mkdocs-material
+  # NO before_script. Zensical is already installed in the image.
   script:
     - echo "Preparing documentation for GitLab Pages..."
     

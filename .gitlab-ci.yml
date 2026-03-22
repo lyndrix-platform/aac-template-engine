@@ -1,31 +1,66 @@
-# .gitlab-ci.yml
-
 stages:
   - lint
   - test
+  - build-image
+
+# Ensure global defaults for DRYness
+default:
+  tags:
+    - docker
 
 yaml-syntax-check:
   stage: lint
-  image: python:3.14-slim
+  image: python:3.12-slim
   before_script:
-    - pip install PyYAML
+    - pip install --no-cache-dir PyYAML
   script:
-    - echo "🔎 Checking syntax of all .yml and .yaml files..."
+    - echo "🔎 Checking syntax of pure YAML files (excluding templates)..."
+    # Added -not -path filters to avoid scanning directories we don't own or .j2 files
     - |
-      find . -type f \( -name "*.yml" -o -name "*.yaml" \) -print0 | xargs -0 -n 1 python -c "import yaml, sys; print(f'-- Checking: {sys.argv[1]}'); yaml.safe_load(open(sys.argv[1]))"
-    - echo "✅ Syntax check passed for all YAML files."
-  tags:
-    - docker
+      find . -type f \( -name "*.yml" -o -name "*.yaml" \) \
+      -not -path "*/.*/*" \
+      -not -name "*.j2" \
+      -print0 | xargs -0 -n 1 python3 -c "import yaml, sys; print(f'-- Checking: {sys.argv[1]}'); yaml.safe_load(open(sys.argv[1]))"
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
 
 python-unit-tests:
   stage: test
-  image: python:3.14-slim
+  image: python:3.12-slim
+  needs: ["yaml-syntax-check"]
   before_script:
-    - pip install pytest pyyaml
-    # Ensure the scripts directory is treated as a module
+    - pip install --no-cache-dir pytest pyyaml jinja2
     - export PYTHONPATH=$PYTHONPATH:$(pwd)/scripts
   script:
     - echo "🧪 Running Python Processor Unit Tests..."
+    # Exit code 5 means no tests found - we want to fail if someone deleted the tests
     - pytest tests/ -v
-  tags:
-    - docker
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+
+# ==========================================================================
+# 3. DOCKER BUILD & PUSH
+# ==========================================================================
+build-engine-image:
+  stage: build-image
+  image: docker:latest
+  services:
+    - docker:dind
+  needs: ["python-unit-tests"]
+  script:
+    - echo "Authenticating with GitLab Container Registry..."
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    
+    - IMAGE_SHA="$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
+    - IMAGE_LATEST="$CI_REGISTRY_IMAGE:latest"
+    
+    - echo "Building the monolithic AAC CI Image..."
+    - docker build -t "$IMAGE_SHA" -t "$IMAGE_LATEST" .
+    
+    - echo "Pushing images to registry..."
+    - docker push "$IMAGE_SHA"
+    - docker push "$IMAGE_LATEST"
+  rules:
+    # Only push 'latest' when code is merged to main. 
+    # For branches, you might want to build (but not push) to verify Dockerfile health.
+    - if: '$CI_COMMIT_BRANCH == "main"'
