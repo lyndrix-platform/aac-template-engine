@@ -70,18 +70,3 @@ build-engine-image:
   rules:
     # NEW: Run when code is merged to main OR when the base image triggers it
     - if: '$CI_COMMIT_BRANCH == "main" || $TRIGGER_SOURCE == "base-image-update"'
-
-publish-image-rebuild-trigger:
-  stage: deploy
-  image: curlimages/curl:latest
-  script:
-    - |
-      echo "🚀 Triggering rebuild of the Ansible CI Image in the downstream repository..."
-      curl --request POST \
-        --form token=$ANSIBLE_REBUILD_TOKEN \
-        --form ref=main \
-        --form "variables[TRIGGER_SOURCE]=template-engine-update" \
-        --form "variables[ENGINE_COMMIT_MSG]=$CI_COMMIT_MESSAGE" \
-        "https://gitlab.int.fam-feser.de/api/v4/projects/105/trigger/pipeline"
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
