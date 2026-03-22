@@ -43,7 +43,7 @@ python-unit-tests:
 # ==========================================================================
 build-engine-image:
   stage: build-image
-  image: docker:latest
+  image: docker:latest@sha256:1ba18449911d01f477a3fc104123c85d677addc60701b14b3fcb5381f9c4a537
   services:
     - docker:dind
   needs: ["python-unit-tests"]
