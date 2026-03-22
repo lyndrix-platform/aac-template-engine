@@ -71,6 +71,18 @@ services:
     container_name: "{{ dep_config.name }}"
     restart: "{{ dep_config.restart_policy | default('always') }}"
     
+    {% if dep_config.command is defined %}
+    command:
+      {% for cmd_item in dep_config.command %}
+      {% if '\n' in cmd_item %}
+      - |
+{{ cmd_item | indent(8) }}
+      {% else %}
+      - "{{ cmd_item }}"
+      {% endif %}
+      {% endfor %}
+    {% endif %}
+
     env_file:
       - .env
       - stack.env
@@ -86,6 +98,13 @@ services:
     networks:
       {% for net in dep_config.processed_networks %}
       - {{ net }}
+      {% endfor %}
+    {% endif %}
+
+    {% if dep_config.labels is defined %}
+    labels:
+      {% for key, value in dep_config.labels.items() %}
+      {{ key }}: "{{ value }}"
       {% endfor %}
     {% endif %}
 
