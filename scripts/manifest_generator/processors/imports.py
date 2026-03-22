@@ -6,8 +6,8 @@ from .base import BaseProcessor
 
 class ImportProcessor(BaseProcessor):
     def __init__(self, template_base_path: str):
-        # This requires the base path of the engine to find the 'catalog' folder
-        self.template_path = template_base_path
+        # Normalize the path to handle relative/absolute inputs correctly
+        self.template_path = os.path.abspath(template_base_path)
 
     def _deep_merge(self, base: dict, override: dict) -> dict:
         """Recursively merges the override dictionary heavily onto the base dictionary."""
@@ -19,11 +19,15 @@ class ImportProcessor(BaseProcessor):
         return base
 
     def process(self, context: dict) -> dict:
-        # 1. Process Main Service Import (Standalone deployment mode)
+        # 1. Process Main Service Import
         if 'import' in context:
-            import_path = os.path.join(self.template_path, context['import'])
+            # Ensure we strip any leading slashes from the 'import' string 
+            # so os.path.join doesn't treat it as a root path
+            clean_import = context['import'].lstrip('/')
+            import_path = os.path.join(self.template_path, clean_import)
+            
             if os.path.isfile(import_path):
-                print(f"  [I] Importing base template for Main Service: {context['import']}")
+                print(f"  [I] Importing base template: {import_path}")
                 with open(import_path, 'r', encoding='utf-8') as f:
                     base_def = yaml.safe_load(f) or {}
                 
