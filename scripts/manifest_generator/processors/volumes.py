@@ -13,20 +13,24 @@ class VolumeProcessor(BaseProcessor):
         if len(parts) >= 3:
             flags = f":{parts[2]}"
 
-        v_type = v_def.get('type', 'bind')
-
-        if v_type == 'bind':
-            # NEU: Native Unterstützung für Single-File Mounts ohne Jinja-Variablen!
-            if 'file' in v_def:
-                source = f"{base_path}/{svc_name}/{v_def['file']}"
-            else:
-                # Standard-Verhalten für Ordner oder explizite 'source' Strings
-                source = v_def.get('source', f"{base_path}/{svc_name}/{v_id}")
-        elif v_def.get('driver'):
+        # FIX: Explicitly evaluate 'driver' first. 
+        # Any definition with a custom driver belongs in named_volumes.
+        if v_def.get('driver'):
             source = v_id
             context['named_volumes'][v_id] = v_def
         else:
-            source = f"{base_path}/{svc_name}/{v_id}"
+            # Fallback for standard bind mounts or other un-driven types
+            v_type = v_def.get('type', 'bind')
+            
+            if v_type == 'bind':
+                # Native support for single-file mounts without Jinja-variables
+                if 'file' in v_def:
+                    source = f"{base_path}/{svc_name}/{v_def['file']}"
+                else:
+                    # Standard behavior for folders or explicit 'source' strings
+                    source = v_def.get('source', f"{base_path}/{svc_name}/{v_id}")
+            else:
+                source = f"{base_path}/{svc_name}/{v_id}"
 
         return f"{source}:{target}{flags}"
 
@@ -34,14 +38,11 @@ class VolumeProcessor(BaseProcessor):
         dc = context.get('deployments', {}).get('docker_compose', {})
         base_path = dc.get('host_base_path', '/export/docker')
         main_svc = context.get('service', {}).get('name', 'app')
-        vol_defs = context.get('volumes', {}) # Global definitions from SSoT
+        vol_defs = context.get('volumes', {}) 
 
         context['processed_volumes'] = []
         context['named_volumes'] = {}
         
-        
-        
-
         # 1. Process Main Service Volumes
         for mount_str in dc.get('volumes', []):
             if not isinstance(mount_str, str):
@@ -50,20 +51,15 @@ class VolumeProcessor(BaseProcessor):
             v_id = mount_str.split(':')[0]
             v_def = vol_defs.get(v_id, {})
 
-            # FIX: This must use 'mount_str', NOT 'mock_mount_str'
             vol_string = self._generate_volume_string(v_id, v_def, main_svc, base_path, context, mount_str)
             context['processed_volumes'].append(vol_string)
             
-            
-            
-
-        # 2. Automatically lift any lingering 'raw_volumes' and append them directly 
-        #    This ensures backward compatibility during the migration phase
+        # 2. Automatically lift any lingering 'raw_volumes'
         for raw_vol in dc.get('raw_volumes', []):
             if raw_vol not in context['processed_volumes']:
                 context['processed_volumes'].append(raw_vol)
 
-            # 3. Process Dependency Volumes (Sidecars)
+        # 3. Process Dependency Volumes (Sidecars)
         deps = context.get('dependencies', {})
         if isinstance(deps, dict):
             for dep_name, dep_cfg in deps.items():
@@ -78,14 +74,12 @@ class VolumeProcessor(BaseProcessor):
                     if not isinstance(v_def, dict):
                         continue
                         
-                    # For sidecars, we construct a fake mount_str to pass target/flags
                     target = v_def.get('target', f"/{v_id}")
                     flags = v_def.get('flags', '')
                     mock_mount_str = f"{v_id}:{target}"
                     if flags:
                         mock_mount_str += f":{flags}"
                         
-                    # THE ACTUAL FIX: Change 'dep_svc_name' to 'main_svc' here
                     vol_string = self._generate_volume_string(v_id, v_def, main_svc, base_path, context, mock_mount_str)
                     dep_cfg['processed_volumes'].append(vol_string)
 
