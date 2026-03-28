@@ -1,31 +1,30 @@
 from .base import BaseProcessor
 
 class PortProcessor(BaseProcessor):
-    def process(self, context: dict) -> dict:
-        """
-        Converts the structured 'ports' list into the 'processed_ports' 
-        format that Docker Compose expects.
-        """
-        ports_data = context.get('ports', [])
-        processed_ports = []
-
+    def _format_ports(self, ports_data):
+        """Helper to convert port dicts to strings."""
+        processed = []
         if not isinstance(ports_data, list):
-            context['processed_ports'] = []
-            return context
-
+            return processed
+            
         for p in ports_data:
             if not isinstance(p, dict):
                 continue
-                
             internal = p.get('port')
             external = p.get('external_port')
-            # Default to TCP if not specified
             protocol = p.get('protocol', 'TCP').lower()
-
-            # We only generate a mapping if an external port is explicitly defined
             if internal and external:
-                # Format: "9001:9001/tcp"
-                processed_ports.append(f"{external}:{internal}/{protocol}")
+                processed.append(f"{external}:{internal}/{protocol}")
+        return processed
 
-        context['processed_ports'] = processed_ports
+    def process(self, context: dict) -> dict:
+        # 1. Process Main Service Ports
+        context['processed_ports'] = self._format_ports(context.get('ports', []))
+
+        # 2. Process Dependency Ports (The Fix)
+        for dep_name, dep_cfg in context.get('dependencies', {}).items():
+            # Look for a 'ports' key inside each dependency configuration
+            dep_ports = dep_cfg.get('ports', [])
+            dep_cfg['processed_ports'] = self._format_ports(dep_ports)
+
         return context

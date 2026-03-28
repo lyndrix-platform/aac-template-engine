@@ -87,6 +87,13 @@ services:
       - .env
       - stack.env
 
+    {% if dep_config.processed_ports %}
+    ports:
+      {% for p in dep_config.processed_ports %}
+      - "{{ p }}"
+      {% endfor %}
+    {% endif %}
+
     {% if dep_config.processed_volumes %}
     volumes:
       {% for vol in dep_config.processed_volumes %}
