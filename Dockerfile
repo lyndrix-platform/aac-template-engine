@@ -1,13 +1,18 @@
 # Start from your monolithic Ansible CI image
 FROM registry.gitlab.int.fam-feser.de/iac-environment/iac-platform-assets/ansible-ci-image:latest
 
-# Install dependencies
+# Install Python dependencies for the template engine and MkDocs
 RUN pip install --no-cache-dir pyyaml jinja2 mkdocs-material
 
-# 1. Pre-create SSH directory and set permissions (Safe to keep here to ensure it exists)
+# CRITICAL: Install Ansible Collections needed for Docker and Swarm
+# This prevents the "couldn't resolve module/action" error in CI
+RUN ansible-galaxy collection install community.docker
+
+# 1. Pre-create SSH directory and set permissions
 RUN mkdir -p /root/.ssh && chmod 700 /root/.ssh
 
 # 2. Set the Ansible Config environment variable globally
+# Note: Ensure this path matches where GitLab CI checks out your code
 ENV ANSIBLE_CONFIG="/builds/iac-environment/iac-ansible-automation/ansible.cfg"
 
 # 3. Copy the complete engine environment
