@@ -11,9 +11,13 @@ RUN ansible-galaxy collection install community.docker
 # 1. Pre-create SSH directory and set permissions
 RUN mkdir -p /root/.ssh && chmod 700 /root/.ssh
 
+
+
 # 2. Set the Ansible Config environment variable globally
 # Note: Ensure this path matches where GitLab CI checks out your code
 ENV ANSIBLE_CONFIG="/builds/iac-environment/iac-ansible-automation/ansible.cfg"
+ENV PYTHONPATH="/opt/aac-template-engine/scripts"
+
 
 # 3. Copy the complete engine environment
 COPY scripts/   /opt/aac-template-engine/scripts/
