@@ -20,7 +20,9 @@ class AnsibleProcessor(BaseProcessor):
             ansible_dirs.append({
                 'path': path,
                 'owner': '999' if is_db else default_puid,
-                'group': '999' if is_db else default_pgid
+                'group': '999' if is_db else default_pgid,
+                # THE FIX 1: Smart permissions calculated by Python
+                'mode': '0700' if is_db else '0755'
             })
 
         # Helper function to evaluate if a mount is likely a file
@@ -43,8 +45,9 @@ class AnsibleProcessor(BaseProcessor):
         # 4. Process Dependency Volumes (Sidecars)
         for dep_name, dep_cfg in context.get('dependencies', {}).items():
             image_repo = dep_cfg.get('image_repo', '').lower()
-            # Flag if this specific sidecar is a database
-            is_db = any(db in image_repo for db in ['mariadb', 'mysql', 'postgres'])
+            
+            # THE FIX 2: Added 'redis' to the database check list
+            is_db = any(db in image_repo for db in ['mariadb', 'mysql', 'postgres', 'redis'])
 
             for vol_str in dep_cfg.get('processed_volumes', []):
                 source = vol_str.split(':')[0]
