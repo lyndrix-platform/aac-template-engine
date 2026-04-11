@@ -4,10 +4,10 @@ restart_policy: "always"
 
 # Agnostic Storage Definition
 volumes:
-  db_data:
+  db:
     description: "Postgres data directory"
     type: "bind"
-    target: "/var/lib/postgresql/data"
+    target: "/var/lib/postgresql"
 
 healthcheck:
   test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
