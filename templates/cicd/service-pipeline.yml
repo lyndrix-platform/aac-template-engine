@@ -8,16 +8,13 @@ default:
 stages:
   - dev-generate
   - dev-validate
-  - dev-deploy
   - dev-promote
   - test-generate
   - test-validate
-  - test-deploy
   - test-promote
   - prod-generate
   - prod-validate
   - documentation
-  - prod-deploy
 
 # ==========================================================================
 # REUSABLE TEMPLATES
@@ -51,15 +48,15 @@ stages:
     - |
       echo "Creating Merge Request from $SOURCE_BRANCH to $TARGET_BRANCH..."
       RESPONSE=$(curl --silent --output /dev/stderr --write-out "%{http_code}" --request POST --header "PRIVATE-TOKEN: ${CI_GITLAB_TOKEN_GLOBAL_FESER}" \
-        --data "source_branch=${SOURCE_BRANCH}&target_branch=${TARGET_BRANCH}&title=🚀 Promotion: ${SOURCE_BRANCH} to ${TARGET_BRANCH}&remove_source_branch=false" \
+        --data "source_branch=${SOURCE_BRANCH}&target_branch=${TARGET_BRANCH}&title=Promotion: ${SOURCE_BRANCH} to ${TARGET_BRANCH}&remove_source_branch=false" \
         "https://${CI_SERVER_HOST}/api/v4/projects/${CI_PROJECT_ID}/merge_requests")
       
       if [ "$RESPONSE" -eq 201 ]; then 
-        echo -e "\n✅ Merge Request Created successfully."
+        echo -e "\nMerge Request Created successfully."
       elif [ "$RESPONSE" -eq 409 ]; then 
-        echo -e "\nℹ️ Merge Request already exists. Skipping."
+        echo -e "\nMerge Request already exists. Skipping."
       else 
-        echo -e "\n❌ Failed to create MR. HTTP Code: $RESPONSE"
+        echo -e "\nFailed to create MR. HTTP Code: $RESPONSE"
         exit 1
       fi
 
@@ -93,25 +90,10 @@ dev-validate-docker-compose:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "dev"'
     - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
-dev-deploy:
-  stage: dev-deploy
-  needs: [dev-validate-docker-compose]
-  trigger:
-    project: 'iac-environment/iac-ansible-automation'
-    branch: $ANSIBLE_BRANCH
-    strategy: depend
-  variables:
-    SERVICE_NAME: $CI_PROJECT_NAME
-    SERVICE_BRANCH: 'dev'
-    INVENTORY_BRANCH: $INVENTORY_BRANCH
-    DEPLOYMENT_TYPE: 'single_service_trigger' 
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/ && $SKIP_DEPLOYMENT != "true"'
-
 dev-promote:
   extends: .auto-promote-base
   stage: dev-promote
-  needs: [dev-deploy]
+  needs: [dev-validate-docker-compose]
   variables:
     SOURCE_BRANCH: "dev"
     TARGET_BRANCH: "test"
@@ -149,25 +131,10 @@ test-validate-docker-compose:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "test"'
     - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
-test-deploy:
-  stage: test-deploy
-  needs: [test-validate-docker-compose]
-  trigger:
-    project: 'iac-environment/iac-ansible-automation'
-    branch: $ANSIBLE_BRANCH
-    strategy: depend
-  variables:
-    SERVICE_NAME: $CI_PROJECT_NAME
-    SERVICE_BRANCH: 'test'
-    INVENTORY_BRANCH: $INVENTORY_BRANCH
-    DEPLOYMENT_TYPE: 'single_service_trigger'
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/ && $SKIP_DEPLOYMENT != "true"'
-
 test-promote:
   extends: .auto-promote-base
   stage: test-promote
-  needs: [test-deploy]
+  needs: [test-validate-docker-compose]
   variables:
     SOURCE_BRANCH: "test"
     TARGET_BRANCH: "main"
@@ -220,24 +187,6 @@ prod-validate-docker-compose:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
-
-prod-deploy:
-  stage: prod-deploy
-  needs: 
-    - prod-validate-docker-compose
-    - prod-generate-documentation
-  trigger:
-    project: 'iac-environment/iac-ansible-automation'
-    branch: $ANSIBLE_BRANCH
-    strategy: depend
-  variables:
-    SERVICE_NAME: $CI_PROJECT_NAME
-    SERVICE_BRANCH: 'main'
-    INVENTORY_BRANCH: $INVENTORY_BRANCH
-    DEPLOYMENT_TYPE: 'single_service_trigger'
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/ && $SKIP_DEPLOYMENT != "true"'
-      when: on_success
 
 # ==========================================================================
 # DOCUMENTATION WORKFLOW
