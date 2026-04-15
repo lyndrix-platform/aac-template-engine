@@ -1,6 +1,42 @@
+# ==========================================================================
+# REUSABLE TEMPLATES
+# ==========================================================================
 # This is a reusable GitLab CI/CD pipeline for service repositories.
 # Optimized for the absolute-path Docker Engine architecture.
 
+variables:
+  # ==========================================================================
+  # GLOBAL PIPELINE CONFIGURATION (Overrideable via GitLab UI)
+  # ==========================================================================
+  
+  # Image & Tooling
+  TEMPLATE_ENGINE_IMAGE: "$CI_CUSTOM_REGISTRY/$CI_TEMPLATE_ENGINE_IMAGE:$CI_TEMPLATE_ENGINE_TAG"
+  ##registry.gitlab.int.fam-feser.de/aac-application-definitions/aac-template-engine:latest
+
+  DOCKER_IMAGE: "docker:latest"
+  CURL_IMAGE: "curlimages/curl:latest"
+  # Generator Script Config
+  SSOT_FILE: "service.yml"
+  TEMPLATE_PATH: "/opt/aac-template-engine"
+  
+  # Directory Paths
+  DEPLOYMENT_DIR: "deployments"
+  DOCKER_COMPOSE_FILE: "deployments/docker_compose/docker-compose.yml"
+  DOC_SOURCE_DIR: "deployments/documentation"
+  
+  # Branch Definitions
+  DEV_BRANCH: "dev"
+  TEST_BRANCH: "test"
+  PROD_BRANCH: "main"
+  
+  # External Integrations
+  # NOTE: CI_GITLAB_TOKEN_GLOBAL_FESER must be provided via GitLab UI Secrets
+  DOCS_REPO_URL: "https://${CI_SERVER_HOST}/documentation/aac-iac-documentation.git"
+  # Provide this via GitLab UI Secrets, e.g., http://10.0.0.5:8081
+  LYNDRIX_ORCHESTRATOR_URL: "${CI_LYNDRIX_ORCHESTRATOR_URL}" 
+  LYNDRIX_ORCHESTRATOR_TOKEN: "${CI_LYNDRIX_ORCHESTRATOR_TOKEN}"
+
+  
 default:
   tags:
     - docker
@@ -22,28 +58,28 @@ stages:
 
 .generate-base:
   image: 
-    name: registry.gitlab.int.fam-feser.de/aac-application-definitions/aac-template-engine:latest
+    name: $TEMPLATE_ENGINE_IMAGE
     pull_policy: always
   artifacts:
-    paths: [deployments/]
+    paths: [$DEPLOYMENT_DIR/]
     expire_in: 1 hour
   rules:
     - if: '$CI_COMMIT_BRANCH && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
 .validate-base:
-  image: docker:latest
+  image: $DOCKER_IMAGE
   services: [docker:dind]
   script:
     - apk add --no-cache docker-compose
-    - docker-compose -f deployments/docker_compose/docker-compose.yml config
+    - docker-compose -f $DOCKER_COMPOSE_FILE config
   artifacts:
-    paths: [deployments/]
+    paths: [$DEPLOYMENT_DIR/]
     expire_in: 1 hour
   rules:
     - if: '$CI_COMMIT_BRANCH && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
 .auto-promote-base:
-  image: curlimages/curl:latest
+  image: $CURL_IMAGE
   script:
     - |
       echo "Creating Merge Request from $SOURCE_BRANCH to $TARGET_BRANCH..."
@@ -67,38 +103,38 @@ dev-generate-docker-compose:
   extends: .generate-base
   stage: dev-generate
   script:
-    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "/opt/aac-template-engine" --deployment-type "docker_compose" --stage "dev"
+    - python3 -m manifest_generator.main --ssot-json "$SSOT_FILE" --template-path "$TEMPLATE_PATH" --deployment-type "docker_compose" --stage "dev"
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "dev"'
-    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $DEV_BRANCH'
+    - if: '$CI_COMMIT_BRANCH == $DEV_BRANCH && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
 dev-generate-custom-files:
   extends: .generate-base
   stage: dev-generate
   script:
-    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "/opt/aac-template-engine" --process-files --stage "dev"
+    - python3 -m manifest_generator.main --ssot-json "$SSOT_FILE" --template-path "$TEMPLATE_PATH" --process-files --stage "dev"
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "dev"'
-    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
-      exists: [custom_templates/files/**/*]
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $DEV_BRANCH'
+    - if: '$CI_COMMIT_BRANCH == $DEV_BRANCH && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+      exists: [custom_templates/files/**/*] # Cannot be parameterized due to GitLab CI limitations
 
 dev-validate-docker-compose:
   extends: .validate-base
   stage: dev-validate
   needs: [dev-generate-docker-compose]
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "dev"'
-    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $DEV_BRANCH'
+    - if: '$CI_COMMIT_BRANCH == $DEV_BRANCH && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
 dev-promote:
   extends: .auto-promote-base
   stage: dev-promote
   needs: [dev-validate-docker-compose]
   variables:
-    SOURCE_BRANCH: "dev"
-    TARGET_BRANCH: "test"
+    SOURCE_BRANCH: $DEV_BRANCH
+    TARGET_BRANCH: $TEST_BRANCH
   rules:
-    - if: '$CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+    - if: '$CI_COMMIT_BRANCH == $DEV_BRANCH && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
       when: on_success
 
 # ==========================================================================
@@ -108,19 +144,19 @@ test-generate-docker-compose:
   extends: .generate-base
   stage: test-generate
   script:
-    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "/opt/aac-template-engine" --deployment-type "docker_compose" --stage "test"
+    - python3 -m manifest_generator.main --ssot-json "$SSOT_FILE" --template-path "$TEMPLATE_PATH" --deployment-type "docker_compose" --stage "test"
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "test"'
-    - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $TEST_BRANCH'
+    - if: '$CI_COMMIT_BRANCH == $TEST_BRANCH && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
 test-generate-custom-files:
   extends: .generate-base
   stage: test-generate
   script:
-    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "/opt/aac-template-engine" --process-files --stage "test"
+    - python3 -m manifest_generator.main --ssot-json "$SSOT_FILE" --template-path "$TEMPLATE_PATH" --process-files --stage "test"
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "test"'
-    - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $TEST_BRANCH'
+    - if: '$CI_COMMIT_BRANCH == $TEST_BRANCH && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
       exists: [custom_templates/files/**/*]
 
 test-validate-docker-compose:
@@ -128,18 +164,18 @@ test-validate-docker-compose:
   stage: test-validate
   needs: [test-generate-docker-compose]
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "test"'
-    - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $TEST_BRANCH'
+    - if: '$CI_COMMIT_BRANCH == $TEST_BRANCH && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
 test-promote:
   extends: .auto-promote-base
   stage: test-promote
   needs: [test-validate-docker-compose]
   variables:
-    SOURCE_BRANCH: "test"
-    TARGET_BRANCH: "main"
+    SOURCE_BRANCH: $TEST_BRANCH
+    TARGET_BRANCH: $PROD_BRANCH
   rules:
-    - if: '$CI_COMMIT_BRANCH == "test" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+    - if: '$CI_COMMIT_BRANCH == $TEST_BRANCH && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
       when: on_success
 
 # ==========================================================================
@@ -149,19 +185,19 @@ prod-generate-docker-compose:
   extends: .generate-base
   stage: prod-generate
   script:
-    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "/opt/aac-template-engine" --deployment-type "docker_compose" --stage "prod"
+    - python3 -m manifest_generator.main --ssot-json "$SSOT_FILE" --template-path "$TEMPLATE_PATH" --deployment-type "docker_compose" --stage "prod"
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $PROD_BRANCH'
+    - if: '$CI_COMMIT_BRANCH == $PROD_BRANCH && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
 prod-generate-custom-files:
   extends: .generate-base
   stage: prod-generate
   script:
-    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "/opt/aac-template-engine" --process-files --stage "prod"
+    - python3 -m manifest_generator.main --ssot-json "$SSOT_FILE" --template-path "$TEMPLATE_PATH" --process-files --stage "prod"
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $PROD_BRANCH'
+    - if: '$CI_COMMIT_BRANCH == $PROD_BRANCH && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
       exists: [custom_templates/files/**/*]
 
 prod-generate-documentation:
@@ -169,24 +205,24 @@ prod-generate-documentation:
   stage: prod-generate
   resource_group: central_docs_publishing
   script:
-    - python3 -m manifest_generator.main --ssot-json "service.yml" --template-path "/opt/aac-template-engine" --process-documentation --stage "prod"
+    - python3 -m manifest_generator.main --ssot-json "$SSOT_FILE" --template-path "$TEMPLATE_PATH" --process-documentation --stage "prod"
   artifacts:
-    paths: [deployments/]
+    paths: [$DEPLOYMENT_DIR/]
   needs:
     - prod-generate-docker-compose
     - job: prod-generate-custom-files
       optional: true
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $PROD_BRANCH'
+    - if: '$CI_COMMIT_BRANCH == $PROD_BRANCH && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
 prod-validate-docker-compose:
   extends: .validate-base
   stage: prod-validate
   needs: [prod-generate-docker-compose]
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $PROD_BRANCH'
+    - if: '$CI_COMMIT_BRANCH == $PROD_BRANCH && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
 
 # ==========================================================================
 # DOCUMENTATION WORKFLOW
@@ -195,30 +231,27 @@ publish_to_docs:
   stage: documentation
   resource_group: central_docs_publishing
   image: 
-    name: registry.gitlab.int.fam-feser.de/aac-application-definitions/aac-template-engine:latest
+    name: $TEMPLATE_ENGINE_IMAGE
     pull_policy: always
   needs:
     - job: prod-generate-documentation
       artifacts: true
-  variables:
-    DOCS_REPO_URL: "https://gitlab.int.fam-feser.de/documentation/aac-iac-documentation.git"
-    DOC_SOURCE_DIR: "deployments/documentation"
   script:
-    - python3 /opt/aac-template-engine/scripts/publish_docs.py
+    - python3 $TEMPLATE_PATH/scripts/publish_docs.py
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == $PROD_BRANCH'
 
 pages:
   stage: documentation
   image: 
-    name: registry.gitlab.int.fam-feser.de/aac-application-definitions/aac-template-engine:latest
+    name: $TEMPLATE_ENGINE_IMAGE
     pull_policy: always
   needs:
     - job: prod-generate-documentation
       artifacts: true
   script:
     - echo "Preparing documentation for GitLab Pages..."
-    - if [ -d "deployments/documentation" ]; then cp -r deployments/documentation/* ./ ; fi
+    - if [ -d "$DOC_SOURCE_DIR" ]; then cp -r $DOC_SOURCE_DIR/* ./ ; fi
     - |
       if [ ! -f "docs/index.md" ]; then
         echo "No documentation generated. Skipping build."
@@ -233,4 +266,30 @@ pages:
     paths:
       - public
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+    - if: '$CI_COMMIT_BRANCH == $PROD_BRANCH && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+
+# ==========================================================================
+# CD TRIGGER WORKFLOW
+# ==========================================================================
+prod-trigger-orchestrator:
+  stage: documentation
+  image: $CURL_IMAGE
+  needs:
+    - prod-validate-docker-compose
+  script:
+    - echo "Triggering Lyndrix Orchestrator Deployment for ${CI_PROJECT_NAME}..."
+    - |
+      RESPONSE=$(curl --silent --output /dev/stderr --write-out "%{http_code}" \
+        --request POST \
+        --header "Content-Type: application/json" \
+        --data "{\"branch\": \"${PROD_BRANCH}\"}" \
+        "${LYNDRIX_ORCHESTRATOR_URL}/api/iac/deploy/service/${CI_PROJECT_NAME}")
+      
+      if [ "$RESPONSE" -eq 200 ] || [ "$RESPONSE" -eq 202 ]; then 
+        echo -e "\nOrchestrator successfully accepted the deployment queue."
+      else 
+        echo -e "\nFailed to trigger deployment. HTTP Code: $RESPONSE"
+        exit 1
+      fi
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $PROD_BRANCH && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
