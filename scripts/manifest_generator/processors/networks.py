@@ -17,7 +17,7 @@ class NetworkProcessor(BaseProcessor):
         }
 
         # 2. Main Service Logic
-        if dc.get('network_mode') == 'host':
+        if dc.get('network_mode'):
             context['processed_networks'] = []
         else:
             assigned = ["interconnect", "stack_internal"]
@@ -31,7 +31,7 @@ class NetworkProcessor(BaseProcessor):
         
         # 3. Dependency Logic (The Fix)
         for dep_name, dep_cfg in context.get('dependencies', {}).items():
-            if dep_cfg.get('network_mode') == 'host':
+            if dep_cfg.get('network_mode'):
                 dep_cfg['processed_networks'] = []
                 continue
 
