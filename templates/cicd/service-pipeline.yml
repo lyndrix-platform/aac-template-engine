@@ -35,6 +35,9 @@ variables:
   # Provide this via GitLab UI Secrets, e.g., http://10.0.0.5:8081
   LYNDRIX_ORCHESTRATOR_URL: "${CI_LYNDRIX_ORCHESTRATOR_URL}" 
   LYNDRIX_ORCHESTRATOR_TOKEN: "${CI_LYNDRIX_ORCHESTRATOR_TOKEN}"
+  # Set to "true" only if you want CI to trigger orchestrator directly.
+  # Keep "false" when GitLab webhooks already trigger deployments.
+  LYNDRIX_DIRECT_TRIGGER_ENABLED: "false"
 
   
 default:
@@ -292,4 +295,4 @@ prod-trigger-orchestrator:
         exit 1
       fi
   rules:
-    - if: '$CI_COMMIT_BRANCH == $PROD_BRANCH && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
+    - if: '$LYNDRIX_DIRECT_TRIGGER_ENABLED == "true" && $CI_COMMIT_BRANCH == $PROD_BRANCH && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
