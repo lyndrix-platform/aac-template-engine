@@ -13,7 +13,7 @@ services:
       - |
 {{ cmd_item | indent(8) }}
       {% else %}
-      - "{{ cmd_item }}"
+      - {{ (cmd_item | string) | tojson }}
       {% endif %}
       {% endfor %}
     {% endif %}
@@ -78,7 +78,7 @@ services:
       - |
 {{ cmd_item | indent(8) }}
       {% else %}
-      - "{{ cmd_item }}"
+      - {{ (cmd_item | string) | tojson }}
       {% endif %}
       {% endfor %}
     {% endif %}
