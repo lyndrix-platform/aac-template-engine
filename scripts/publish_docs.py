@@ -36,10 +36,18 @@ def main():
     repo_dir = 'docs_repo'
 
     # --- 2. Find Source Files ---
-    source_files = glob.glob(os.path.join(source_dir, '*.md'))
+    # Support both legacy flat markdown output and MkDocs-style docs/index.md output.
+    source_files = sorted(glob.glob(os.path.join(source_dir, '*.md')))
+    if not source_files:
+        source_files = sorted(glob.glob(os.path.join(source_dir, 'docs', '*.md')))
+    if not source_files:
+        source_files = sorted(glob.glob(os.path.join(source_dir, 'docs', '**', '*.md'), recursive=True))
+
     if not source_files:
         print(f"No Markdown files found in {source_dir}. Skipping.")
         sys.exit(0)
+
+    print(f"Found {len(source_files)} Markdown file(s) in documentation artifacts.")
 
     # --- 3. Setup and Clone ---
     if os.path.exists(repo_dir):
@@ -67,6 +75,9 @@ def main():
     
     for src in source_files:
         filename = os.path.basename(src)
+        if filename == 'index.md':
+            filename = 'documentation.md'
+
         title = os.path.splitext(filename)[0].replace('_', ' ').title()
         dest = os.path.join(target_dir, filename)
         

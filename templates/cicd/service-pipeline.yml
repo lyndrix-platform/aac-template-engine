@@ -242,6 +242,13 @@ publish_to_docs:
     - job: prod-generate-documentation
       artifacts: true
   script:
+    - |
+      # Compatibility bridge: manifest generator writes docs/index.md,
+      # while older publish_docs.py versions expect documentation/*.md.
+      if [ -f "$DOC_SOURCE_DIR/docs/index.md" ] && [ ! -f "$DOC_SOURCE_DIR/documentation.md" ]; then
+        cp "$DOC_SOURCE_DIR/docs/index.md" "$DOC_SOURCE_DIR/documentation.md"
+      fi
+    - ls -la "$DOC_SOURCE_DIR" || true
     - python3 $TEMPLATE_PATH/scripts/publish_docs.py
   rules:
     - if: '$CI_COMMIT_BRANCH == $PROD_BRANCH'
