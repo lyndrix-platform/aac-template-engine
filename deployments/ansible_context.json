@@ -1,0 +1,190 @@
+{
+  "service": {
+    "name": "aac-hugo",
+    "stage": "prod",
+    "image_repo": "hugomods/hugo",
+    "image_tag": "debian-go-git",
+    "description": "Static Site Generator & Development Server",
+    "icon": "/icons/hugo.svg",
+    "category": "Documentation",
+    "hostname": "hugo",
+    "friendly_name": "Hugo"
+  },
+  "config": {
+    "domain_name": "int.fam-feser.de",
+    "generate_hostname": false,
+    "integrations": {
+      "homepage": {
+        "enabled": true
+      },
+      "autodns": {
+        "enabled": true
+      },
+      "traefik": {
+        "enabled": true,
+        "cert_resolver": "ionos",
+        "entrypoint": "websecure"
+      }
+    }
+  },
+  "environment": {
+    "PUID": "1000",
+    "TZ": "Europe/Berlin",
+    "PGID": "1000",
+    "GIT_REPO_URL": "https://gitlab.int.fam-feser.de/documentation/aac-iac-documentation.git"
+  },
+  "secrets": {
+    "GIT_PERSONAL_ACCESS_TOKEN": "REDACTED"
+  },
+  "dependencies": {},
+  "volumes": {
+    "site": {
+      "description": "Persistenter Speicher f\u00fcr das geklonte Git-Repository"
+    },
+    "config": {
+      "description": "Enth\u00e4lt Start-Skripte und Konfigurationen"
+    },
+    "local_time": {
+      "type": "bind",
+      "source": "/etc/localtime"
+    }
+  },
+  "network_definitions": {
+    "secured": {
+      "name": "services-secured",
+      "external": true
+    },
+    "exposed": {
+      "name": "services-exposed",
+      "external": true
+    },
+    "interconnect": {
+      "name": "docker-default",
+      "external": true
+    },
+    "stack_internal": {
+      "name": "aac-hugo_stack_internal",
+      "driver": "bridge"
+    }
+  },
+  "deployments": {
+    "docker_compose": {
+      "volumes": [
+        "site:/src/site",
+        "config:/config",
+        "local_time:/etc/localtime"
+      ],
+      "networks_to_join": [],
+      "restart_policy": "unless-stopped",
+      "host_base_path": "/export/docker",
+      "command": [
+        "/bin/sh",
+        "-c",
+        "chmod +x /config/clone_repo.sh && /config/clone_repo.sh && exec hugo server --disableFastRender --source /src/site --destination /public --bind=0.0.0.0 --port 1313 --appendPort=false --baseURL https://hugo.int.fam-feser.de"
+      ]
+    }
+  },
+  "stage": "prod",
+  "ports": [
+    {
+      "name": "web",
+      "port": 1313,
+      "protocol": "TCP"
+    }
+  ],
+  "deployment_strategy": {
+    "main": {
+      "enabled": true,
+      "target_stage": "prod"
+    },
+    "dev": {
+      "enabled": true,
+      "target_stage": "dev"
+    },
+    "test": {
+      "enabled": false,
+      "target_stage": "test"
+    },
+    "ansible-dev": {
+      "enabled": true,
+      "target_stage": "dev"
+    },
+    "iac-dev": {
+      "enabled": true,
+      "target_stage": "dev"
+    },
+    "template-dev": {
+      "enabled": true,
+      "target_stage": "dev"
+    }
+  },
+  "deployment_enabled": true,
+  "inventory_hostname_friendly": "Ci Validation Host",
+  "processed_ports": [],
+  "processed_env": {
+    "PUID": "1000",
+    "TZ": "Europe/Berlin",
+    "PGID": "1000",
+    "GIT_REPO_URL": "https://gitlab.int.fam-feser.de/documentation/aac-iac-documentation.git"
+  },
+  "processed_secrets": {
+    "GIT_PERSONAL_ACCESS_TOKEN": "REDACTED"
+  },
+  "processed_networks": [
+    "interconnect",
+    "secured",
+    "stack_internal"
+  ],
+  "processed_labels": {
+    "traefik.enable": "true",
+    "traefik.http.routers.aac-hugo.rule": "Host(`hugo.int.fam-feser.de`)",
+    "traefik.http.routers.aac-hugo.entrypoints": "websecure",
+    "traefik.http.routers.aac-hugo.tls": "true",
+    "traefik.http.routers.aac-hugo.tls.certresolver": "ionos",
+    "traefik.docker.network": "services-secured",
+    "traefik.http.services.aac-hugo.loadbalancer.server.port": "1313",
+    "traefik.http.services.aac-hugo.loadbalancer.server.scheme": "http",
+    "auto-dns.createWildcard.aac-hugo": "false",
+    "auto-dns.customDNS.aac-hugo": "true",
+    "auto-dns.customDOMAIN.aac-hugo": "int.fam-feser.de",
+    "auto-dns.customHost.aac-hugo": "hugo",
+    "homepage.group": "Documentation",
+    "homepage.name": "Hugo - Ci Validation Host",
+    "homepage.href": "https://hugo.int.fam-feser.de",
+    "homepage.icon": "/icons/hugo.svg",
+    "homepage.description": "Static Site Generator & Development Server"
+  },
+  "processed_specs": {},
+  "processed_volumes": [
+    "/export/docker/aac-hugo/site:/src/site",
+    "/export/docker/aac-hugo/config:/config",
+    "/etc/localtime:/etc/localtime"
+  ],
+  "named_volumes": {},
+  "ansible_directories": [
+    {
+      "path": "/export/docker/aac-hugo",
+      "owner": "1000",
+      "group": "1000",
+      "mode": "0755"
+    },
+    {
+      "path": "/export/docker/aac-hugo/site",
+      "owner": "1000",
+      "group": "1000",
+      "mode": "0755"
+    },
+    {
+      "path": "/export/docker/aac-hugo/config",
+      "owner": "1000",
+      "group": "1000",
+      "mode": "0755"
+    },
+    {
+      "path": "/etc/localtime",
+      "owner": "1000",
+      "group": "1000",
+      "mode": "0755"
+    }
+  ]
+}

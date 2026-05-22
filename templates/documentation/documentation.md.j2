@@ -33,18 +33,6 @@ Diese Variablen enthalten allgemeine Konfigurationen und sind nicht als geheim e
 ```
 {% endif %}
 
-{% if processed_secrets %}
-### 2.3 Geheime Umgebungsvariablen (`stack.env`)
-
-Diese Datei enthält sensible Daten wie Passwörter, API-Keys oder Tokens. **Sie sollte niemals in Git eingecheckt werden.**
-
-```ini
-{% for key, value in processed_secrets.items() %}
-{{ key }}="********"
-{% endfor %}
-```
-{% endif %}
-
 ---
 
 ## 3. Volumes und Datenhaltung
