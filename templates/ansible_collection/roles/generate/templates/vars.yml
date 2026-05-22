@@ -9,7 +9,7 @@ default_extra_env_vars:
   - name: TZ
     value: "Europe/Berlin"
   - name: IONOS_API_KEY
-    value: "REDACTED"
+    value: "{{ vault_ionos_api_key | default('CHANGE_ME') }}"
 
 volume_dirs:
   - letsencrypt

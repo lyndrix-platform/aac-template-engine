@@ -20,3 +20,5 @@ dist/
 pip-wheel-metadata/
 *.egg-info/
 .ipynb_checkpoints/
+deployments/ansible_context.json
+ssot_temp.json
