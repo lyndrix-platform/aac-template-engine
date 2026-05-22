@@ -23,6 +23,8 @@ variables:
   DEPLOYMENT_DIR: "deployments"
   DOCKER_COMPOSE_FILE: "deployments/docker_compose/docker-compose.yml"
   DOC_SOURCE_DIR: "deployments/documentation"
+  DOCS_TARGET_ROOT: "content/aac-services"
+  DOCS_LEGACY_TARGET_ROOT: "site/content/aac-services"
   
   # Branch Definitions
   DEV_BRANCH: "dev"

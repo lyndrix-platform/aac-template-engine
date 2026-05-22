@@ -295,7 +295,7 @@ Dieser Prozess wird durch einen manuellen `publish_to_docs`-Job in der CI/CD-Pip
 2.  **Klonen des Doku-Repos:** Das zentrale Dokumentations-Repository (`documentation/aac-iac-documentation`) wird geklont.
 3.  **Hugo-Header-Generierung:** Der Job erstellt dynamisch einen Hugo-kompatiblen "Front Matter"-Header. Dieser enthält Metadaten wie `title`, `date`, `lastmod`, `draft` und `description`.
 4.  **Zusammenführung:** Der generierte Header wird mit dem Inhalt der `documentation.md` aus dem App-Repo zusammengefügt.
-5.  **Commit & Push:** Die fertige Markdown-Datei wird im Dokumentations-Repository unter `site/content/aac-services/<service-name>/<service-name>-documentation.md` gespeichert, committet und in den `main`-Branch gepusht.
+5.  **Commit & Push:** Die fertige Markdown-Datei wird im Dokumentations-Repository unter `content/aac-services/<service-name>/<service-name>-documentation.md` gespeichert, committet und in den `main`-Branch gepusht.
 
 Durch diesen Prozess wird sichergestellt, dass die Dokumentation immer auf dem gleichen Stand wie der Code ist ("Docs as Code") und ohne manuelles Eingreifen in einem zentralen Portal (das mit Hugo gebaut wird) zur Verfügung steht.
 
