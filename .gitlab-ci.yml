@@ -43,9 +43,9 @@ python-unit-tests:
 # ==========================================================================
 build-engine-image:
   stage: build-image
-  image: docker:24.0.9
+  image: docker:29.5.2
   services:
-    - name: docker:24.0.9-dind
+    - name: docker:29.5.2-dind
       alias: docker
   variables:
     DOCKER_TLS_CERTDIR: ""
