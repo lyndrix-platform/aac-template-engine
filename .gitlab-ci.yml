@@ -1,6 +1,7 @@
 stages:
   - lint
   - test
+  - release-tag
   - build-image
 
 # Ensure global defaults for DRYness
@@ -37,6 +38,32 @@ python-unit-tests:
     - pytest tests/ -v
   rules:
     - if: '$CI_COMMIT_BRANCH'
+
+create-release-tag:
+  stage: release-tag
+  image: alpine/git:2.47.2
+  needs: ["python-unit-tests"]
+  script:
+    - VERSION="$(awk -F'"' '/^__version__/ {print $2}' version.py)"
+    - |
+      if [ -z "$VERSION" ]; then
+        echo "ERROR: Could not read __version__ from version.py"
+        exit 1
+      fi
+    - TAG="v${VERSION#v}"
+    - echo "Ensuring release tag ${TAG} exists..."
+    - git fetch --tags origin
+    - |
+      if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+        echo "Tag ${TAG} already exists. Nothing to do."
+        exit 0
+      fi
+    - git config user.name "${GITLAB_USER_NAME:-CI Release Bot}"
+    - git config user.email "${GITLAB_USER_EMAIL:-ci-release-bot@local}"
+    - git tag -a "$TAG" -m "Release $TAG"
+    - git push "$CI_REPOSITORY_URL" "refs/tags/$TAG"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'
 
 # ==========================================================================
 # 3. DOCKER BUILD & PUSH
