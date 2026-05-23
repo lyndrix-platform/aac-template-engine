@@ -105,8 +105,8 @@ trigger-github-release:
         echo "GITHUB_REPO is not configured. Skipping GitHub workflow dispatch."
         exit 0
       fi
-      if [ -z "$CI_GLOBAL_TOKEN" ]; then
-        echo "CI_GLOBAL_TOKEN is not configured. Skipping GitHub workflow dispatch."
+      if [ -z "$GITHUB_TOKEN" ]; then
+        echo "GITHUB_TOKEN is not configured. Skipping GitHub workflow dispatch."
         exit 0
       fi
     - WORKFLOW_FILE="${GITHUB_RELEASE_WORKFLOW:-release.yml}"
@@ -114,7 +114,7 @@ trigger-github-release:
     - |
       curl --fail-with-body --request POST \
         --url "https://api.github.com/repos/${GITHUB_REPO}/actions/workflows/${WORKFLOW_FILE}/dispatches" \
-        --header "Authorization: Bearer ${CI_GLOBAL_TOKEN}" \
+        --header "Authorization: Bearer ${GITHUB_TOKEN}" \
         --header "Accept: application/vnd.github+json" \
         --header "X-GitHub-Api-Version: 2022-11-28" \
         --data "{\"ref\":\"main\",\"inputs\":{\"release_tag\":\"${TAG}\",\"source_sha\":\"${CI_COMMIT_SHA}\"}}"
