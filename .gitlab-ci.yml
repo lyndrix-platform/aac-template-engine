@@ -44,6 +44,7 @@ create-release-tag:
   image:
     name: alpine/git:2.47.2
     entrypoint: [""]
+  resource_group: create-release-tag
   needs: ["python-unit-tests"]
   script:
     - VERSION="$(awk -F'"' '/^__version__/ {print $2}' version.py)"
@@ -65,8 +66,9 @@ create-release-tag:
     - git tag -a "$TAG" -m "Release $TAG"
     - |
       JOB_TOKEN_PUSH_URL="https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+      FALLBACK_PUSH_TOKEN="${RELEASE_TAG_PUSH_TOKEN:-$CI_GLOBAL_TOKEN}"
       FALLBACK_PUSH_USER="${RELEASE_TAG_PUSH_USER:-oauth2}"
-      FALLBACK_PUSH_URL="https://${FALLBACK_PUSH_USER}:${RELEASE_TAG_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+      FALLBACK_PUSH_URL="https://${FALLBACK_PUSH_USER}:${FALLBACK_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
 
       echo "Trying tag push with CI_JOB_TOKEN first..."
       if git push "$JOB_TOKEN_PUSH_URL" "refs/tags/$TAG"; then
@@ -74,15 +76,48 @@ create-release-tag:
         exit 0
       fi
 
-      if [ -n "$RELEASE_TAG_PUSH_TOKEN" ]; then
-        echo "CI_JOB_TOKEN push failed. Trying fallback project token..."
+      if [ -n "$FALLBACK_PUSH_TOKEN" ]; then
+        echo "CI_JOB_TOKEN push failed. Trying fallback token..."
         git push "$FALLBACK_PUSH_URL" "refs/tags/$TAG"
         exit 0
       fi
 
-      echo "ERROR: CI_JOB_TOKEN push failed and RELEASE_TAG_PUSH_TOKEN is not set."
-      echo "Enable CI job token write_repository or set RELEASE_TAG_PUSH_TOKEN."
+      echo "ERROR: CI_JOB_TOKEN push failed and no fallback token is set."
+      echo "Enable CI job token write_repository or set RELEASE_TAG_PUSH_TOKEN/CI_GLOBAL_TOKEN."
       exit 1
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'
+
+trigger-github-release:
+  stage: release-tag
+  image: curlimages/curl:8.8.0
+  needs: ["create-release-tag"]
+  script:
+    - VERSION="$(awk -F'"' '/^__version__/ {print $2}' version.py)"
+    - |
+      if [ -z "$VERSION" ]; then
+        echo "ERROR: Could not read __version__ from version.py"
+        exit 1
+      fi
+    - TAG="v${VERSION#v}"
+    - |
+      if [ -z "$GITHUB_REPO" ]; then
+        echo "GITHUB_REPO is not configured. Skipping GitHub workflow dispatch."
+        exit 0
+      fi
+      if [ -z "$CI_GLOBAL_TOKEN" ]; then
+        echo "CI_GLOBAL_TOKEN is not configured. Skipping GitHub workflow dispatch."
+        exit 0
+      fi
+    - WORKFLOW_FILE="${GITHUB_RELEASE_WORKFLOW:-release.yml}"
+    - echo "Dispatching GitHub workflow ${WORKFLOW_FILE} for ${GITHUB_REPO} (tag ${TAG})..."
+    - |
+      curl --fail-with-body --request POST \
+        --url "https://api.github.com/repos/${GITHUB_REPO}/actions/workflows/${WORKFLOW_FILE}/dispatches" \
+        --header "Authorization: Bearer ${CI_GLOBAL_TOKEN}" \
+        --header "Accept: application/vnd.github+json" \
+        --header "X-GitHub-Api-Version: 2022-11-28" \
+        --data "{\"ref\":\"main\",\"inputs\":{\"release_tag\":\"${TAG}\",\"source_sha\":\"${CI_COMMIT_SHA}\"}}"
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'
 

@@ -1,0 +1,70 @@
+name: Release Deploy
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to deploy, e.g. v0.0.4"
+        required: false
+        type: string
+      source_sha:
+        description: "Source commit SHA from upstream CI"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.inputs.release_tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve release tag
+        id: meta
+        run: |
+          TAG="${{ github.event.inputs.release_tag }}"
+          if [ -z "$TAG" ]; then
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          if [ -z "$TAG" ]; then
+            echo "Could not determine release tag"
+            exit 1
+          fi
+          echo "release_tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Show deployment context
+        run: |
+          echo "Deploying release tag: ${{ steps.meta.outputs.release_tag }}"
+          echo "GitHub ref: ${GITHUB_REF}"
+          echo "GitHub sha: ${GITHUB_SHA}"
+          echo "Upstream source sha: ${{ github.event.inputs.source_sha }}"
+
+      - name: Trigger deployment webhook
+        if: ${{ secrets.DEPLOY_WEBHOOK_URL != '' }}
+        env:
+          DEPLOY_WEBHOOK_URL: ${{ secrets.DEPLOY_WEBHOOK_URL }}
+          DEPLOY_WEBHOOK_TOKEN: ${{ secrets.DEPLOY_WEBHOOK_TOKEN }}
+        run: |
+          AUTH_HEADER=""
+          if [ -n "$DEPLOY_WEBHOOK_TOKEN" ]; then
+            AUTH_HEADER="-H Authorization: Bearer $DEPLOY_WEBHOOK_TOKEN"
+          fi
+
+          curl --fail --request POST \
+            --url "$DEPLOY_WEBHOOK_URL" \
+            --header "Content-Type: application/json" \
+            $AUTH_HEADER \
+            --data "{\"release_tag\":\"${{ steps.meta.outputs.release_tag }}\",\"sha\":\"${GITHUB_SHA}\"}"
+
+      - name: Skip deployment if no webhook configured
+        if: ${{ secrets.DEPLOY_WEBHOOK_URL == '' }}
+        run: |
+          echo "DEPLOY_WEBHOOK_URL is not configured."
+          echo "Set GitHub Action secret DEPLOY_WEBHOOK_URL to enable deployment."
