@@ -17,6 +17,7 @@ on:
 
 permissions:
   contents: read
+  packages: write
 
 concurrency:
   group: release-${{ github.event.inputs.release_tag || github.ref_name }}
@@ -25,7 +26,15 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      REGISTRY: ghcr.io
+      IMAGE_NAME: ${{ github.repository }}
+      DEPLOY_WEBHOOK_URL: ${{ secrets.DEPLOY_WEBHOOK_URL }}
+      DEPLOY_WEBHOOK_TOKEN: ${{ secrets.DEPLOY_WEBHOOK_TOKEN }}
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Resolve release tag
         id: meta
         run: |
@@ -37,20 +46,60 @@ jobs:
             echo "Could not determine release tag"
             exit 1
           fi
+          VERSION="${TAG#v}"
+          MINOR="$(printf '%s' "$VERSION" | cut -d. -f1,2)"
+          IS_PRERELEASE="false"
+          if printf '%s' "$VERSION" | grep -Eq '[-+]'; then
+            IS_PRERELEASE="true"
+          fi
           echo "release_tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "minor=$MINOR" >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
 
       - name: Show deployment context
         run: |
           echo "Deploying release tag: ${{ steps.meta.outputs.release_tag }}"
+          echo "Image version tag: ${{ steps.meta.outputs.version }}"
+          echo "Image minor tag: ${{ steps.meta.outputs.minor }}"
           echo "GitHub ref: ${GITHUB_REF}"
           echo "GitHub sha: ${GITHUB_SHA}"
           echo "Upstream source sha: ${{ github.event.inputs.source_sha }}"
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: docker_meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ steps.meta.outputs.version }}
+            type=raw,value=${{ steps.meta.outputs.minor }}
+            type=raw,value=latest,enable=${{ steps.meta.outputs.is_prerelease != 'true' }}
+            type=sha,prefix=sha-
+
+      - name: Build and push image to GHCR
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.docker_meta.outputs.tags }}
+          labels: ${{ steps.docker_meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
       - name: Trigger deployment webhook
-        if: ${{ secrets.DEPLOY_WEBHOOK_URL != '' }}
-        env:
-          DEPLOY_WEBHOOK_URL: ${{ secrets.DEPLOY_WEBHOOK_URL }}
-          DEPLOY_WEBHOOK_TOKEN: ${{ secrets.DEPLOY_WEBHOOK_TOKEN }}
+        if: ${{ env.DEPLOY_WEBHOOK_URL != '' }}
         run: |
           AUTH_HEADER=""
           if [ -n "$DEPLOY_WEBHOOK_TOKEN" ]; then
@@ -64,7 +113,7 @@ jobs:
             --data "{\"release_tag\":\"${{ steps.meta.outputs.release_tag }}\",\"sha\":\"${GITHUB_SHA}\"}"
 
       - name: Skip deployment if no webhook configured
-        if: ${{ secrets.DEPLOY_WEBHOOK_URL == '' }}
+        if: ${{ env.DEPLOY_WEBHOOK_URL == '' }}
         run: |
           echo "DEPLOY_WEBHOOK_URL is not configured."
           echo "Set GitHub Action secret DEPLOY_WEBHOOK_URL to enable deployment."
