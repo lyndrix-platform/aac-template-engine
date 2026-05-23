@@ -29,6 +29,7 @@ jobs:
     env:
       REGISTRY: ghcr.io
       IMAGE_NAME: ${{ github.repository }}
+      BASE_IMAGE: ghcr.io/lyndrix-platform/ansible-ci-image:latest
       DEPLOY_WEBHOOK_URL: ${{ secrets.DEPLOY_WEBHOOK_URL }}
       DEPLOY_WEBHOOK_TOKEN: ${{ secrets.DEPLOY_WEBHOOK_TOKEN }}
     steps:
@@ -92,6 +93,8 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
+          build-args: |
+            BASE_IMAGE=${{ env.BASE_IMAGE }}
           push: true
           tags: ${{ steps.docker_meta.outputs.tags }}
           labels: ${{ steps.docker_meta.outputs.labels }}

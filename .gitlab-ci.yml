@@ -6,6 +6,8 @@ stages:
 
 variables:
   GITHUB_REPO: "https://github.com/lyndrix-platform/aac-template-engine"
+  ANSIBLE_CI_IMAGE_PROJECT_URL: "https://gitlab.int.fam-feser.de/iac-environment/iac-platform-assets/ansible-ci-image"
+  ANSIBLE_CI_BASE_IMAGE: "registry.gitlab.int.fam-feser.de/iac-environment/iac-platform-assets/ansible-ci-image:latest"
 
 # Ensure global defaults for DRYness
 default:
@@ -155,12 +157,13 @@ build-engine-image:
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
     
     # Ensure Docker pulls the absolute latest base image we just built upstream
-    - docker pull registry.gitlab.int.fam-feser.de/iac-environment/iac-platform-assets/ansible-ci-image:latest
+    - 'echo "Using local base image project: ${ANSIBLE_CI_IMAGE_PROJECT_URL}"'
+    - docker pull "$ANSIBLE_CI_BASE_IMAGE"
     
     - IMAGE_SHA="$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
     
     - echo "Building the monolithic AAC CI Image..."
-    - docker build --pull --tag "$IMAGE_SHA" .
+    - docker build --pull --build-arg BASE_IMAGE="$ANSIBLE_CI_BASE_IMAGE" --tag "$IMAGE_SHA" .
     
     - echo "Pushing images to registry..."
     - docker push "$IMAGE_SHA"

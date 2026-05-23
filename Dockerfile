@@ -1,5 +1,6 @@
 # Start from your monolithic Ansible CI image
-FROM registry.gitlab.int.fam-feser.de/iac-environment/iac-platform-assets/ansible-ci-image:latest
+ARG BASE_IMAGE=registry.gitlab.int.fam-feser.de/iac-environment/iac-platform-assets/ansible-ci-image:latest
+FROM ${BASE_IMAGE}
 
 # Install Python dependencies for the template engine and MkDocs
 RUN pip install --no-cache-dir pyyaml jinja2 mkdocs-material
