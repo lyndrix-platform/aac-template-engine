@@ -23,6 +23,7 @@ yaml-syntax-check:
       -print0 | xargs -0 -n 1 python3 -c "import yaml, sys; print(f'-- Checking: {sys.argv[1]}'); yaml.safe_load(open(sys.argv[1]))"
   rules:
     - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+([-.].*)?$/'
 
 python-unit-tests:
   stage: test
@@ -37,6 +38,7 @@ python-unit-tests:
     - pytest tests/ -v
   rules:
     - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+([-.].*)?$/'
 
 # ==========================================================================
 # 3. DOCKER BUILD & PUSH
@@ -59,14 +61,44 @@ build-engine-image:
     - docker pull registry.gitlab.int.fam-feser.de/iac-environment/iac-platform-assets/ansible-ci-image:latest
     
     - IMAGE_SHA="$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
-    - IMAGE_LATEST="$CI_REGISTRY_IMAGE:latest"
     
     - echo "Building the monolithic AAC CI Image..."
-    - docker build -t "$IMAGE_SHA" -t "$IMAGE_LATEST" .
+    - docker build -t "$IMAGE_SHA" .
     
     - echo "Pushing images to registry..."
     - docker push "$IMAGE_SHA"
-    - docker push "$IMAGE_LATEST"
+    - |
+      RELEASE_VERSION=""
+
+      if [ "$CI_COMMIT_BRANCH" = "main" ] || [ "$TRIGGER_SOURCE" = "base-image-update" ]; then
+        RELEASE_VERSION="$(awk -F'"' '/^__version__/ {print $2}' version.py)"
+        if [ -z "$RELEASE_VERSION" ]; then
+          echo "ERROR: Could not read __version__ from version.py"
+          exit 1
+        fi
+      elif printf '%s' "$CI_COMMIT_TAG" | grep -Eq '^v?[0-9]+\.[0-9]+\.[0-9]+([-.].*)?$'; then
+        RELEASE_VERSION="${CI_COMMIT_TAG#v}"
+      fi
+
+      RELEASE_MINOR="$(printf '%s' "$RELEASE_VERSION" | cut -d. -f1,2)"
+
+      if [ "$CI_COMMIT_BRANCH" = "main" ] || [ "$TRIGGER_SOURCE" = "base-image-update" ]; then
+        IMAGE_LATEST="$CI_REGISTRY_IMAGE:latest"
+        echo "Updating latest tag..."
+        docker tag "$IMAGE_SHA" "$IMAGE_LATEST"
+        docker push "$IMAGE_LATEST"
+      fi
+      if [ -n "$RELEASE_VERSION" ] && ! docker manifest inspect "$CI_REGISTRY_IMAGE:$RELEASE_VERSION" >/dev/null 2>&1; then
+        echo "Publishing release tags for ${RELEASE_VERSION}..."
+        docker tag "$IMAGE_SHA" "$CI_REGISTRY_IMAGE:$RELEASE_VERSION"
+        docker push "$CI_REGISTRY_IMAGE:$RELEASE_VERSION"
+
+        docker tag "$IMAGE_SHA" "$CI_REGISTRY_IMAGE:$RELEASE_MINOR"
+        docker push "$CI_REGISTRY_IMAGE:$RELEASE_MINOR"
+      elif [ -n "$RELEASE_VERSION" ]; then
+        echo "Pinned tag ${RELEASE_VERSION} already exists; leaving it unchanged."
+      fi
   rules:
     # NEW: Run when code is merged to main OR when the base image triggers it
     - if: '$CI_COMMIT_BRANCH == "main" || $TRIGGER_SOURCE == "base-image-update"'
+    - if: '$CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+([-.].*)?$/'
