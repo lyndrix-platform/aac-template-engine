@@ -41,7 +41,7 @@ python-unit-tests:
 
 create-release-tag:
   stage: release-tag
-  image: alpine/git:2.47.2
+  image: alpine/git:v2.52.0
   needs: ["python-unit-tests"]
   script:
     - VERSION="$(awk -F'"' '/^__version__/ {print $2}' version.py)"
