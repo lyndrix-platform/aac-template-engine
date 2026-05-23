@@ -4,6 +4,9 @@ stages:
   - release-tag
   - build-image
 
+variables:
+  GITHUB_REPO: "https://github.com/lyndrix-platform/aac-template-engine"
+
 # Ensure global defaults for DRYness
 default:
   tags:
@@ -105,15 +108,27 @@ trigger-github-release:
         echo "GITHUB_REPO is not configured. Skipping GitHub workflow dispatch."
         exit 0
       fi
+
+      GITHUB_REPO_PATH="$GITHUB_REPO"
+      GITHUB_REPO_PATH="${GITHUB_REPO_PATH#https://github.com/}"
+      GITHUB_REPO_PATH="${GITHUB_REPO_PATH#http://github.com/}"
+      GITHUB_REPO_PATH="${GITHUB_REPO_PATH#git@github.com:}"
+      GITHUB_REPO_PATH="${GITHUB_REPO_PATH%.git}"
+
+      if ! printf '%s' "$GITHUB_REPO_PATH" | grep -Eq '^[^/]+/[^/]+$'; then
+        echo "ERROR: GITHUB_REPO must be owner/repo or a github.com URL. Current value: $GITHUB_REPO"
+        exit 1
+      fi
+
       if [ -z "$GITHUB_TOKEN" ]; then
         echo "GITHUB_TOKEN is not configured. Skipping GitHub workflow dispatch."
         exit 0
       fi
     - WORKFLOW_FILE="${GITHUB_RELEASE_WORKFLOW:-release.yml}"
-    - echo "Dispatching GitHub workflow ${WORKFLOW_FILE} for ${GITHUB_REPO} (tag ${TAG})..."
+    - echo "Dispatching GitHub workflow ${WORKFLOW_FILE} for ${GITHUB_REPO_PATH} (tag ${TAG})..."
     - |
       curl --fail-with-body --request POST \
-        --url "https://api.github.com/repos/${GITHUB_REPO}/actions/workflows/${WORKFLOW_FILE}/dispatches" \
+        --url "https://api.github.com/repos/${GITHUB_REPO_PATH}/actions/workflows/${WORKFLOW_FILE}/dispatches" \
         --header "Authorization: Bearer ${GITHUB_TOKEN}" \
         --header "Accept: application/vnd.github+json" \
         --header "X-GitHub-Api-Version: 2022-11-28" \
