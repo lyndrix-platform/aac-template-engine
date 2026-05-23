@@ -88,7 +88,7 @@ build-engine-image:
         docker tag "$IMAGE_SHA" "$IMAGE_LATEST"
         docker push "$IMAGE_LATEST"
       fi
-      if [ -n "$RELEASE_VERSION" ] && ! docker manifest inspect "$CI_REGISTRY_IMAGE:$RELEASE_VERSION" >/dev/null 2>&1; then
+      if [ -n "$RELEASE_VERSION" ] && ! docker pull "$CI_REGISTRY_IMAGE:$RELEASE_VERSION" >/dev/null 2>&1; then
         echo "Publishing release tags for ${RELEASE_VERSION}..."
         docker tag "$IMAGE_SHA" "$CI_REGISTRY_IMAGE:$RELEASE_VERSION"
         docker push "$CI_REGISTRY_IMAGE:$RELEASE_VERSION"
