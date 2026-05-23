@@ -23,7 +23,6 @@ yaml-syntax-check:
       -print0 | xargs -0 -n 1 python3 -c "import yaml, sys; print(f'-- Checking: {sys.argv[1]}'); yaml.safe_load(open(sys.argv[1]))"
   rules:
     - if: '$CI_COMMIT_BRANCH'
-    - if: '$CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+([-.].*)?$/'
 
 python-unit-tests:
   stage: test
@@ -38,20 +37,20 @@ python-unit-tests:
     - pytest tests/ -v
   rules:
     - if: '$CI_COMMIT_BRANCH'
-    - if: '$CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+([-.].*)?$/'
 
 # ==========================================================================
 # 3. DOCKER BUILD & PUSH
 # ==========================================================================
 build-engine-image:
   stage: build-image
-  image: docker:latest@sha256:6b9cd914eb9c6b342c040a49a27a5eb3804453bae6ecc90f7ff96133595a95e8
+  image: docker:24.0.9
   services:
-    - name: docker:dind
+    - name: docker:24.0.9-dind
       alias: docker
   variables:
     DOCKER_TLS_CERTDIR: ""
     DOCKER_HOST: "tcp://docker:2375"
+    DOCKER_BUILDKIT: "0"
   needs: ["python-unit-tests"]
   script:
     - echo "Authenticating with GitLab Container Registry..."
@@ -63,7 +62,7 @@ build-engine-image:
     - IMAGE_SHA="$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
     
     - echo "Building the monolithic AAC CI Image..."
-    - docker build -t "$IMAGE_SHA" .
+    - docker build --pull --tag "$IMAGE_SHA" .
     
     - echo "Pushing images to registry..."
     - docker push "$IMAGE_SHA"
@@ -76,8 +75,6 @@ build-engine-image:
           echo "ERROR: Could not read __version__ from version.py"
           exit 1
         fi
-      elif printf '%s' "$CI_COMMIT_TAG" | grep -Eq '^v?[0-9]+\.[0-9]+\.[0-9]+([-.].*)?$'; then
-        RELEASE_VERSION="${CI_COMMIT_TAG#v}"
       fi
 
       RELEASE_MINOR="$(printf '%s' "$RELEASE_VERSION" | cut -d. -f1,2)"
@@ -101,4 +98,3 @@ build-engine-image:
   rules:
     # NEW: Run when code is merged to main OR when the base image triggers it
     - if: '$CI_COMMIT_BRANCH == "main" || $TRIGGER_SOURCE == "base-image-update"'
-    - if: '$CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+([-.].*)?$/'
