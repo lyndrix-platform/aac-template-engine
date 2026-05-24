@@ -47,7 +47,7 @@ python-unit-tests:
 create-release-tag:
   stage: release-tag
   image:
-    name: alpine/git:2.47.2
+    name: alpine/git:v2.52.0
     entrypoint: [""]
   resource_group: create-release-tag
   needs: ["python-unit-tests"]
