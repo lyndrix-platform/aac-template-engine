@@ -39,7 +39,11 @@ variables:
   LYNDRIX_ORCHESTRATOR_TOKEN: "${CI_LYNDRIX_ORCHESTRATOR_TOKEN}"
   # Set to "true" only if you want CI to trigger orchestrator directly.
   # Keep "false" when GitLab webhooks already trigger deployments.
-  LYNDRIX_DIRECT_TRIGGER_ENABLED: "false"
+  LYNDRIX_DIRECT_TRIGGER_ENABLED: "true"
+  # CI waits for Lyndrix deployment completion so GitLab job status mirrors deploy status.
+  LYNDRIX_DEPLOY_WAIT_ENABLED: "true"
+  LYNDRIX_DEPLOY_WAIT_TIMEOUT_SECONDS: "1800"
+  LYNDRIX_DEPLOY_WAIT_INTERVAL_SECONDS: "10"
 
   
 default:
@@ -289,19 +293,57 @@ prod-trigger-orchestrator:
   needs:
     - prod-validate-docker-compose
   script:
-    - echo "Triggering Lyndrix Orchestrator Deployment for ${CI_PROJECT_NAME}..."
+    - echo "Triggering Lyndrix Orchestrator deployment for ${CI_PROJECT_NAME}..."
     - |
+      TRIGGER_EPOCH="$(date +%s)"
       RESPONSE=$(curl --silent --output /dev/stderr --write-out "%{http_code}" \
         --request POST \
         --header "Content-Type: application/json" \
+        --header "X-Gitlab-Token: ${LYNDRIX_ORCHESTRATOR_TOKEN}" \
         --data "{\"branch\": \"${PROD_BRANCH}\"}" \
-        "${LYNDRIX_ORCHESTRATOR_URL}/api/iac/deploy/service/${CI_PROJECT_NAME}")
+        "${LYNDRIX_ORCHESTRATOR_URL}/api/iac/deploy/service/${CI_PROJECT_NAME}/gitlab")
       
       if [ "$RESPONSE" -eq 200 ] || [ "$RESPONSE" -eq 202 ]; then 
-        echo -e "\nOrchestrator successfully accepted the deployment queue."
+        echo -e "\nOrchestrator accepted deployment queue."
       else 
-        echo -e "\nFailed to trigger deployment. HTTP Code: $RESPONSE"
+        echo -e "\nFailed to trigger deployment. HTTP code: $RESPONSE"
         exit 1
       fi
+    - |
+      if [ "${LYNDRIX_DEPLOY_WAIT_ENABLED}" != "true" ]; then
+        echo "Skipping Lyndrix deployment wait loop."
+        exit 0
+      fi
+
+      END_EPOCH=$((TRIGGER_EPOCH + LYNDRIX_DEPLOY_WAIT_TIMEOUT_SECONDS))
+      STATUS_ENDPOINT="${LYNDRIX_ORCHESTRATOR_URL}/api/iac/deploy/service/${CI_PROJECT_NAME}/gitlab/status?since_epoch=${TRIGGER_EPOCH}"
+      echo "Waiting for Lyndrix deployment status via ${STATUS_ENDPOINT}..."
+
+      while [ "$(date +%s)" -le "${END_EPOCH}" ]; do
+        STATUS_PAYLOAD=$(curl --silent \
+          --header "X-Gitlab-Token: ${LYNDRIX_ORCHESTRATOR_TOKEN}" \
+          "${STATUS_ENDPOINT}")
+
+        DEPLOY_STATUS=$(echo "${STATUS_PAYLOAD}" | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4)
+        JOB_ID=$(echo "${STATUS_PAYLOAD}" | grep -o '"job_id":[0-9]*' | head -1 | cut -d':' -f2)
+        JOB_STATUS=$(echo "${STATUS_PAYLOAD}" | grep -o '"job_status":"[^"]*"' | head -1 | cut -d'"' -f4)
+        CURRENT_STEP=$(echo "${STATUS_PAYLOAD}" | grep -o '"current_step":"[^"]*"' | head -1 | cut -d'"' -f4)
+
+        if [ "${DEPLOY_STATUS}" = "success" ]; then
+          echo "Lyndrix deployment succeeded (job_id=${JOB_ID:-unknown}, status=${JOB_STATUS:-unknown})."
+          exit 0
+        fi
+
+        if [ "${DEPLOY_STATUS}" = "failed" ]; then
+          echo "Lyndrix deployment failed (job_id=${JOB_ID:-unknown}, status=${JOB_STATUS:-unknown}, step=${CURRENT_STEP:-unknown})."
+          exit 1
+        fi
+
+        echo "Lyndrix deployment state=${DEPLOY_STATUS:-pending} job_id=${JOB_ID:-n/a} status=${JOB_STATUS:-n/a} step=${CURRENT_STEP:-n/a}"
+        sleep "${LYNDRIX_DEPLOY_WAIT_INTERVAL_SECONDS}"
+      done
+
+      echo "Timed out waiting for Lyndrix deployment completion."
+      exit 1
   rules:
     - if: '$LYNDRIX_DIRECT_TRIGGER_ENABLED == "true" && $CI_COMMIT_BRANCH == $PROD_BRANCH && $CI_COMMIT_MESSAGE !~ /\[skip ci\]/'
