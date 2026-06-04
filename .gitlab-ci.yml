@@ -143,9 +143,9 @@ trigger-github-release:
 # ==========================================================================
 build-engine-image:
   stage: build-image
-  image: docker:29.5.2
+  image: docker:29.5.3
   services:
-    - name: docker:29.5.2-dind
+    - name: docker:29.5.3-dind
       alias: docker
   variables:
     DOCKER_TLS_CERTDIR: ""
