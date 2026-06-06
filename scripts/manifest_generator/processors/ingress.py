@@ -53,6 +53,29 @@ class IngressProcessor(BaseProcessor):
                 f"traefik.http.routers.{name}.tls.certresolver": t.get('cert_resolver', 'ionos')
             })
 
+            # Optional: Attach request-header middleware from service config.
+            # Example:
+            # integrations.traefik.custom_request_headers:
+            #   X-Forwarded-Proto: https
+            # integrations.traefik.middlewares:
+            #   - my-existing-mw@docker
+            router_middlewares = []
+            custom_request_headers = t.get('custom_request_headers') or {}
+            if custom_request_headers:
+                header_mw_name = f"{name}-headers"
+                for header_name, header_value in custom_request_headers.items():
+                    labels[
+                        f"traefik.http.middlewares.{header_mw_name}.headers.customrequestheaders.{header_name}"
+                    ] = str(header_value)
+                router_middlewares.append(f"{header_mw_name}@docker")
+
+            for mw in t.get('middlewares', []) or []:
+                if mw:
+                    router_middlewares.append(str(mw))
+
+            if router_middlewares:
+                labels[f"traefik.http.routers.{name}.middlewares"] = ",".join(router_middlewares)
+
             # Check if we route to Host or Container
             if dc.get('network_mode') == 'host' or cfg.get('routing_host_network'):
                 ansible_ip = context.get('ansible_host_ip', '10.111.111.111')
