@@ -297,6 +297,12 @@ prod-trigger-orchestrator:
     - echo "Triggering Lyndrix Orchestrator deployment for ${CI_PROJECT_NAME}..."
     - |
       TRIGGER_EPOCH="$(date +%s)"
+      STATUS_ENDPOINT_BASE="${LYNDRIX_ORCHESTRATOR_URL}/api/iac/deploy/service/${CI_PROJECT_NAME}/gitlab/status"
+      PRE_STATUS_PAYLOAD=$(curl --silent \
+        --header "X-Gitlab-Token: ${LYNDRIX_ORCHESTRATOR_TOKEN}" \
+        "${STATUS_ENDPOINT_BASE}" || true)
+      PRE_JOB_ID=$(echo "${PRE_STATUS_PAYLOAD}" | grep -o '"job_id":[0-9]*' | head -1 | cut -d':' -f2 || true)
+
       RESPONSE=$(curl --silent --output /dev/stderr --write-out "%{http_code}" \
         --request POST \
         --header "Content-Type: application/json" \
@@ -317,9 +323,10 @@ prod-trigger-orchestrator:
       fi
 
       END_EPOCH=$((TRIGGER_EPOCH + LYNDRIX_DEPLOY_WAIT_TIMEOUT_SECONDS))
-      STATUS_ENDPOINT="${LYNDRIX_ORCHESTRATOR_URL}/api/iac/deploy/service/${CI_PROJECT_NAME}/gitlab/status?since_epoch=${TRIGGER_EPOCH}"
+      STATUS_ENDPOINT="${LYNDRIX_ORCHESTRATOR_URL}/api/iac/deploy/service/${CI_PROJECT_NAME}/gitlab/status"
       echo "Waiting for Lyndrix deployment status via ${STATUS_ENDPOINT}..."
       POLL_COUNT=0
+      NEW_JOB_SEEN=0
 
       while [ "$(date +%s)" -le "${END_EPOCH}" ]; do
         POLL_COUNT=$((POLL_COUNT + 1))
@@ -331,6 +338,20 @@ prod-trigger-orchestrator:
         JOB_ID=$(echo "${STATUS_PAYLOAD}" | grep -o '"job_id":[0-9]*' | head -1 | cut -d':' -f2 || true)
         JOB_STATUS=$(echo "${STATUS_PAYLOAD}" | grep -o '"job_status":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
         CURRENT_STEP=$(echo "${STATUS_PAYLOAD}" | grep -o '"current_step":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
+
+        if [ -n "${JOB_ID}" ] && [ "${JOB_ID}" != "${PRE_JOB_ID}" ]; then
+          NEW_JOB_SEEN=1
+        fi
+
+        if [ "${NEW_JOB_SEEN}" != "1" ]; then
+          echo "Lyndrix deployment waiting for new job record (previous_job_id=${PRE_JOB_ID:-none})"
+          if [ "${POLL_COUNT}" -ge "${LYNDRIX_DEPLOY_WAIT_MAX_POLLS}" ]; then
+            echo "No new deployment job appeared after ${POLL_COUNT} polls. Last payload: ${STATUS_PAYLOAD}"
+            exit 1
+          fi
+          sleep "${LYNDRIX_DEPLOY_WAIT_INTERVAL_SECONDS}"
+          continue
+        fi
 
         if [ "${DEPLOY_STATUS}" = "success" ]; then
           echo "Lyndrix deployment succeeded (job_id=${JOB_ID:-unknown}, status=${JOB_STATUS:-unknown})."
