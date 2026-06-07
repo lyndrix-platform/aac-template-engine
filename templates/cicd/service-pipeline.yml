@@ -44,6 +44,7 @@ variables:
   LYNDRIX_DEPLOY_WAIT_ENABLED: "true"
   LYNDRIX_DEPLOY_WAIT_TIMEOUT_SECONDS: "1800"
   LYNDRIX_DEPLOY_WAIT_INTERVAL_SECONDS: "10"
+  LYNDRIX_DEPLOY_WAIT_MAX_POLLS: "180"
 
   
 default:
@@ -318,8 +319,10 @@ prod-trigger-orchestrator:
       END_EPOCH=$((TRIGGER_EPOCH + LYNDRIX_DEPLOY_WAIT_TIMEOUT_SECONDS))
       STATUS_ENDPOINT="${LYNDRIX_ORCHESTRATOR_URL}/api/iac/deploy/service/${CI_PROJECT_NAME}/gitlab/status?since_epoch=${TRIGGER_EPOCH}"
       echo "Waiting for Lyndrix deployment status via ${STATUS_ENDPOINT}..."
+      POLL_COUNT=0
 
       while [ "$(date +%s)" -le "${END_EPOCH}" ]; do
+        POLL_COUNT=$((POLL_COUNT + 1))
         STATUS_PAYLOAD=$(curl --silent \
           --header "X-Gitlab-Token: ${LYNDRIX_ORCHESTRATOR_TOKEN}" \
           "${STATUS_ENDPOINT}")
@@ -340,6 +343,10 @@ prod-trigger-orchestrator:
         fi
 
         echo "Lyndrix deployment state=${DEPLOY_STATUS:-pending} job_id=${JOB_ID:-n/a} status=${JOB_STATUS:-n/a} step=${CURRENT_STEP:-n/a}"
+        if [ "${POLL_COUNT}" -ge "${LYNDRIX_DEPLOY_WAIT_MAX_POLLS}" ]; then
+          echo "No terminal deployment status after ${POLL_COUNT} polls. Last payload: ${STATUS_PAYLOAD}"
+          exit 1
+        fi
         sleep "${LYNDRIX_DEPLOY_WAIT_INTERVAL_SECONDS}"
       done
 
