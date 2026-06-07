@@ -324,10 +324,10 @@ prod-trigger-orchestrator:
           --header "X-Gitlab-Token: ${LYNDRIX_ORCHESTRATOR_TOKEN}" \
           "${STATUS_ENDPOINT}")
 
-        DEPLOY_STATUS=$(echo "${STATUS_PAYLOAD}" | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4)
-        JOB_ID=$(echo "${STATUS_PAYLOAD}" | grep -o '"job_id":[0-9]*' | head -1 | cut -d':' -f2)
-        JOB_STATUS=$(echo "${STATUS_PAYLOAD}" | grep -o '"job_status":"[^"]*"' | head -1 | cut -d'"' -f4)
-        CURRENT_STEP=$(echo "${STATUS_PAYLOAD}" | grep -o '"current_step":"[^"]*"' | head -1 | cut -d'"' -f4)
+        DEPLOY_STATUS=$(echo "${STATUS_PAYLOAD}" | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
+        JOB_ID=$(echo "${STATUS_PAYLOAD}" | grep -o '"job_id":[0-9]*' | head -1 | cut -d':' -f2 || true)
+        JOB_STATUS=$(echo "${STATUS_PAYLOAD}" | grep -o '"job_status":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
+        CURRENT_STEP=$(echo "${STATUS_PAYLOAD}" | grep -o '"current_step":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
 
         if [ "${DEPLOY_STATUS}" = "success" ]; then
           echo "Lyndrix deployment succeeded (job_id=${JOB_ID:-unknown}, status=${JOB_STATUS:-unknown})."
