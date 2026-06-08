@@ -29,14 +29,15 @@ class NetworkProcessor(BaseProcessor):
 
             context['processed_networks'] = sorted(list(set(assigned + dc.get('networks_to_join', []))))
         
-        # 3. Dependency Logic (The Fix)
+        # 3. Dependency Logic
         for dep_name, dep_cfg in context.get('dependencies', {}).items():
             if dep_cfg.get('network_mode'):
                 dep_cfg['processed_networks'] = []
                 continue
 
-            dep_nets = dep_cfg.setdefault('processed_networks', [])
-            if "stack_internal" not in dep_nets:
-                dep_nets.append("stack_internal")
+            # Respect networks_to_join from dependency config, same as main service
+            extra = dep_cfg.get('networks_to_join', [])
+            dep_nets = sorted(list(set(["stack_internal"] + extra)))
+            dep_cfg['processed_networks'] = dep_nets
 
         return context
