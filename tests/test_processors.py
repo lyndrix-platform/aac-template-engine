@@ -3,7 +3,10 @@ import pytest
 import os
 import yaml
 from manifest_generator.processors.imports import ImportProcessor
+from manifest_generator.processors.networks import NetworkProcessor
 from manifest_generator.processors.volumes import VolumeProcessor
+from manifest_generator.processors.ports import PortProcessor
+from manifest_generator.processors.environment import EnvironmentProcessor
 
 @pytest.fixture
 def temp_engine_dir(tmp_path):
@@ -101,3 +104,81 @@ def test_volume_processor_prevents_hijack():
     # Ensure Database volume correctly nests under the MAIN application folder
     assert len(dep_vols) == 1
     assert "/export/docker/aac-nextcloud/db:/var/lib/mysql" in dep_vols
+
+
+def test_network_processor_merges_dependency_networks_to_join():
+    """Verifies dependency networks_to_join are merged into processed_networks."""
+    mock_context = {
+        "service": {"name": "aac-test-app"},
+        "deployments": {
+            "docker_compose": {}
+        },
+        "dependencies": {
+            "database": {
+                "networks_to_join": ["secured", "stack_internal"]
+            }
+        }
+    }
+
+    processor = NetworkProcessor()
+    result = processor.process(mock_context)
+
+    dep_networks = result["dependencies"]["database"]["processed_networks"]
+
+    assert dep_networks == ["secured", "stack_internal"]
+
+
+def test_import_processor_normalizes_compose_style_dependency(temp_engine_dir):
+    """Compose-style dependency keys should be normalized into engine schema."""
+    mock_context = {
+        "service": {"name": "aac-openweb-ui"},
+        "dependencies": {
+            "kokoro-tts": {
+                "image": "ghcr.io/remsky/kokoro-fastapi-gpu:latest",
+                "container_name": "kokoro-tts",
+                "ports": ["8880:8880"],
+                "environment": ["USE_GPU=true"],
+                "restart": "unless-stopped"
+            }
+        }
+    }
+
+    importer = ImportProcessor(temp_engine_dir)
+    result = importer.process(mock_context)
+    dep = result["dependencies"]["kokoro-tts"]
+
+    assert dep["name"] == "kokoro-tts"
+    assert dep["image_repo"] == "ghcr.io/remsky/kokoro-fastapi-gpu"
+    assert dep["image_tag"] == "latest"
+    assert dep["restart_policy"] == "unless-stopped"
+    assert dep["environment"]["USE_GPU"] == "true"
+
+    ports_result = PortProcessor().process(result)
+    assert ports_result["dependencies"]["kokoro-tts"]["processed_ports"] == ["8880:8880/tcp"]
+
+
+def test_environment_processor_keeps_dependency_env_out_of_global_files():
+    """Dependency env vars must not spill into global .env/stack.env outputs."""
+    mock_context = {
+        "environment": {
+            "MAIN_ONLY": "ok",
+            "OPENAI_API_KEY": "main-secret"
+        },
+        "dependencies": {
+            "sidecar": {
+                "environment": {
+                    "DB_CONNECTION_URI": "postgres://sidecar-only"
+                }
+            }
+        },
+        "deployments": {
+            "docker_compose": {}
+        }
+    }
+
+    result = EnvironmentProcessor().process(mock_context)
+
+    assert result["processed_env"]["MAIN_ONLY"] == "ok"
+    assert result["processed_secrets"]["OPENAI_API_KEY"] == "main-secret"
+    assert "DB_CONNECTION_URI" not in result["processed_env"]
+    assert "DB_CONNECTION_URI" not in result["processed_secrets"]

@@ -42,12 +42,4 @@ class EnvironmentProcessor(BaseProcessor):
         distribute_env(context['environment'], is_secret_source=False)
         distribute_env(context['secrets'], is_secret_source=True)
 
-        # 3. Dependencies verarbeiten
-        # HINWEIS: Sidecars sollten idealerweise ihre eigene Env-Datei haben. 
-        # Wenn du sie in die globale mischen willst, ist dies der Weg:
-        for dep_name, dep_cfg in context.get('dependencies', {}).items():
-            dep_env = dep_cfg.get('environment', {})
-            if isinstance(dep_env, dict):
-                distribute_env(dep_env, is_secret_source=False)
-
         return context

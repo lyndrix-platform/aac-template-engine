@@ -35,9 +35,9 @@ class NetworkProcessor(BaseProcessor):
                 dep_cfg['processed_networks'] = []
                 continue
 
-            # Respect networks_to_join from dependency config, same as main service
-            extra = dep_cfg.get('networks_to_join', [])
-            dep_nets = sorted(list(set(["stack_internal"] + extra)))
-            dep_cfg['processed_networks'] = dep_nets
+            assigned = ["stack_internal"]
+            dep_cfg['processed_networks'] = sorted(
+                list(set(assigned + dep_cfg.get('networks_to_join', [])))
+            )
 
         return context

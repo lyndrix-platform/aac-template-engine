@@ -12,7 +12,7 @@ class SpecProcessor(BaseProcessor):
             'name', 'image_repo', 'image_tag', 'category', 'description', 
             'friendly_name', 'icon', 'stage', 'host_base_path', 
             'routing_host_network', 'networks_to_join', 'network_definitions',
-            'dot_env', 'stack_env'
+            'dot_env', 'stack_env', 'inherit_global_env', 'dependencies_inherit_global_env'
         }
 
         def get_clean_specs(data):

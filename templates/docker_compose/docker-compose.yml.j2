@@ -18,7 +18,7 @@ services:
       {% endfor %}
     {% endif %}
 
-    env_file: 
+    env_file:
       - .env
       - stack.env
 
@@ -83,9 +83,26 @@ services:
       {% endfor %}
     {% endif %}
 
+    {% set dep_inherit_global_env = dep_config.inherit_global_env | default(deployments.docker_compose.dependencies_inherit_global_env | default(true)) %}
+    {% if dep_inherit_global_env %}
     env_file:
       - .env
       - stack.env
+    {% endif %}
+
+    {% if dep_config.environment is defined or dep_config.secrets is defined %}
+    environment:
+      {% if dep_config.environment is defined and dep_config.environment is mapping %}
+      {% for key, value in dep_config.environment.items() %}
+      {{ key }}: "{{ value }}"
+      {% endfor %}
+      {% endif %}
+      {% if dep_config.secrets is defined and dep_config.secrets is mapping %}
+      {% for key, value in dep_config.secrets.items() %}
+      {{ key }}: "{{ value }}"
+      {% endfor %}
+      {% endif %}
+    {% endif %}
 
     {% if dep_config.processed_ports %}
     ports:
