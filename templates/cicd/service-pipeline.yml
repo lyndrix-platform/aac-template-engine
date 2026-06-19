@@ -78,7 +78,7 @@ stages:
 
 .validate-base:
   image: $DOCKER_IMAGE
-  services: [docker:dind]
+  services: [docker:29.5.3-dind]
   script:
     - apk add --no-cache docker-compose
     - docker-compose -f $DOCKER_COMPOSE_FILE config
