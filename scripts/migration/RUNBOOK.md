@@ -12,16 +12,19 @@ service's repo. Do **not** touch `iac-controller` or the engine. Return a struct
 
 ## Steps
 
-1. **Extract** from the legacy SSoT (NOT a migrated file):
+1. **Extract** from a clean `main` checkout (so legacy `service.yml` **and** legacy `custom_templates`
+   are present; the extractor refuses an already-v2 file):
    ```
-   git -C "$REPO" show main:service.yml > /tmp/aac-X.legacy.yml
+   SRC=/tmp/aac-X-main; rm -rf "$SRC"; mkdir -p "$SRC"
+   git -C "$REPO" archive main | tar -x -C "$SRC"
    python "$ENGINE/scripts/migration/extract_overrides.py" \
-     --service-yml "$REPO/service.yml" --controller-root "$CTRL" --out-dir /tmp/aac-X-art
+     --service-yml "$SRC/service.yml" --controller-root "$CTRL" --out-dir /tmp/aac-X-art
    ```
-   (Run against `$REPO/service.yml` while the repo is still on `main`; the extractor refuses an
-   already-v2 file.) Artifacts: `aac-X.service.v2.yml`, `aac-X.service.v2.real.yml`,
+   Artifacts: `aac-X.service.v2.yml`, `aac-X.service.v2.real.yml`,
    `aac-X.override.<site>.<stage>.<host>.yml` (one per placement), and rewritten
-   `custom_templates/**/*.j2` (only files whose `{{ environment.X }}` refs changed).
+   `custom_templates/**/*.j2` (only files whose `{{ environment.X }}` refs changed). The extractor
+   already re-adds central infra vars (`PUID`/`PGID`/`TZ`/…) to each sidecar as references, so sidecar
+   inheritance is preserved automatically (route (a)).
 
 2. **Apply to the service repo**:
    ```
@@ -50,29 +53,16 @@ service's repo. Do **not** touch `iac-controller` or the engine. Return a struct
    PASS requires: `v2_compose_valid_yaml`, `compose_structural_identical`, `main_env_identical`,
    `validate_ssot_pass` all true, and `custom_files_identical` true when the service has custom files.
 
-6. **Route (a) sidecar re-add** — inspect `sidecar_deltas[*].lost_infra` in the verify output. For each
-   sidecar, decide whether it genuinely needs the lost infra vars and re-add ONLY those explicitly to
-   that sidecar's own env block in `service.yml`, referencing the central state, e.g.:
-   ```yaml
-   dependencies:
-     <dep>:
-       overrides:        # (or directly under the dep if it has no import)
-         environment:
-           TZ: "{{ vars.TZ }}"
-           PUID: "{{ vars.PUID }}"
-           PGID: "{{ vars.PGID }}"
-   ```
-   Heuristic: **linuxserver/* images** → re-add `PUID`/`PGID`/`TZ`. **db images** (postgres/mariadb/
-   mysql/redis) → re-add `TZ` only (they run as their own uid). Ignore non-infra "lost" vars (those are
-   main-app config the sidecar never needed). Skip re-add for `network_mode: host` sidecars that already
-   declare their own `TZ`. After editing, `git commit --amend` and re-run verify_service; document each
-   decision in the result.
+6. **Sidecar check** — infra re-add is automatic, so `sidecar_deltas[*].lost_infra` should be empty.
+   If a sidecar still shows a non-empty `lost_infra`, or `gained` shows something that looks dangerous
+   (a real secret leaking into an unrelated sidecar), note it under `NEEDS_REVIEW` — do not hand-edit
+   the engine. Remaining non-infra `lost` entries are expected (main-app config the sidecar never
+   needed) and are fine.
 
 7. **Return** this JSON (and nothing else as the final message):
    ```json
    {"service":"aac-X","status":"DONE|ENGINE_ISSUE|NEEDS_REVIEW",
     "checks":{...from verify_service...},
-    "sidecar_decisions":[{"sidecar":"...","readded":["TZ"],"reason":"..."}],
     "placements":["hetzner/prod/docker-atlas", ...],
     "engine_issues":[{"symptom":"...","sample":"...","suspected_cause":"..."}],
     "notes":["multi-stage: also placed in dev/test (CHANGE_ME)","profile-only","no-placement"]}

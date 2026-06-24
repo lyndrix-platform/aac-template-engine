@@ -156,20 +156,22 @@ def main():
             fail(f"v2 compose invalid YAML: {e}", engine_issue=True)
             print(json.dumps(result, indent=2)); sys.exit(1)
 
-        # 2. structural compose diff: only main env_file<->environment allowed
-        def strip_main_env(compose):
+        # 2. structural compose diff: env is verified separately (per-container
+        # effective env), so ignore env_file/environment on EVERY service here and
+        # assert the rest of the compose (image/ports/volumes/networks/labels/...)
+        # is identical. This tolerates the main env_file->inline swap and the
+        # intentional route-(a) infra re-adds on sidecars.
+        def strip_env(compose):
             c = json.loads(json.dumps(compose))
-            svcs = c.get("services") or {}
-            if svcs:
-                first = next(iter(svcs))
+            for svc in (c.get("services") or {}).values():
                 for k in ALLOWED_MAIN_ENV_KEYS:
-                    svcs[first].pop(k, None)
+                    svc.pop(k, None)
             return c
         if legacy_compose.get("services"):
-            if strip_main_env(legacy_compose) == strip_main_env(v2_compose):
+            if strip_env(legacy_compose) == strip_env(v2_compose):
                 result["checks"]["compose_structural_identical"] = True
             else:
-                fail("compose structural diff beyond main env swap", engine_issue=True)
+                fail("compose structural diff beyond env", engine_issue=True)
 
         # 3. rendered custom files byte-identical
         if legacy_files or v2_files:

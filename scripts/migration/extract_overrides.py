@@ -32,6 +32,10 @@ import yaml
 
 PLACEHOLDER = "CHANGE_ME"
 DOMAIN_PLACEHOLDER = "example.com"
+# Infra vars sidecars inherited via the shared .env in legacy; under v2 the main
+# app's env no longer populates .env, so re-add these (when present centrally) to
+# each sidecar explicitly as references. Used-or-harmlessly-ignored => safe.
+INFRA_VARS = {"PUID", "PGID", "TZ", "UID", "GID", "UMASK"}
 
 # --- classification helpers ------------------------------------------------
 
@@ -202,6 +206,24 @@ def rewrite_dependency_env(dependencies: dict, ex: Extraction):
                 # portable literal -> leave as-is (publishable)
 
 
+def ensure_sidecar_infra(dependencies: dict, ex: Extraction):
+    """Re-add central infra vars (PUID/PGID/TZ/...) to each dependency's env block
+    as references, preserving the inheritance lost when the shared .env emptied
+    under schema_version 2. Skips vars a sidecar already declares."""
+    central = {k: "vars" for k in ex.vars_real if k in INFRA_VARS}
+    central.update({k: "secrets" for k in ex.secrets_real if k in INFRA_VARS})
+    if not central:
+        return
+    for _name, dep in (dependencies or {}).items():
+        envb = (dep.setdefault("overrides", {}).setdefault("environment", {})
+                if "import" in dep else dep.setdefault("environment", {}))
+        existing = set(envb) | set((dep.get("overrides") or {}).get("environment") or {}) \
+            | set(dep.get("environment") or {})
+        for k, ns in central.items():
+            if k not in existing:
+                envb[k] = "{{ %s.%s }}" % (ns, k)
+
+
 def discover_placements(service_name: str, controller_root: str):
     """Find every host services[] entry matching service_name across the
     inventory. Returns list of (site, stage, host, source_file)."""
@@ -344,6 +366,7 @@ def main():
 
     v2_placeholder = build_v2_service(data, ex, real=False)
     rewrite_dependency_env(v2_placeholder.get("dependencies"), ex)
+    ensure_sidecar_infra(v2_placeholder.get("dependencies"), ex)
     # rebuild after dependency rewrite may have added vars/secrets
     v2_placeholder["vars"] = ex.vars
     v2_placeholder["secrets"] = ex.secrets
