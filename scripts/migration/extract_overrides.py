@@ -122,6 +122,7 @@ class Extraction:
         self.override_secrets = {}
         self.override_config = {}
         self.main_env_refs = {}   # deployments.docker_compose.environment mapping
+        self.env_origin = set()   # keys that were actually in the original environment: block
         self.notes = []
 
     def add_var(self, key, value):
@@ -150,6 +151,7 @@ def migrate_service(data: dict) -> Extraction:
 
     # 1. main-service environment: -> vars: (+ explicit inline refs)
     for key, value in (data.get("environment") or {}).items():
+        ex.env_origin.add(key)
         # a clearly-secret key hiding in environment: is promoted to secrets:
         if looks_secret(key, value):
             ex.add_secret(key, value)
@@ -281,18 +283,28 @@ def build_v2_service(data: dict, ex: Extraction, real: bool) -> dict:
     return out
 
 
-_ENV_REF_RE = re.compile(r"\{\{\s*environment\.([A-Za-z0-9_]+)\s*\}\}")
+# Jinja expression / statement blocks, and `environment.KEY` / `environment['KEY']`
+# tokens inside them. We rewrite only the namespace, preserving filters, default()s,
+# surrounding text and whitespace (so `{{ environment.X | lower }}` works).
+_JINJA_BLOCK_RE = re.compile(r"\{\{.*?\}\}|\{%.*?%\}", re.DOTALL)
+_ENV_TOKEN_RE = re.compile(r"\benvironment(?:\.([A-Za-z_]\w*)|\[(['\"])([A-Za-z_]\w*)\2\])")
 
 
 def rewrite_env_refs(text: str, ex: "Extraction") -> str:
-    """Rewrite {{ environment.KEY }} references to the namespace KEY now lives in
-    under schema_version 2: {{ secrets.KEY }} if it was classified as a secret,
-    else {{ vars.KEY }}. {{ secrets.* }} / {{ config.* }} are left untouched."""
-    def repl(m):
-        key = m.group(1)
+    """Rewrite `environment.KEY` references (anywhere inside a Jinja block, with
+    any trailing filters) to the namespace KEY now lives in under schema_version 2:
+    `secrets.KEY` if classified as a secret, else `vars.KEY`. `secrets.*` /
+    `config.*` references and plain text are left untouched."""
+    def fix_token(m):
+        key = m.group(1) or m.group(3)
+        # Only rewrite keys that were actually in the original environment: block.
+        # A stray environment.KEY ref to a non-environment key resolved to undefined
+        # in legacy (and still does, since environment: is empty under v2) -- leave it.
+        if key not in ex.env_origin:
+            return m.group(0)
         ns = "secrets" if key in ex.secrets_real else "vars"
-        return "{{ %s.%s }}" % (ns, key)
-    return _ENV_REF_RE.sub(repl, text)
+        return "%s.%s" % (ns, key)
+    return _JINJA_BLOCK_RE.sub(lambda b: _ENV_TOKEN_RE.sub(fix_token, b.group(0)), text)
 
 
 def rewrite_node(node, ex: "Extraction"):
@@ -345,6 +357,8 @@ def yaml_dump(data) -> str:
 def main():
     p = argparse.ArgumentParser(description="Migrate a service.yml to schema_version 2 + emit overrides")
     p.add_argument("--service-yml", required=True)
+    p.add_argument("--name", help="deployment/repo name used in hosts.yml (defaults to service.name; "
+                                  "set this when the repo dir name differs from service.name)")
     p.add_argument("--controller-root", help="iac-controller/environments dir (for placement discovery)")
     p.add_argument("--out-dir", help="write artifacts here instead of stdout")
     args = p.parse_args()
@@ -360,7 +374,9 @@ def main():
         sys.exit("ERROR: this service.yml is already schema_version 2 (migrated). "
                  "Run the extractor on the ORIGINAL legacy service.yml, not the migrated one.")
 
-    service_name = (data.get("service") or {}).get("name", "unknown")
+    # Placement/artifact key = the name used in hosts.yml (the repo/dir name),
+    # which can differ from the internal service.name (container identity).
+    service_name = args.name or (data.get("service") or {}).get("name", "unknown")
 
     ex = migrate_service(data)
 
