@@ -95,7 +95,7 @@ create-release-tag:
 
 trigger-github-release:
   stage: release-tag
-  image: curlimages/curl:8.20.0
+  image: curlimages/curl:8.21.0
   needs: ["create-release-tag"]
   script:
     - VERSION="$(awk -F'"' '/^__version__/ {print $2}' version.py)"
