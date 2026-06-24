@@ -18,9 +18,18 @@ services:
       {% endfor %}
     {% endif %}
 
+    {% if (config.schema_version | default(1) | int) >= 2 %}
+    {% if deployments.docker_compose.environment is defined and deployments.docker_compose.environment is mapping %}
+    environment:
+      {% for key, value in deployments.docker_compose.environment.items() %}
+      {{ key }}: {{ value | tojson }}
+      {% endfor %}
+    {% endif %}
+    {% else %}
     env_file:
       - .env
       - stack.env
+    {% endif %}
 
     {% if processed_ports %}
     ports:

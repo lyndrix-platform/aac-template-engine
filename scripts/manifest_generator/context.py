@@ -18,25 +18,36 @@ class ContextBuilder:
                 destination[key] = value
         return destination
 
+    def _render_node(self, node, root, env):
+        """Render a single node against the full `root` context.
+
+        Renders structurally (per string scalar) instead of serializing the
+        whole tree to a JSON string, so values that contain JSON-significant
+        characters (quotes, braces) in resolved references can't corrupt the
+        document.
+        """
+        if isinstance(node, dict):
+            return {self._render_node(k, root, env): self._render_node(v, root, env)
+                    for k, v in node.items()}
+        if isinstance(node, list):
+            return [self._render_node(item, root, env) for item in node]
+        if isinstance(node, str) and ('{{' in node or '{%' in node):
+            return env.from_string(node).render(root)
+        return node
+
     def _render_recursive(self, data: dict, passes=5) -> dict:
         """
-        Resolves internal references (e.g., {{ secrets.DB_PASS }}).
-        Uses string-serialization to allow cross-referencing anywhere in the tree.
+        Resolves internal references (e.g., {{ secrets.DB_PASS }}) anywhere in
+        the tree, repeating until stable (handles references to references).
         """
         env = Environment(trim_blocks=True, lstrip_blocks=True)
-        current_render = json.dumps(data)
-        
+        current = data
         for i in range(passes):
-            previous_render = current_render
-            context = json.loads(previous_render)
-            template = env.from_string(previous_render)
-            
-            # This handles the actual 'Rendering' of the entire YAML structure
-            current_render = template.render(context)
-            
-            if previous_render == current_render:
+            rendered = self._render_node(current, current, env)
+            if rendered == current:
                 break
-        return json.loads(current_render)
+            current = rendered
+        return current
 
     def build(self) -> dict:
         # 1. Start with the "Safety Net"
@@ -46,6 +57,9 @@ class ContextBuilder:
             "config": {},
             "environment": {},
             "secrets": {},
+            # schema_version 2: reference-only definition values (never written to a
+            # file, only resolved via {{ vars.X }} during _render_recursive).
+            "vars": {},
             "dependencies": {},
             "volumes": {},
             "network_definitions": {},
