@@ -39,8 +39,8 @@ cp "$ART/$svc.service.v2.yml" "$REPO/service.yml"
 done
 
 # 4. stage override block(s)
-rm -f "$STAGE/$svc.override."*.yml
-cp "$ART"/"$svc".override.*.yml "$STAGE/" 2>/dev/null
+rm -f "$STAGE/$svc.override"*.yml
+cp "$ART"/"$svc".override*.yml "$STAGE/" 2>/dev/null
 
 # 5. commit
 git -C "$REPO" add -A

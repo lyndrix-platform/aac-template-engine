@@ -100,14 +100,13 @@ def placeholder_for(key: str, value) -> str:
     return PLACEHOLDER
 
 
-def normalize_scalar(value):
-    """Strip a single layer of surrounding matching quotes from malformed YAML
-    scalars (e.g. '"6"' -> 6) when the inner content has no quote of its own."""
-    if isinstance(value, str):
-        s = value.strip()
-        if len(s) >= 2 and s[0] == s[-1] and s[0] in ('"', "'") and s[0] not in s[1:-1]:
-            return s[1:-1]
-    return value
+def ref(ns: str, key: str) -> str:
+    """A Jinja reference into namespace `ns` for `key`. Uses bracket access for
+    keys that aren't valid identifiers (e.g. a malformed `TZ=`), so the generated
+    template never produces invalid Jinja."""
+    if key.isidentifier():
+        return "{{ %s.%s }}" % (ns, key)
+    return "{{ %s[%r] }}" % (ns, key)
 
 
 # --- core ------------------------------------------------------------------
@@ -126,24 +125,22 @@ class Extraction:
         self.notes = []
 
     def add_var(self, key, value):
-        value = normalize_scalar(value)
         self.vars_real[key] = value
         if must_externalize(key, value, from_secret_block=False):
             self.vars[key] = placeholder_for(key, value)
             self.override_vars[key] = value
         else:
             self.vars[key] = value
-        self.main_env_refs[key] = "{{ vars.%s }}" % key
+        self.main_env_refs[key] = ref("vars", key)
 
     def add_secret(self, key, value):
-        value = normalize_scalar(value)
         self.secrets_real[key] = value
         if must_externalize(key, value, from_secret_block=True):
             self.secrets[key] = placeholder_for(key, value)
             self.override_secrets[key] = value
         else:
             self.secrets[key] = value
-        self.main_env_refs[key] = "{{ secrets.%s }}" % key
+        self.main_env_refs[key] = ref("secrets", key)
 
 
 def migrate_service(data: dict) -> Extraction:
@@ -198,13 +195,13 @@ def rewrite_dependency_env(dependencies: dict, ex: Extraction):
                         ex.add_secret(key, value)
                         # add_secret also recorded a main_env_ref; drop it (dep-local)
                         ex.main_env_refs.pop(key, None)
-                    block[key] = "{{ secrets.%s }}" % key
+                    block[key] = ref("secrets", key)
                 elif looks_env_specific(key, value):
                     if key not in ex.vars_real:
                         ex.vars_real[key] = value
                         ex.vars[key] = PLACEHOLDER
                         ex.override_vars[key] = value
-                    block[key] = "{{ vars.%s }}" % key
+                    block[key] = ref("vars", key)
                 # portable literal -> leave as-is (publishable)
 
 
@@ -223,7 +220,7 @@ def ensure_sidecar_infra(dependencies: dict, ex: Extraction):
             | set(dep.get("environment") or {})
         for k, ns in central.items():
             if k not in existing:
-                envb[k] = "{{ %s.%s }}" % (ns, k)
+                envb[k] = ref(ns, k)
 
 
 def discover_placements(service_name: str, controller_root: str):

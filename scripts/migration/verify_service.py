@@ -73,7 +73,13 @@ def parse_env_file(path):
             line = line.strip()
             if line and not line.startswith("#") and "=" in line:
                 k, v = line.split("=", 1)
-                d[k] = v.strip().strip('"')
+                v = v.strip()
+                # the .env/stack.env template wraps every value as "<value>";
+                # remove exactly that one layer (not greedily) so a value that is
+                # itself quoted (e.g. '"6"') is compared faithfully.
+                if len(v) >= 2 and v[0] == '"' and v[-1] == '"':
+                    v = v[1:-1]
+                d[k] = v
     return d
 
 
