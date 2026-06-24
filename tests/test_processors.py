@@ -1,7 +1,9 @@
 # tests/test_processors.py
+import json
 import pytest
 import os
 import yaml
+from manifest_generator.context import ContextBuilder
 from manifest_generator.processors.imports import ImportProcessor
 from manifest_generator.processors.networks import NetworkProcessor
 from manifest_generator.processors.volumes import VolumeProcessor
@@ -182,3 +184,77 @@ def test_environment_processor_keeps_dependency_env_out_of_global_files():
     assert result["processed_secrets"]["OPENAI_API_KEY"] == "main-secret"
     assert "DB_CONNECTION_URI" not in result["processed_env"]
     assert "DB_CONNECTION_URI" not in result["processed_secrets"]
+
+
+def test_environment_processor_v2_no_heuristic_and_no_lift():
+    """schema_version 2: explicit classification (no substring heuristic) and
+    deployments.docker_compose.environment is NOT lifted (it is the main
+    service's inline env block)."""
+    mock_context = {
+        "config": {"schema_version": 2},
+        "environment": {"PUBLIC_KEY_ID": "not-a-secret", "TZ": "Europe/Berlin"},
+        "secrets": {"DB_PASSWORD": "s3cr3t"},
+        "deployments": {
+            "docker_compose": {
+                "environment": {"FOO": "{{ vars.FOO }}"},
+            }
+        },
+    }
+
+    result = EnvironmentProcessor().process(mock_context)
+
+    # No heuristic: PUBLIC_KEY_ID stays in env even though it contains 'key'.
+    assert result["processed_env"]["PUBLIC_KEY_ID"] == "not-a-secret"
+    assert result["processed_env"]["TZ"] == "Europe/Berlin"
+    assert result["processed_secrets"]["DB_PASSWORD"] == "s3cr3t"
+    assert "DB_PASSWORD" not in result["processed_env"]
+    # dc.environment is preserved verbatim for inline rendering (NOT lifted).
+    assert result["deployments"]["docker_compose"]["environment"] == {"FOO": "{{ vars.FOO }}"}
+    assert "FOO" not in result["processed_env"]
+
+
+def test_environment_processor_v1_lift_and_heuristic_preserved():
+    """schema_version 1 (default): legacy lift + substring heuristic intact."""
+    mock_context = {
+        "environment": {"API_KEY": "x", "PLAIN": "y"},
+        "deployments": {
+            "docker_compose": {
+                "environment": {"LIFTED": "z"},
+                "stack_env": {"SECRET_TWO": "q"},
+            }
+        },
+    }
+
+    result = EnvironmentProcessor().process(mock_context)
+
+    assert result["processed_secrets"]["API_KEY"] == "x"   # heuristic
+    assert result["processed_env"]["PLAIN"] == "y"
+    assert result["processed_env"]["LIFTED"] == "z"        # lifted from dc
+    assert result["processed_secrets"]["SECRET_TWO"] == "q"
+    assert "environment" not in result["deployments"]["docker_compose"]  # popped
+
+
+def test_context_builder_seeds_vars_and_resolves_quoted_refs():
+    """vars: is seeded; references resolve structurally even when the resolved
+    value contains JSON-significant characters (quotes)."""
+    ssot = {
+        "config": {"schema_version": 2},
+        "vars": {"HOST": "db.example.com"},
+        "secrets": {"PW": 'has"quote'},
+        "deployments": {
+            "docker_compose": {
+                "environment": {
+                    "DB_HOST": "{{ vars.HOST }}",
+                    "DB_PW": "{{ secrets.PW }}",
+                }
+            }
+        },
+    }
+
+    ctx = ContextBuilder(json.dumps(ssot), "prod").build()
+
+    assert "vars" in ctx
+    env = ctx["deployments"]["docker_compose"]["environment"]
+    assert env["DB_HOST"] == "db.example.com"
+    # quote-containing secret resolved without corrupting the tree
+    assert env["DB_PW"] == 'has"quote'
