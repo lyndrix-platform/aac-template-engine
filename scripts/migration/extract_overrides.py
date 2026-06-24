@@ -259,6 +259,52 @@ def build_v2_service(data: dict, ex: Extraction, real: bool) -> dict:
     return out
 
 
+_ENV_REF_RE = re.compile(r"\{\{\s*environment\.([A-Za-z0-9_]+)\s*\}\}")
+
+
+def rewrite_env_refs(text: str, ex: "Extraction") -> str:
+    """Rewrite {{ environment.KEY }} references to the namespace KEY now lives in
+    under schema_version 2: {{ secrets.KEY }} if it was classified as a secret,
+    else {{ vars.KEY }}. {{ secrets.* }} / {{ config.* }} are left untouched."""
+    def repl(m):
+        key = m.group(1)
+        ns = "secrets" if key in ex.secrets_real else "vars"
+        return "{{ %s.%s }}" % (ns, key)
+    return _ENV_REF_RE.sub(repl, text)
+
+
+def rewrite_node(node, ex: "Extraction"):
+    """Recursively rewrite {{ environment.X }} refs in all string values."""
+    if isinstance(node, dict):
+        return {k: rewrite_node(v, ex) for k, v in node.items()}
+    if isinstance(node, list):
+        return [rewrite_node(v, ex) for v in node]
+    if isinstance(node, str):
+        return rewrite_env_refs(node, ex)
+    return node
+
+
+def rewrite_custom_templates(service_dir: str, ex: "Extraction") -> dict:
+    """Return {relative_path: rewritten_content} for every custom_templates/*.j2
+    whose {{ environment.X }} references changed."""
+    out = {}
+    ct_dir = os.path.join(service_dir, "custom_templates")
+    if not os.path.isdir(ct_dir):
+        return out
+    for root, _dirs, files in os.walk(ct_dir):
+        for fn in files:
+            if not fn.endswith(".j2"):
+                continue
+            fpath = os.path.join(root, fn)
+            rel = os.path.relpath(fpath, service_dir)
+            with open(fpath, "r", encoding="utf-8") as f:
+                content = f.read()
+            new = rewrite_env_refs(content, ex)
+            if new != content:
+                out[rel] = new
+    return out
+
+
 def build_override(ex: Extraction) -> dict:
     cfg = {}
     if ex.override_vars:
@@ -308,6 +354,13 @@ def main():
     v2_real["vars"] = ex.vars_real
     v2_real["secrets"] = ex.secrets_real
 
+    # Rewrite {{ environment.X }} refs to {{ vars.X }}/{{ secrets.X }} everywhere
+    # (in-tree string values + custom_templates files), since environment: is gone.
+    v2_placeholder = rewrite_node(v2_placeholder, ex)
+    v2_real = rewrite_node(v2_real, ex)
+    service_dir = os.path.dirname(os.path.abspath(args.service_yml))
+    ct_rewritten = rewrite_custom_templates(service_dir, ex)
+
     override = build_override(ex)
     placements = discover_placements(service_name, args.controller_root) if args.controller_root else []
 
@@ -315,6 +368,10 @@ def main():
         f"{service_name}.service.v2.yml": yaml_dump(v2_placeholder),
         f"{service_name}.service.v2.real.yml": yaml_dump(v2_real),
     }
+    # rewritten custom_templates (relative paths preserved, e.g.
+    # custom_templates/files/config/x.yml.j2) so they can be copied into the repo
+    for rel, content in ct_rewritten.items():
+        artifacts[rel] = content
     # one override doc per placement, with the service entry skeleton
     if placements:
         for site, stage, host, _src in placements:
@@ -329,9 +386,11 @@ def main():
     if args.out_dir:
         os.makedirs(args.out_dir, exist_ok=True)
         for name, content in artifacts.items():
-            with open(os.path.join(args.out_dir, name), "w", encoding="utf-8") as f:
+            dest = os.path.join(args.out_dir, name)
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            with open(dest, "w", encoding="utf-8") as f:
                 f.write(content)
-            print(f"  [+] wrote {os.path.join(args.out_dir, name)}")
+            print(f"  [+] wrote {dest}")
     else:
         for name, content in artifacts.items():
             print(f"\n# ===== {name} =====")
