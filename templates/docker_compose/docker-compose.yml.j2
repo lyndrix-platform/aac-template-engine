@@ -19,7 +19,7 @@ services:
     {% endif %}
 
     {% if (config.schema_version | default(1) | int) >= 2 %}
-    {% if deployments.docker_compose.environment is defined and deployments.docker_compose.environment is mapping %}
+    {% if deployments.docker_compose.environment is defined and deployments.docker_compose.environment is mapping and deployments.docker_compose.environment %}
     environment:
       {% for key, value in deployments.docker_compose.environment.items() %}
       {{ key }}: {{ value | tojson }}
@@ -100,7 +100,7 @@ services:
     {% endif %}
 
     {% set _v2 = (config.schema_version | default(1) | int) >= 2 %}
-    {% if dep_config.environment is defined or dep_config.secrets is defined %}
+    {% if (dep_config.environment is defined and dep_config.environment is mapping and dep_config.environment) or (dep_config.secrets is defined and dep_config.secrets is mapping and dep_config.secrets) %}
     environment:
       {% if dep_config.environment is defined and dep_config.environment is mapping %}
       {% for key, value in dep_config.environment.items() %}
