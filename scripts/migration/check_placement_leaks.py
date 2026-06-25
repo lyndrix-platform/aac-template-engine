@@ -86,6 +86,24 @@ def main():
                     for p, v in find_leaks(merged.get(blk), blk):
                         bad.append((rel.split("/", 1)[1].replace("/hosts.yml", ""), hn, p, v))
 
+    # also scan profile entries (03_profiles.yml) — services injected via a profile
+    # (e.g. docker_standard: traefik, cadvisor) have no hosts.yml placement.
+    praw = subprocess.run(["git", "-C", CTRL, "show", "origin/main:environments/global/03_profiles.yml"],
+                          capture_output=True, text=True).stdout
+    if praw:
+        pdoc = yaml.safe_load(praw) or {}
+        for pname, prof in (pdoc.get("profiles") or {}).items():
+            if not isinstance(prof, dict):
+                continue
+            for s in (prof.get("services") or []):
+                if not isinstance(s, dict) or s.get("name") != svc:
+                    continue
+                placements += 1
+                merged = deep_merge(sy, s.get("config") or {})
+                for blk in ("config", "secrets", "vars"):
+                    for p, v in find_leaks(merged.get(blk), blk):
+                        bad.append((f"profile:{pname}", "*", p, v))
+
     if not placements:
         print(f"{svc}: no committed placement (nothing to leak-check)"); sys.exit(0)
     if bad:
