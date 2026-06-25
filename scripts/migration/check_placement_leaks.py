@@ -46,6 +46,10 @@ def find_leaks(node, path=""):
     elif isinstance(node, str):
         if any(p in node for p in PLACEHOLDERS):
             leaks.append((path.lstrip("."), node))
+        # wrapped ("...") or backslash-escaped values corrupt the legacy stack.env
+        # render ("unexpected character in variable name") and break inline JSON.
+        elif (len(node) >= 2 and node[0] == '"' and node[-1] == '"') or '\\"' in node:
+            leaks.append((path.lstrip("."), node))
     return leaks
 
 
