@@ -4,19 +4,25 @@
 # Publishes a historyless, source-of-truth snapshot of a service repo to its
 # public GitHub correspondent under github.com/app-as-code/<service>.
 #
-# A service opts in by including this file AND defining the job's `extends`:
+# A service opts in by including this file in its .gitlab-ci.yml. Gate the
+# include to release tags so the credentialed job is never loaded elsewhere:
 #   include:
 #     - project: 'aac-application-definitions/aac-template-engine'
 #       ref: main
 #       file: '/templates/cicd/public-publish.yml'
+#       rules:
+#         - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
 #
 # Requirements (set as masked GitLab CI/CD variables, group-level recommended):
-#   PUBLISH_TOKEN  - GitHub PAT with `repo` scope on the app-as-code org
+#   PUBLISH_TOKEN  - GitHub fine-grained PAT, owner app-as-code, Contents: RW
 #
-# Design:
-#   - Current state only (git archive HEAD) -> no private history is ever pushed.
-#   - Generated output (deployments/) and secret-bearing files are excluded.
-#   - gitleaks runs as a HARD gate: any secret match fails the job.
+# Design (fail-closed):
+#   - Current state only (no .git) -> private history is never pushed.
+#   - ALLOWLIST: only explicitly-permitted source paths are published. Anything
+#     not listed is dropped, so an unanticipated secret-bearing file can never
+#     leak (this is deliberately NOT a denylist). Services that need to publish
+#     extra source paths extend PUBLIC_INCLUDE_PATHS in their own .gitlab-ci.yml.
+#   - gitleaks runs as a HARD second-line gate over the allowlisted tree.
 #   - The public repo keeps its own clean changelog: one commit per release tag.
 #   - Triggered on release tags only (vX.Y.Z), mirroring the platform's
 #     git-tag-driven release model.
@@ -24,9 +30,9 @@
 
 variables:
   PUBLIC_GH_ORG: "app-as-code"
-  # Files/dirs that must never reach the public mirror. deployments/ is the
-  # CI-generated render (docker-compose, .env, stack.env, k8s secrets, etc.).
-  PUBLIC_EXCLUDE_GLOBS: "deployments .ssot_vars.json stack.env .env secrets.json *.enc.yaml"
+  # ALLOWLIST of source paths to publish. Space-separated; files or dirs.
+  # Generated output (deployments/) and any unlisted file are never published.
+  PUBLIC_INCLUDE_PATHS: "service.yml .gitlab-ci.yml renovate.json README.md LICENSE"
 
 publish-public:
   stage: documentation
@@ -48,27 +54,39 @@ publish-public:
       fi
 
       SERVICE="${CI_PROJECT_NAME}"
-      PUBLIC_REPO="https://x-access-token:${PUBLISH_TOKEN}@github.com/${PUBLIC_GH_ORG}/${SERVICE}.git"
+      CLEAN_URL="https://github.com/${PUBLIC_GH_ORG}/${SERVICE}.git"
+      # Token is supplied inline to the push commands only -- never written to
+      # .git/config and never echoed (script runs without set -x). GitLab masks
+      # PUBLISH_TOKEN in job logs.
+      AUTH_URL="https://x-access-token:${PUBLISH_TOKEN}@github.com/${PUBLIC_GH_ORG}/${SERVICE}.git"
 
-      # 1) Build a clean, current-state-only tree (no .git, no history).
+      # 1) ALLOWLIST: assemble the public tree from permitted paths only.
       rm -rf /tmp/public && mkdir -p /tmp/public
-      git archive HEAD | tar -x -C /tmp/public
-      for glob in $PUBLIC_EXCLUDE_GLOBS; do
-        rm -rf /tmp/public/$glob
+      for path in $PUBLIC_INCLUDE_PATHS; do
+        if [ -e "$path" ]; then
+          mkdir -p "/tmp/public/$(dirname "$path")"
+          cp -a "$path" "/tmp/public/$path"
+        fi
       done
+      if [ -z "$(ls -A /tmp/public)" ]; then
+        echo "Allowlist produced an empty tree -- nothing to publish. Aborting."
+        exit 1
+      fi
+      echo "Allowlisted tree to publish:"
+      (cd /tmp/public && find . -type f | sort)
 
-      # 2) HARD secret-scan gate on exactly what would be published.
-      echo "Scanning sanitized snapshot with gitleaks..."
+      # 2) HARD secret-scan gate (defense in depth over the allowlist).
+      echo "Scanning snapshot with gitleaks..."
       gitleaks detect --source /tmp/public --no-git --redact --exit-code 1
 
-      # 3) Clone the public repo's own clean history and replace its tree.
+      # 3) Clone the public repo (no token needed -- it is public) and replace
+      #    its tree with the snapshot, preserving its own clean history.
       rm -rf /tmp/mirror
-      git clone --depth 1 "${PUBLIC_REPO}" /tmp/mirror
-      # remove all tracked content except .git, then drop in the new snapshot
+      git clone --depth 1 "${CLEAN_URL}" /tmp/mirror
       find /tmp/mirror -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
       cp -a /tmp/public/. /tmp/mirror/
 
-      # 4) Commit one release on top of the public changelog and push.
+      # 4) One release commit on top of the public changelog, then push.
       cd /tmp/mirror
       git config user.name "app-as-code-bot"
       git config user.email "ci@app-as-code"
@@ -79,6 +97,6 @@ publish-public:
       fi
       git commit -m "release: ${CI_COMMIT_TAG}"
       git tag "${CI_COMMIT_TAG}"
-      git push origin HEAD:main
-      git push origin "${CI_COMMIT_TAG}"
+      git push "${AUTH_URL}" HEAD:main
+      git push "${AUTH_URL}" "${CI_COMMIT_TAG}"
       echo "Published ${SERVICE} ${CI_COMMIT_TAG} to ${PUBLIC_GH_ORG}/${SERVICE}."
