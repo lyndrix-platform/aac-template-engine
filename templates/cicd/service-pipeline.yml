@@ -331,8 +331,10 @@ prod-trigger-orchestrator:
       while [ "$(date +%s)" -le "${END_EPOCH}" ]; do
         POLL_COUNT=$((POLL_COUNT + 1))
         STATUS_PAYLOAD=$(curl --silent \
+          --connect-timeout 5 --max-time 30 \
+          --retry 3 --retry-delay 2 --retry-connrefused \
           --header "X-Gitlab-Token: ${LYNDRIX_ORCHESTRATOR_TOKEN}" \
-          "${STATUS_ENDPOINT}")
+          "${STATUS_ENDPOINT}" || true)
 
         DEPLOY_STATUS=$(echo "${STATUS_PAYLOAD}" | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
         JOB_ID=$(echo "${STATUS_PAYLOAD}" | grep -o '"job_id":[0-9]*' | head -1 | cut -d':' -f2 || true)
