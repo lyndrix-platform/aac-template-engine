@@ -125,24 +125,44 @@ publish-public:
       git push -f "${AUTH_URL}" "${CI_COMMIT_TAG}"
 
       # 6) Package generated deployments and attach to a GitHub Release.
+      #    Best-effort: the full tree incl. deployments/ is already in the repo,
+      #    so GitHub's auto-generated source tarball covers downloads even if the
+      #    custom asset upload (separate uploads.github.com host) is unavailable.
       ASSET="/tmp/deployments-${CI_COMMIT_TAG}.tar.gz"
       if [ -d /tmp/public/deployments ]; then
         tar -czf "${ASSET}" -C /tmp/public deployments
-        REL_ID=$(curl -sS -X POST "${API}/releases" \
+
+        # Create the release, or reuse it if it already exists (idempotent).
+        CREATE_OUT=$(curl -sS -w $'\n%{http_code}' -X POST "${API}/releases" \
           -H "Authorization: Bearer ${PUBLISH_TOKEN}" \
           -H "Accept: application/vnd.github+json" \
           -H "X-GitHub-Api-Version: 2022-11-28" \
-          -d "{\"tag_name\":\"${CI_COMMIT_TAG}\",\"name\":\"${CI_COMMIT_TAG}\",\"body\":\"Generated deployment manifests (placeholder values). Configure before use.\"}" \
-          | jq -r '.id // empty')
+          -d "{\"tag_name\":\"${CI_COMMIT_TAG}\",\"name\":\"${CI_COMMIT_TAG}\",\"body\":\"Generated deployment manifests (placeholder values). Configure before use.\"}")
+        CREATE_CODE=$(printf '%s' "${CREATE_OUT}" | tail -n1)
+        REL_ID=$(printf '%s' "${CREATE_OUT}" | sed '$d' | jq -r '.id // empty')
+        echo "Release create: HTTP ${CREATE_CODE} (id=${REL_ID:-none})"
+        if [ -z "${REL_ID}" ]; then
+          REL_ID=$(curl -sS "${API}/releases/tags/${CI_COMMIT_TAG}" \
+            -H "Authorization: Bearer ${PUBLISH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" | jq -r '.id // empty')
+          echo "Reusing existing release id=${REL_ID:-none}"
+        fi
+
         if [ -n "${REL_ID}" ]; then
-          curl -sS -X POST "${UPLOADS}/releases/${REL_ID}/assets?name=deployments-${CI_COMMIT_TAG}.tar.gz" \
+          UP_CODE=$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+            "${UPLOADS}/releases/${REL_ID}/assets?name=deployments-${CI_COMMIT_TAG}.tar.gz" \
             -H "Authorization: Bearer ${PUBLISH_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
             -H "Content-Type: application/gzip" \
-            --data-binary "@${ASSET}" > /dev/null
-          echo "Attached deployments-${CI_COMMIT_TAG}.tar.gz to release ${CI_COMMIT_TAG}."
+            --data-binary "@${ASSET}")
+          echo "Asset upload: HTTP ${UP_CODE}"
+          if [ "${UP_CODE}" = "201" ]; then
+            echo "Attached deployments-${CI_COMMIT_TAG}.tar.gz to release ${CI_COMMIT_TAG}."
+          else
+            echo "WARNING: asset upload failed (HTTP ${UP_CODE}). deployments/ is still in the repo tree and in the release source tarball."
+          fi
         else
-          echo "WARNING: could not create/find GitHub release for ${CI_COMMIT_TAG}; skipped asset upload."
+          echo "WARNING: no GitHub release id for ${CI_COMMIT_TAG}; skipped asset upload."
         fi
       fi
       echo "Published ${SERVICE} ${CI_COMMIT_TAG} to ${PUBLIC_GH_ORG}/${SERVICE}."
