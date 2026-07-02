@@ -6,10 +6,10 @@
 # Desired state comes from hosts.yml services[].state, surfaced by
 # service_rollout as `service_state` (present -> install, absent -> uninstall).
 
-- name: "{{ service.name }} | Install / converge"
+- name: "{{ final_ssot_vars.service.name }} | Install / converge"
   ansible.builtin.include_tasks: install.yml
   when: (service_state | default('present')) == 'present'
 
-- name: "{{ service.name }} | Uninstall"
+- name: "{{ final_ssot_vars.service.name }} | Uninstall"
   ansible.builtin.include_tasks: uninstall.yml
   when: (service_state | default('present')) == 'absent'

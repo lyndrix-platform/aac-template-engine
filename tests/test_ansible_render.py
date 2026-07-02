@@ -55,7 +55,9 @@ def test_ansible_render_emits_entrypoint_and_role(tmp_path, monkeypatch):
     assert (role / "defaults" / "main.yml").is_file()
 
     # Role tasks are VERBATIM => Ansible runtime jinja survives unrendered.
-    assert "{{ service.name }}" in main.read_text()
+    # The SSoT is referenced via the `final_ssot_vars` namespace (NOT bare
+    # `vars`/`service`, which collide with Ansible reserved magic names).
+    assert "{{ final_ssot_vars.service.name }}" in main.read_text()
     yaml.safe_load(main.read_text())  # still valid YAML
 
 

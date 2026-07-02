@@ -4,8 +4,8 @@
 # overriding this file at:
 #   custom_templates/ansible/roles/service/tasks/uninstall.yml
 
-- name: "{{ service.name }} | No service-specific uninstall tasks defined"
+- name: "{{ final_ssot_vars.service.name }} | No service-specific uninstall tasks defined"
   ansible.builtin.debug:
     msg: >-
-      No uninstall tasks provided for {{ service.name }}. Override
+      No uninstall tasks provided for {{ final_ssot_vars.service.name }}. Override
       custom_templates/ansible/roles/service/tasks/uninstall.yml in the service repo.

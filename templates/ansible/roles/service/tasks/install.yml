@@ -7,8 +7,8 @@
 # Keep secrets OUT of generated files: reference them as Ansible runtime vars
 # (e.g. vars/secrets from the SSoT context), never hard-code them here.
 
-- name: "{{ service.name }} | No service-specific install tasks defined"
+- name: "{{ final_ssot_vars.service.name }} | No service-specific install tasks defined"
   ansible.builtin.debug:
     msg: >-
-      No install tasks provided for {{ service.name }}. Override
+      No install tasks provided for {{ final_ssot_vars.service.name }}. Override
       custom_templates/ansible/roles/service/tasks/install.yml in the service repo.
