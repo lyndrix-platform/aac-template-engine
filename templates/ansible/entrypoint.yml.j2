@@ -20,6 +20,6 @@
 - name: "entrypoint | Run the {{ service.name }} service role"
   ansible.builtin.include_role:
     name: service
-  # Native installs are inherently privileged (apt, systemd, /etc, keyrings).
-  # become on include_role propagates to every task of the service role.
-  become: true
+  # Privilege escalation (native installs need root) is set at the PLAY level in
+  # the ansible execution chain (cd_rollout_single_service_ansible.yml) — the
+  # pinned ansible-core rejects `become` directly on include_role.
