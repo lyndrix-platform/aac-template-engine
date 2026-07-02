@@ -1,0 +1,15 @@
+---
+# Service role dispatch. Copied VERBATIM by the engine — the Jinja references
+# below are Ansible RUNTIME vars resolved from the SSoT context
+# (ansible_context.json), NOT engine-time values.
+#
+# Desired state comes from hosts.yml services[].state, surfaced by
+# service_rollout as `service_state` (present -> install, absent -> uninstall).
+
+- name: "{{ final_ssot_vars.service.name }} | Install / converge"
+  ansible.builtin.include_tasks: install.yml
+  when: (service_state | default('present')) == 'present'
+
+- name: "{{ final_ssot_vars.service.name }} | Uninstall"
+  ansible.builtin.include_tasks: uninstall.yml
+  when: (service_state | default('present')) == 'absent'
