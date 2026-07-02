@@ -127,6 +127,10 @@ def main():
             else:
                 engine.render_all(context, args.deployment_type)
                 
+        elif args.deployment_type == 'ansible':
+            print("  [I] Processing Ansible (native) deployment...")
+            engine.render_ansible(context)
+
         else:
             print("  [I] Processing Docker Compose...")
             engine.render_all(context, args.deployment_type)

@@ -1,5 +1,6 @@
 # scripts/manifest_generator/engine.py
 import os
+import shutil
 import yaml
 from jinja2 import Environment, FileSystemLoader, ChoiceLoader
 
@@ -94,7 +95,64 @@ class ManifestEngine:
             
             # Ensure the target subdirectories exist
             os.makedirs(os.path.dirname(output_file), exist_ok=True)
-            
+
             with open(output_file, 'w', encoding='utf-8') as f:
                 f.write(template.render(context))
-                
+
+    def render_ansible(self, context: dict):
+        """Render the 'ansible' (native / bare-metal) deployment type.
+
+        Model:
+          * A GLOBAL, engine-rendered ``entrypoint.yml`` (from the root of
+            ``templates/ansible/``) — the single hook that runs before every
+            native rollout. It currently just hands off to the service role, but
+            is the place to add cross-cutting default tasks over time.
+          * A self-contained Ansible ROLE (``roles/**``) that is copied VERBATIM.
+            The role is native Ansible code driven by the SSoT context at runtime
+            (``ansible_context.json``), so secrets are never baked into generated
+            files and the role's own ``.j2`` templates (for Ansible's ``template``
+            module) are left untouched.
+
+        Service repos override or extend anything under
+        ``custom_templates/ansible/``; those files win over the engine defaults.
+        """
+        default_dir = os.path.join(self.template_base, 'templates', 'ansible')
+        custom_dir = os.path.join(self.service_path, 'custom_templates', 'ansible')
+        output_dir = os.path.join("deployments", "ansible")
+        os.makedirs(output_dir, exist_ok=True)
+
+        # Merge the source tree: engine defaults first, service custom overrides.
+        merged = {}  # rel_path -> absolute source path (custom wins)
+        for base in (default_dir, custom_dir):
+            if not os.path.isdir(base):
+                continue
+            for root, _dirs, files in os.walk(base):
+                for filename in files:
+                    abs_path = os.path.join(root, filename)
+                    rel = os.path.relpath(abs_path, base)
+                    merged[rel] = abs_path
+
+        # ChoiceLoader (custom over default) used ONLY for the root-level
+        # entrypoint template(s) that get engine-rendered.
+        loader = ChoiceLoader([
+            FileSystemLoader(custom_dir),
+            FileSystemLoader(default_dir),
+        ])
+        env = Environment(loader=loader, trim_blocks=True, lstrip_blocks=True)
+        env.filters['to_yaml'] = self._to_yaml_filter
+
+        for rel, src in sorted(merged.items()):
+            is_root_level = os.sep not in rel
+            if is_root_level and rel.endswith('.j2'):
+                # Engine-render the global entrypoint (strip .j2).
+                output_file = os.path.join(output_dir, rel[:-3])
+                print(f"  [>] Rendering (ansible entrypoint): {rel}")
+                template = env.get_template(rel)
+                with open(output_file, 'w', encoding='utf-8') as f:
+                    f.write(template.render(context))
+            else:
+                # Copy the role tree (and any other files) VERBATIM.
+                output_file = os.path.join(output_dir, rel)
+                os.makedirs(os.path.dirname(output_file), exist_ok=True)
+                print(f"  [>] Copying (ansible): {rel}")
+                shutil.copyfile(src, output_file)

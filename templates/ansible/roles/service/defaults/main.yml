@@ -1,0 +1,7 @@
+---
+# Role defaults. Real per-host values arrive at RUNTIME from the rendered SSoT
+# context (ansible_context.json) loaded by service_rollout — nothing is baked
+# in here, so no secrets ever land in generated artifacts.
+
+# Desired lifecycle state; overridden per host from services[].state.
+service_state: present
