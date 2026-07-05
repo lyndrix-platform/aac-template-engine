@@ -1,0 +1,244 @@
+{#
+  _helpers.jinja — shared macros for the kubernetes deployment type.
+
+  This file intentionally does NOT end in `.j2` so the engine's render_all()
+  skips it as an output file; templates import it via:
+      {% import '_helpers.jinja' as h %}
+
+  Design rule: every macro is PURE — it only uses its arguments, never the
+  global render context. All SSoT lookups happen in the calling template, so
+  the data contract stays visible in one place per manifest and can later be
+  moved into a KubernetesProcessor without touching the macros.
+#}
+
+{# --- DNS-1123 sanitizer: k8s object names must be lowercase alnum + '-' --- #}
+{%- macro k8sname(name) -%}
+{{ name | lower | replace('_', '-') | replace('.', '-') }}
+{%- endmacro -%}
+
+{# --- Standard label set applied to every object ------------------------- #}
+{%- macro std_labels(app_name, part_of) -%}
+app: {{ app_name }}
+app.kubernetes.io/name: {{ app_name }}
+app.kubernetes.io/part-of: {{ part_of }}
+app.kubernetes.io/managed-by: aac-template-engine
+{%- endmacro -%}
+
+{#
+  --- env: block ----------------------------------------------------------
+  env_map:     resolved KEY -> VALUE mapping (secrets already resolved).
+  secret_keys: keys that must NOT be inlined; they are emitted as
+               secretKeyRef into `secret_name` (the values live in the
+               Secret manifest rendered by secrets.yml.j2).
+#}
+{%- macro env_block(env_map, secret_keys, secret_name) -%}
+env:
+{% for key, value in env_map | dictsort %}
+{% if key in secret_keys %}
+- name: {{ key }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ secret_name }}
+      key: {{ key }}
+{% else %}
+- name: {{ key }}
+  value: {{ (value | string) | tojson }}
+{% endif %}
+{% endfor %}
+{%- endmacro -%}
+
+{#
+  --- envFrom: block ------------------------------------------------------
+  Compose parity: dependencies inherit `.env` + `stack.env` via env_file.
+  The k8s equivalent injects the shared ConfigMap / Secret wholesale.
+#}
+{%- macro env_from(secret_name, configmap_name) -%}
+envFrom:
+{% if configmap_name %}
+- configMapRef:
+    name: {{ configmap_name }}
+    optional: true
+{% endif %}
+{% if secret_name %}
+- secretRef:
+    name: {{ secret_name }}
+    optional: true
+{% endif %}
+{%- endmacro -%}
+
+{#
+  --- volumeMounts: -------------------------------------------------------
+  mount_list: compose-style "volume_name:/container/path" strings.
+  Duplicate mount paths are dropped (first entry wins) — catalog merges can
+  produce two names for the same target, which k8s rejects.
+#}
+{%- macro volume_mounts(mount_list) -%}
+volumeMounts:
+{% set seen = namespace(paths=[]) %}
+{% for m in mount_list %}
+{% set vol_name = m.split(':', 1)[0] %}
+{% set target = m.split(':', 1)[1] %}
+{% if target not in seen.paths %}
+{% set seen.paths = seen.paths + [target] %}
+- name: {{ k8sname(vol_name) }}
+  mountPath: {{ target }}
+{% endif %}
+{% endfor %}
+{%- endmacro -%}
+
+{#
+  --- pod volumes: --------------------------------------------------------
+  mount_list:  same "name:target" strings as volume_mounts (same dedup).
+  local_defs:  per-container volume definitions ({name: {target, type?, source?}}).
+  global_defs: the SSoT top-level `volumes:` map (authoritative for type/source).
+  claim_prefix: PVC name prefix, normally the main service name.
+
+  type: bind + source  -> hostPath (DirectoryOrCreate)
+  anything else        -> persistentVolumeClaim <claim_prefix>-<name>
+                          (claims are rendered by pvc.yml.j2 from the SSoT
+                           top-level `volumes:` map — declare storage there).
+#}
+{%- macro pod_volumes(mount_list, local_defs, global_defs, claim_prefix) -%}
+volumes:
+{% set seen = namespace(paths=[]) %}
+{% for m in mount_list %}
+{% set vol_name = m.split(':', 1)[0] %}
+{% set target = m.split(':', 1)[1] %}
+{% if target not in seen.paths %}
+{% set seen.paths = seen.paths + [target] %}
+{% set meta = global_defs.get(vol_name, local_defs.get(vol_name, {})) %}
+- name: {{ k8sname(vol_name) }}
+{% if meta.get('type') == 'bind' and meta.get('source') %}
+  hostPath:
+    path: {{ meta.source }}
+    type: DirectoryOrCreate
+{% else %}
+  persistentVolumeClaim:
+    claimName: {{ claim_prefix }}-{{ k8sname(vol_name) }}
+{% endif %}
+{% endif %}
+{% endfor %}
+{%- endmacro -%}
+
+{#
+  --- securityContext: ----------------------------------------------------
+  Maps the compose hardening keys (cap_drop / cap_add / security_opt) that
+  the SpecProcessor passes through, onto the k8s container securityContext.
+#}
+{%- macro security_context(spec) -%}
+{% set opts = spec.get('security_opt', []) | map('string') | list %}
+securityContext:
+{% if 'no-new-privileges=true' in opts or 'no-new-privileges:true' in opts %}
+  allowPrivilegeEscalation: false
+{% endif %}
+{% if 'apparmor=unconfined' in opts or 'apparmor:unconfined' in opts %}
+  appArmorProfile:
+    type: Unconfined
+{% endif %}
+{% if spec.get('privileged') %}
+  privileged: true
+{% endif %}
+{% if spec.get('cap_drop') or spec.get('cap_add') %}
+  capabilities:
+{% if spec.get('cap_drop') %}
+    drop:
+{% for c in spec.cap_drop %}
+    - {{ c }}
+{% endfor %}
+{% endif %}
+{% if spec.get('cap_add') %}
+    add:
+{% for c in spec.cap_add %}
+    - {{ c }}
+{% endfor %}
+{% endif %}
+{% endif %}
+{%- endmacro -%}
+
+{# True if security_context() would emit anything beyond the bare key. #}
+{%- macro has_security_context(spec) -%}
+{{ 'yes' if (spec.get('cap_drop') or spec.get('cap_add') or spec.get('privileged') or spec.get('security_opt')) else '' }}
+{%- endmacro -%}
+
+{#
+  --- probes: -------------------------------------------------------------
+  Translates a compose healthcheck into liveness + readiness probes.
+  ["CMD", ...]        -> exec argv
+  ["CMD-SHELL", "x"]  -> /bin/sh -c "x"
+  Intervals only support the "<n>s" notation used across the SSoT catalog.
+#}
+{%- macro probes(hc) -%}
+{% if hc and hc.test %}
+{# compose escapes `$` as `$$` — undo that, k8s exec has no such escaping #}
+{% set test = hc.test %}
+{% if test is string %}
+{% set cmd = ['/bin/sh', '-c', test | replace('$$', '$')] %}
+{% elif test[0] == 'CMD-SHELL' %}
+{% set cmd = ['/bin/sh', '-c', test[1] | replace('$$', '$')] %}
+{% elif test[0] == 'CMD' %}
+{% set cmd = test[1:] | map('replace', '$$', '$') | list %}
+{% else %}
+{% set cmd = test | map('replace', '$$', '$') | list %}
+{% endif %}
+{% set period = hc.interval | default('30s') | replace('s', '') | int %}
+{% set timeout = hc.timeout | default('5s') | replace('s', '') | int %}
+{% set retries = hc.retries | default(3) %}
+livenessProbe:
+  exec:
+    command:
+{% for c in cmd %}
+    - {{ (c | string) | tojson }}
+{% endfor %}
+  periodSeconds: {{ period }}
+  timeoutSeconds: {{ timeout }}
+  failureThreshold: {{ retries }}
+readinessProbe:
+  exec:
+    command:
+{% for c in cmd %}
+    - {{ (c | string) | tojson }}
+{% endfor %}
+  periodSeconds: {{ period }}
+  timeoutSeconds: {{ timeout }}
+  failureThreshold: {{ retries }}
+{% endif %}
+{%- endmacro -%}
+
+{#
+  --- resources: ----------------------------------------------------------
+  res: optional {requests: {cpu, memory}, limits: {cpu, memory}} override
+  (deployments.kubernetes.resources / .dependencies.<n>.resources).
+#}
+{%- macro resources(res) -%}
+{% set r = res | default({}, true) %}
+resources:
+  requests:
+    cpu: {{ (r.get('requests', {}).get('cpu', '100m')) | tojson }}
+    memory: {{ (r.get('requests', {}).get('memory', '128Mi')) | tojson }}
+  limits:
+    cpu: {{ (r.get('limits', {}).get('cpu', '2')) | tojson }}
+    memory: {{ (r.get('limits', {}).get('memory', '2Gi')) | tojson }}
+{%- endmacro -%}
+
+{#
+  --- traefik label parsing ----------------------------------------------
+  The IngressProcessor already encodes the full routing intent into docker
+  labels (processed_labels / dep.labels). These helpers read the labels back
+  so the k8s IngressRoute stays 1:1 with the compose routing without
+  re-implementing the ingress logic. Replace with a KubernetesProcessor later.
+#}
+{%- macro traefik_rule(labels) -%}
+{% for k, v in labels.items() if k.startswith('traefik.http.routers.') and k.endswith('.rule') %}{{ v if loop.first }}{% endfor %}
+{%- endmacro -%}
+
+{%- macro traefik_entrypoint(labels) -%}
+{% for k, v in labels.items() if k.startswith('traefik.http.routers.') and k.endswith('.entrypoints') %}{{ v if loop.first }}{% endfor %}
+{%- endmacro -%}
+
+{%- macro traefik_certresolver(labels) -%}
+{% for k, v in labels.items() if k.startswith('traefik.http.routers.') and k.endswith('.tls.certresolver') %}{{ v if loop.first }}{% endfor %}
+{%- endmacro -%}
+
+{%- macro traefik_port(labels) -%}
+{% for k, v in labels.items() if k.startswith('traefik.http.services.') and k.endswith('.loadbalancer.server.port') %}{{ v if loop.first }}{% endfor %}
+{%- endmacro -%}
