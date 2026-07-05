@@ -132,7 +132,7 @@ def main():
             engine.render_ansible(context)
 
         else:
-            print("  [I] Processing Docker Compose...")
+            print(f"  [I] Processing {args.deployment_type}...")
             engine.render_all(context, args.deployment_type)
         
         print("\nSuccess: Manifest generation complete.")
