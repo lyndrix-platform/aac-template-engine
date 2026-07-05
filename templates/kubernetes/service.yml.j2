@@ -39,7 +39,7 @@ spec:
   - name: {{ h.k8sname(p.name) }}
     port: {{ p.port }}
     targetPort: {{ p.port }}
-    protocol: {{ p.protocol | default('TCP') }}
+    protocol: {{ (p.protocol | default('TCP')) | upper }}
 {% if k8s.get('service_type') == 'NodePort' and p.external_port is defined and p.external_port >= 30000 and p.external_port <= 32767 %}
     nodePort: {{ p.external_port }}
 {% endif %}
@@ -50,23 +50,23 @@ spec:
 {# --- resolve the dependency's service ports (see header) --- #}
 {% set dep_ports = [] %}
 {% for p in dep_k8s.get('ports', []) %}
-{% set _ = dep_ports.append({'name': p.name | default('port-' ~ loop.index), 'port': p.port | default(p)}) %}
+{% set _ = dep_ports.append({'name': p.name | default('port-' ~ loop.index), 'port': p.port | default(p), 'protocol': p.protocol | default('TCP')}) %}
 {% endfor %}
 {% if not dep_ports %}
 {% for p in dep.get('ports', []) %}
-{% set _ = dep_ports.append({'name': p.name | default('port-' ~ loop.index), 'port': p.port | default(p)}) %}
+{% set _ = dep_ports.append({'name': p.name | default('port-' ~ loop.index), 'port': p.port | default(p), 'protocol': p.protocol | default('TCP')}) %}
 {% endfor %}
 {% endif %}
 {% if not dep_ports %}
 {% set image_base = dep.image_repo.split('/') | last %}
 {% if image_base in known_ports %}
-{% set _ = dep_ports.append({'name': image_base, 'port': known_ports[image_base]}) %}
+{% set _ = dep_ports.append({'name': image_base, 'port': known_ports[image_base], 'protocol': 'TCP'}) %}
 {% endif %}
 {% endif %}
 {% if not dep_ports %}
 {% set traefik_port = h.traefik_port(dep.labels | default({}, true)) %}
 {% if traefik_port %}
-{% set _ = dep_ports.append({'name': 'web', 'port': traefik_port | int}) %}
+{% set _ = dep_ports.append({'name': 'web', 'port': traefik_port | int, 'protocol': 'TCP'}) %}
 {% endif %}
 {% endif %}
 {% if dep_ports %}
@@ -87,7 +87,7 @@ spec:
   - name: {{ h.k8sname(p.name) }}
     port: {{ p.port }}
     targetPort: {{ p.port }}
-    protocol: TCP
+    protocol: {{ (p.protocol | default('TCP')) | upper }}
 {% endfor %}
 {% else %}
 # NOTE: dependency '{{ dep_key }}' ({{ dep.image_repo }}) has no resolvable port —

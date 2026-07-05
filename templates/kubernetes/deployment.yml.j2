@@ -67,7 +67,7 @@ spec:
 {% for p in port_list %}
         - name: {{ h.k8sname(p.name) }}
           containerPort: {{ p.port }}
-          protocol: {{ p.protocol | default('TCP') }}
+          protocol: {{ (p.protocol | default('TCP')) | upper }}
 {% endfor %}
 {% endif %}
 {% set env_map = k8s.get('environment', dc.get('environment', {})) %}
