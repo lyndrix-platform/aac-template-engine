@@ -119,5 +119,41 @@ class IngressProcessor(BaseProcessor):
                 labels.update({"homepage.widget.type": w.get('type'), "homepage.widget.url": f"https://{fqdn}"})
                 if w.get('key'): labels["homepage.widget.key"] = w['key']
 
+        # 5. NetBird reverse-proxy exposure (external, over the k3s NetBird proxies).
+        #    The engine only records the DESIRED STATE as labels — WHAT to expose.
+        #    A reconciler (docker-to-netbird watcher, mirroring docker-to-dns) turns
+        #    these into a NetBird reverse-proxy service via the management REST API
+        #    (POST/PUT/DELETE /api/reverse-proxies/services), resolving the target
+        #    peer by inventory hostname and pulling the API PAT from the iac-controller
+        #    global vars / SOPS — the engine never sees the secret.
+        #    Hostname defaults from service.hostname (like Traefik); the exposure
+        #    domain is its own zone (e.g. nb.fam-feser.de), independent of the
+        #    internal domain, so Traefik (internal) and NetBird (external) can coexist.
+        if ints.get('netbird', {}).get('enabled'):
+            nb = ints['netbird']
+            nb_domain = nb.get('domain', domain)
+            nb_fqdn = f"{svc.get('hostname', name)}.{nb_domain}"
+            nb_ports = context.get('ports', [])
+            nb_default_port = nb_ports[0].get('port') if nb_ports else 80
+            nb_port = str(nb.get('service_port', nb_default_port))
+            labels.update({
+                f"netbird.expose.enabled.{name}": "true",
+                f"netbird.expose.domain.{name}": nb_fqdn,
+                f"netbird.expose.port.{name}": nb_port,
+                f"netbird.expose.protocol.{name}": nb.get('protocol', 'http'),
+                f"netbird.expose.mode.{name}": nb.get('mode', 'http'),
+            })
+            # SSO restriction: comma-separated NetBird group NAMES (the reconciler
+            # resolves them to group IDs via GET /api/groups). Ties into the
+            # G_NETBIRD_* groups synced from Authentik.
+            sso_groups = nb.get('sso_groups') or []
+            if sso_groups:
+                labels[f"netbird.expose.sso_groups.{name}"] = ",".join(str(g) for g in sso_groups)
+            # Optional passthrough knobs, only emitted when explicitly set.
+            if nb.get('pass_host_header') is not None:
+                labels[f"netbird.expose.pass_host_header.{name}"] = str(nb.get('pass_host_header')).lower()
+            if nb.get('private') is not None:
+                labels[f"netbird.expose.private.{name}"] = str(nb.get('private')).lower()
+
         context['processed_labels'] = labels
         return context

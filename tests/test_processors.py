@@ -258,3 +258,60 @@ def test_context_builder_seeds_vars_and_resolves_quoted_refs():
     assert env["DB_HOST"] == "db.example.com"
     # quote-containing secret resolved without corrupting the tree
     assert env["DB_PW"] == 'has"quote'
+
+def test_ingress_processor_emits_netbird_expose_labels():
+    """NetBird integration emits declarative expose labels; hostname defaults from service."""
+    from manifest_generator.processors.ingress import IngressProcessor
+    mock_context = {
+        "service": {"name": "aac-zigbee2mqtt", "hostname": "zigbee2mqtt", "stage": "prod"},
+        "config": {
+            "domain_name": "int.fam-feser.de",
+            "generate_hostname": False,
+            "integrations": {
+                "netbird": {
+                    "enabled": True,
+                    "service_port": 8181,
+                    "domain": "nb.fam-feser.de",
+                    "sso_groups": ["G_NETBIRD_PROXY_ADMIN"],
+                },
+            },
+        },
+        "deployments": {"docker_compose": {}},
+        "ports": [{"port": 8080}],
+    }
+    labels = IngressProcessor().process(mock_context)["processed_labels"]
+    n = "aac-zigbee2mqtt"
+    # Hostname defaults from service.hostname (like Traefik), domain is the netbird zone.
+    assert labels[f"netbird.expose.domain.{n}"] == "zigbee2mqtt.nb.fam-feser.de"
+    assert labels[f"netbird.expose.enabled.{n}"] == "true"
+    assert labels[f"netbird.expose.port.{n}"] == "8181"
+    assert labels[f"netbird.expose.protocol.{n}"] == "http"
+    assert labels[f"netbird.expose.mode.{n}"] == "http"
+    assert labels[f"netbird.expose.sso_groups.{n}"] == "G_NETBIRD_PROXY_ADMIN"
+
+
+def test_ingress_processor_no_netbird_labels_when_disabled():
+    """Without integrations.netbird.enabled, no netbird.* labels are produced."""
+    from manifest_generator.processors.ingress import IngressProcessor
+    mock_context = {
+        "service": {"name": "aac-plain"},
+        "config": {"integrations": {}},
+        "deployments": {"docker_compose": {}},
+        "ports": [],
+    }
+    labels = IngressProcessor().process(mock_context)["processed_labels"]
+    assert not any(k.startswith("netbird.") for k in labels)
+
+
+def test_ingress_processor_netbird_port_defaults_from_ports():
+    """When service_port is omitted, the first declared port is used."""
+    from manifest_generator.processors.ingress import IngressProcessor
+    mock_context = {
+        "service": {"name": "aac-homeassistant", "hostname": "homeassistant"},
+        "config": {"integrations": {"netbird": {"enabled": True, "domain": "nb.fam-feser.de"}}},
+        "deployments": {"docker_compose": {}},
+        "ports": [{"port": 8123}],
+    }
+    labels = IngressProcessor().process(mock_context)["processed_labels"]
+    assert labels["netbird.expose.port.aac-homeassistant"] == "8123"
+    assert labels["netbird.expose.domain.aac-homeassistant"] == "homeassistant.nb.fam-feser.de"
