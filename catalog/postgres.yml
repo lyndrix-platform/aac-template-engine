@@ -10,7 +10,12 @@ volumes:
     target: "/var/lib/postgresql"
 
 healthcheck:
-  test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+  # Default the role/db so the probe stays valid when a service doesn't pass
+  # POSTGRES_USER/POSTGRES_DB to the db container (the postgres image's default
+  # superuser is "postgres"). Without the fallback the probe runs
+  # `pg_isready -U -d <db>`, which consumes `-d` as the username and spams
+  # `FATAL: role "-d" does not exist` in the db log every interval.
+  test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER:-postgres}\" -d \"$${POSTGRES_DB:-postgres}\""]
   interval: "30s"
   timeout: "5s"
   retries: 5
