@@ -65,6 +65,9 @@ services:
       interval: {{ deployments.docker_compose.healthcheck.interval | default('30s') }}
       timeout: {{ deployments.docker_compose.healthcheck.timeout | default('5s') }}
       retries: {{ deployments.docker_compose.healthcheck.retries | default(3) }}
+      {% if deployments.docker_compose.healthcheck.start_period is defined %}
+      start_period: {{ deployments.docker_compose.healthcheck.start_period }}
+      {% endif %}
     {% endif %}
 
     {# --- SMART SPECS (Python handles all other valid DC keys) --- #}
@@ -148,6 +151,9 @@ services:
       interval: {{ dep_config.healthcheck.interval | default('30s') }}
       timeout: {{ dep_config.healthcheck.timeout | default('5s') }}
       retries: {{ dep_config.healthcheck.retries | default(5) }}
+      {% if dep_config.healthcheck.start_period is defined %}
+      start_period: {{ dep_config.healthcheck.start_period }}
+      {% endif %}
     {% endif %}
 
     {# --- SMART SPECS FOR SIDECARS --- #}
