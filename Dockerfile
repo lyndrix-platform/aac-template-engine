@@ -1,5 +1,5 @@
 # Start from your monolithic Ansible CI image
-ARG BASE_IMAGE=registry.gitlab.int.fam-feser.de/iac-environment/iac-platform-assets/ansible-ci-image:latest@sha256:457958b1dc402e6f6b6d1fd2df1b01476dbe5b79bc6d859c5eac293c5b1b1137
+ARG BASE_IMAGE=registry.gitlab.int.fam-feser.de/iac-environment/iac-platform-assets/ansible-ci-image:latest@sha256:4264c200b109a268fb4b210f48c010c461c9dc68eab2be244a8d9245b7cec637
 FROM ${BASE_IMAGE}
 
 # Install Python dependencies for the template engine and MkDocs
