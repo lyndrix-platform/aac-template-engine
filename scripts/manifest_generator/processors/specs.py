@@ -32,6 +32,14 @@ class SpecProcessor(BaseProcessor):
         for dep_name, dep_cfg in context.get('dependencies', {}).items():
             dep_specs = get_clean_specs(dep_cfg)
             dep_svc_name = dep_cfg.get('name', f"{main_svc}-{dep_name}")
+
+            # A sidecar may pin its container hostname. The main service gets
+            # service.hostname via the template; for dependencies it is opt-in
+            # (some software derives durable identifiers from the hostname, e.g.
+            # the Wazuh manager names its vulnerability index after it — a random
+            # container id per recreation would spawn a new index every rollout).
+            if dep_cfg.get('hostname'):
+                dep_specs['hostname'] = str(dep_cfg['hostname'])
             
             if dep_cfg.get('network_mode') == 'host':
                 extra_hosts = processed_specs.setdefault('extra_hosts', [])

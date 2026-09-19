@@ -337,3 +337,22 @@ def test_spec_processor_depends_on_conditions():
     assert depends_on["svc-init"] == {"condition": "service_completed_successfully"}
     assert depends_on["svc-db"] == {"condition": "service_healthy"}
     assert depends_on["svc-cache"] == {"condition": "service_started"}
+
+
+def test_spec_processor_dependency_hostname_passthrough():
+    """`hostname` on a dependency is emitted as a compose spec (opt-in), while
+    the main service keeps using service.hostname via the template and a
+    dependency without hostname gets none (container id, docker default)."""
+    from manifest_generator.processors.specs import SpecProcessor
+    context = {
+        "service": {"name": "svc"},
+        "deployments": {"docker_compose": {"hostname": "ignored-here"}},
+        "dependencies": {
+            "mgr": {"name": "svc.manager", "hostname": "svc.manager"},
+            "cache": {"name": "svc-cache"},
+        },
+    }
+    SpecProcessor().process(context)
+    assert context["dependencies"]["mgr"]["processed_specs"]["hostname"] == "svc.manager"
+    assert "hostname" not in context["dependencies"]["cache"]["processed_specs"]
+    assert "hostname" not in context["processed_specs"]
