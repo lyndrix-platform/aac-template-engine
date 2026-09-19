@@ -315,3 +315,25 @@ def test_ingress_processor_netbird_port_defaults_from_ports():
     labels = IngressProcessor().process(mock_context)["processed_labels"]
     assert labels["netbird.expose.port.aac-homeassistant"] == "8123"
     assert labels["netbird.expose.domain.aac-homeassistant"] == "homeassistant.nb.fam-feser.de"
+
+
+def test_spec_processor_depends_on_conditions():
+    """One-shot sidecars (restart_policy "no") must be waited for as
+    service_completed_successfully, healthchecked ones as service_healthy,
+    everything else as service_started — otherwise `compose up --wait` fails
+    when the one-shot container exits."""
+    from manifest_generator.processors.specs import SpecProcessor
+    context = {
+        "service": {"name": "svc"},
+        "deployments": {"docker_compose": {}},
+        "dependencies": {
+            "init": {"name": "svc-init", "restart_policy": "no"},
+            "db": {"name": "svc-db", "healthcheck": {"test": ["CMD", "true"]}},
+            "cache": {"name": "svc-cache"},
+        },
+    }
+    SpecProcessor().process(context)
+    depends_on = context["processed_specs"]["depends_on"]
+    assert depends_on["svc-init"] == {"condition": "service_completed_successfully"}
+    assert depends_on["svc-db"] == {"condition": "service_healthy"}
+    assert depends_on["svc-cache"] == {"condition": "service_started"}

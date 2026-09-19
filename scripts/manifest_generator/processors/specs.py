@@ -40,7 +40,12 @@ class SpecProcessor(BaseProcessor):
                     extra_hosts.append(mapping)
             
             # INJECT DEPENDS_ON LOGIC
-            if 'healthcheck' in dep_cfg:
+            # A one-shot sidecar (restart_policy "no", e.g. an init/cert generator)
+            # is expected to EXIT; `compose up --wait` only accepts that when the
+            # dependency is declared as service_completed_successfully.
+            if str(dep_cfg.get('restart_policy', '')).lower() in ('no', 'false'):
+                depends_on_block[dep_svc_name] = {"condition": "service_completed_successfully"}
+            elif 'healthcheck' in dep_cfg:
                 depends_on_block[dep_svc_name] = {"condition": "service_healthy"}
             else:
                 depends_on_block[dep_svc_name] = {"condition": "service_started"}
