@@ -5,16 +5,24 @@ import glob
 import shutil
 from datetime import datetime, timezone
 
+import re
+
+
+def _mask(text):
+    """Hide credentials embedded in URLs (https://user:token@host) in log output."""
+    return re.sub(r"(https?://)[^/@\s]+@", r"\1<credentials>@", text)
+
+
 def run_command(command, cwd=None):
     """Executes a shell command and returns the result."""
-    print(f"Executing: {' '.join(command)}")
+    print(f"Executing: {_mask(' '.join(command))}")
     try:
         return subprocess.run(
             command, cwd=cwd, check=True, 
             capture_output=True, text=True, encoding='utf-8'
         )
     except subprocess.CalledProcessError as e:
-        print(f"Error: {e.stderr}", file=sys.stderr)
+        print(f"Error: {_mask(e.stderr or '')}", file=sys.stderr)
         sys.exit(1)
 
 def main():
@@ -24,15 +32,23 @@ def main():
     docs_target_root = os.environ.get("DOCS_TARGET_ROOT", os.path.join("content", "aac-services"))
     legacy_target_root = os.environ.get("DOCS_LEGACY_TARGET_ROOT", os.path.join("site", "content", "aac-services"))
     repo_url = os.environ.get("DOCS_REPO_URL")
-    token = os.environ.get("CI_GITLAB_TOKEN_GLOBAL_FESER")
     project_name = os.environ.get("CI_PROJECT_NAME", "unknown-service")
     server_host = os.environ.get("CI_SERVER_HOST", "gitlab.int.fam-feser.de")
 
+    # Credentials: prefer the dedicated docs publisher (group CI variables
+    # DOCS_PUBLISH_USER / DOCS_PUBLISH_TOKEN = a project access token of the
+    # docs repo with write_repository), fall back to the legacy global token.
+    user = os.environ.get("DOCS_PUBLISH_USER")
+    token = os.environ.get("DOCS_PUBLISH_TOKEN")
+    if not (user and token):
+        user = "gitlab-ci-token"
+        token = os.environ.get("CI_GITLAB_TOKEN_GLOBAL_FESER")
+
     if not repo_url or not token:
-        print("Fatal: DOCS_REPO_URL or CI_GITLAB_TOKEN_GLOBAL_FESER not set.")
+        print("Fatal: DOCS_REPO_URL or DOCS_PUBLISH_TOKEN/CI_GITLAB_TOKEN_GLOBAL_FESER not set.")
         sys.exit(1)
 
-    auth_url = repo_url.replace("https://", f"https://gitlab-ci-token:{token}@")
+    auth_url = repo_url.replace("https://", f"https://{user}:{token}@")
     repo_dir = 'docs_repo'
 
     # --- 2. Find Source Files ---
