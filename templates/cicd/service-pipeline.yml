@@ -254,7 +254,15 @@ publish_to_docs:
         cp "$DOC_SOURCE_DIR/docs/index.md" "$DOC_SOURCE_DIR/documentation.md"
       fi
     - ls -la "$DOC_SOURCE_DIR" || true
-    - python3 $TEMPLATE_PATH/scripts/publish_docs.py
+    # Run the CURRENT publish script from the engine repo (ref main, like this
+    # include) instead of the copy baked into the engine image, so fixes land
+    # without an image release; the baked copy stays as fallback.
+    - |
+      SCRIPT="$TEMPLATE_PATH/scripts/publish_docs.py"
+      if curl -sf --max-time 20 "$CI_API_V4_URL/projects/7/repository/files/scripts%2Fpublish_docs.py/raw?ref=main" -o /tmp/publish_docs.py && [ -s /tmp/publish_docs.py ]; then
+        SCRIPT=/tmp/publish_docs.py
+      fi
+      python3 "$SCRIPT"
   rules:
     - if: '$CI_COMMIT_BRANCH == $PROD_BRANCH'
 
