@@ -259,7 +259,7 @@ publish_to_docs:
     # without an image release; the baked copy stays as fallback.
     - |
       SCRIPT="$TEMPLATE_PATH/scripts/publish_docs.py"
-      if curl -sf --max-time 20 "$CI_API_V4_URL/projects/7/repository/files/scripts%2Fpublish_docs.py/raw?ref=main" -o /tmp/publish_docs.py && [ -s /tmp/publish_docs.py ]; then
+      if curl -sf --max-time 20 --header "JOB-TOKEN: $CI_JOB_TOKEN" "$CI_API_V4_URL/projects/7/repository/files/scripts%2Fpublish_docs.py/raw?ref=main" -o /tmp/publish_docs.py && [ -s /tmp/publish_docs.py ]; then
         SCRIPT=/tmp/publish_docs.py
       fi
       python3 "$SCRIPT"
