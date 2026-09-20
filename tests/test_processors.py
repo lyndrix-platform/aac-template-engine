@@ -356,3 +356,27 @@ def test_spec_processor_dependency_hostname_passthrough():
     assert context["dependencies"]["mgr"]["processed_specs"]["hostname"] == "svc.manager"
     assert "hostname" not in context["dependencies"]["cache"]["processed_specs"]
     assert "hostname" not in context["processed_specs"]
+
+
+def test_port_processor_bind_host_and_literal():
+    """`bind: host` prefixes the published port with the injected
+    ansible_host_ip, a literal bind address is used as-is, and ports without
+    `bind` keep the 0.0.0.0 default (unchanged output)."""
+    from manifest_generator.processors.ports import PortProcessor
+    context = {
+        "ansible_host_ip": "10.1.130.250",
+        "ports": [
+            {"name": "dns-udp", "port": 53, "external_port": 53, "protocol": "UDP", "bind": "host"},
+            {"name": "dns-lo", "port": 53, "external_port": 5353, "protocol": "TCP", "bind": "127.0.0.1"},
+            {"name": "web", "port": 80, "external_port": 8080, "protocol": "TCP"},
+        ],
+        "dependencies": {"auth": {"name": "svc-auth", "ports": [
+            {"name": "dns", "port": 53, "external_port": 53, "protocol": "TCP", "bind": "host"}]}},
+    }
+    PortProcessor().process(context)
+    assert context["processed_ports"] == ["10.1.130.250:53:53/udp", "127.0.0.1:5353:53/tcp", "8080:80/tcp"]
+    assert context["dependencies"]["auth"]["processed_ports"] == ["10.1.130.250:53:53/tcp"]
+    # no host ip injected (CI render) -> bind: host degrades to the default publish
+    ctx2 = {"ports": [{"port": 53, "external_port": 53, "protocol": "UDP", "bind": "host"}], "dependencies": {}}
+    PortProcessor().process(ctx2)
+    assert ctx2["processed_ports"] == ["53:53/udp"]
