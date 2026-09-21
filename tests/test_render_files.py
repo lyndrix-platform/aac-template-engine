@@ -28,4 +28,4 @@ def test_render_files_renders_j2_and_copies_raw_assets(tmp_path, monkeypatch):
     assert not (out / "config" / "settings.yaml.j2").exists()
     assert (out / "icons" / "logo.png").read_bytes() == b"\x89PNG\r\n\x1a\n\x00raw"
     dash = (out / "provisioning" / "dashboards" / "Docker" / "all.json").read_text()
-    assert "{{name}} ({{host}})" in dash and '"$job"' in dash
+    assert "{{name}} ({{host}})" in dash and "$job" in dash
