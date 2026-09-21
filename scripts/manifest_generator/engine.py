@@ -83,9 +83,17 @@ class ManifestEngine:
         output_base_dir = os.path.join("deployments", "files")
 
         for template_name in env.list_templates():
-            if not template_name.endswith('.j2'): 
+            if not template_name.endswith('.j2'):
+                # Raw asset (icons, dashboard JSON, binaries, ...): ship it
+                # verbatim. Anything with Jinja-looking syntax that must not be
+                # rendered (Grafana `{{name}}` legends, `${var}`) goes here too.
+                src = os.path.join(base_src_dir, template_name)
+                output_file = os.path.join(output_base_dir, template_name)
+                os.makedirs(os.path.dirname(output_file), exist_ok=True)
+                print(f"  [>] Copying Custom File (verbatim): {template_name}")
+                shutil.copyfile(src, output_file)
                 continue
-                
+
             print(f"  [>] Rendering Custom File: {template_name}")
             template = env.get_template(template_name)
             
