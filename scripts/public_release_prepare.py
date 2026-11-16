@@ -141,7 +141,8 @@ def cmd_finalize(tree):
                       f"{k}=CHANGE_ME", ""]
         else:
             lines += [f"# default: {v}", f"{k}={v}", ""]
-    if env:
+    # also needed when sidecars reference env_file: .env but no variable exists (else `compose config` fails)
+    if env or re.search(r"^\s+env_file:", text, re.M):
         open(os.path.join(d, ".env.example"), "w", encoding="utf-8").write("\n".join(lines))
     for fn in (".env", "stack.env"):
         try:
