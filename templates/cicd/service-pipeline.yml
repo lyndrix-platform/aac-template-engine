@@ -62,6 +62,12 @@ stages:
   - prod-validate
   - documentation
 
+# Public release sync (tag X.Y.Z -> GitHub org app-as-code). Tag pipelines only.
+include:
+  - project: 'aac-application-definitions/aac-template-engine'
+    ref: main
+    file: '/templates/cicd/public-release.yml'
+
 # ==========================================================================
 # REUSABLE TEMPLATES
 # ==========================================================================
