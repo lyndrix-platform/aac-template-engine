@@ -3,7 +3,7 @@
 
 Sub-commands:
   sanitize <service.yml>        blank all secret values (-> CHANGE_ME); rewrites file only if needed
-  standalone <tree> <service.yml>  make rendered compose standalone (+ .env.example, traefik override)
+  finalize <tree>                  inline CHANGE_ME -> \${KEY:?}, single .env.example
   readme   <tree> <service.yml> create/extend README.md with a "Quick start (docker compose)" section
   notes    <CHANGELOG.md> <X.Y.Z>   print the changelog section of a release (empty if none)
 """
@@ -42,6 +42,32 @@ def cmd_sanitize(path):
                 block[k] = "CHANGE_ME"
                 changed += 1
 
+    # neutral, non-secret defaults for platform-injected metadata (stay real values, not CHANGE_ME)
+    svc = data.get("service", {}) or {}
+    cfg = data.setdefault("config", {}) or {}
+    host = svc.get("hostname") or svc.get("name", "app")
+    defaults = {"SERVICE_IMAGE_TAG": svc.get("image_tag"), "SERVICE_IMAGE_NAME": svc.get("image_repo"),
+                "SERVICE_ICON": svc.get("icon"), "SERVICE_DOMAIN_NAME": "example.com"}
+    allv = [data.get("vars"), data.get("environment")]
+    for blk in allv:
+        if not isinstance(blk, dict):
+            continue
+        for k, v in list(blk.items()):
+            if v != "CHANGE_ME":
+                continue
+            ku = k.upper()
+            if defaults.get(k):
+                blk[k] = defaults[k]; changed += 1
+            elif re.search(r"URL|AUTHORITY|ISSUER|DOMAIN|HOST", ku) and not re.search(r"DATABASE|DSN|PASS|SECRET|TOKEN|KEY", ku):
+                blk[k] = (f"https://{host}.example.com" if re.search(r"URL|AUTHORITY|ISSUER", ku) else f"{host}.example.com")
+                changed += 1
+    # hostnames: <hostname>.example.com (no <stage>.<service>.<host>.<domain> construct), neutral domain
+    for c in [cfg] + [(o or {}).get("config") or {} for o in (data.get("stage_overrides") or {}).values()]:
+        if "generate_hostname" in c:
+            c["generate_hostname"] = False; changed += 1
+        for dk in ("domain_name", "public_domain_name"):
+            if c.get(dk) and c[dk] != "example.com":
+                c[dk] = "example.com"; changed += 1
     blank(data.get("secrets"))
     # secret-looking keys in the plain environment/vars blocks as well
     for name in ("environment", "vars"):
@@ -53,13 +79,10 @@ def cmd_sanitize(path):
     if changed:
         with open(path, "w", encoding="utf-8") as f:
             yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True)
-    print(f"sanitize: {changed} secret value(s) replaced by CHANGE_ME")
+    print(f"sanitize: {changed} value(s) neutralised (defaults/hostnames/secrets)")
 
 
-PLATFORM_VARS = {"SERVICE_STAGE", "SERVICE_NAME", "SERVICE_NAME_LOWERCASE", "SERVICE_HOSTNAME", "SERVICE_CATEGORY",
-                 "SERVICE_DESCRIPTION", "SERVICE_ICON", "SERVICE_RESTART_POLICY", "SERVICE_IMAGE_NAME",
-                 "SERVICE_IMAGE_TAG", "SERVICE_DOMAIN_NAME", "DEFAULT_DOCKER_DIR"}
-SECRET_RE = re.compile(r"pass|secret|token|key|credential", re.I)
+SECRET_RE = re.compile(r"pass|secret|token|key|credential|database|dsn", re.I)
 
 
 def _read_envfile(path):
@@ -76,145 +99,51 @@ def _read_envfile(path):
     return out
 
 
-def _dollar(v):
-    return v.replace("$", "$$") if "$" in v and not v.startswith("${") else v
+def _external_networks(compose_path):
+    try:
+        c = yaml.safe_load(open(compose_path, encoding="utf-8")) or {}
+    except OSError:
+        return []
+    return [(n.get("name") or k) for k, n in (c.get("networks") or {}).items() if isinstance(n, dict) and n.get("external")]
 
 
-def cmd_standalone(tree, ssot):
-    """Turn the platform-rendered compose into a standalone one (no external networks, relative
-    volumes, no platform labels, .env.example) plus an optional Traefik override."""
+def cmd_finalize(tree):
+    """Keep the compose exactly as rendered (platform networks, paths, labels). Only:
+    - inline CHANGE_ME secrets -> ${KEY:?set in .env}
+    - rendered .env/stack.env -> single .env.example (all vars commented, secrets CHANGE_ME)
+    - env_file: [.env, stack.env] -> [.env]"""
     d = os.path.join(tree, "deployments/docker_compose")
     cpath = os.path.join(d, "docker-compose.yml")
-    comp = yaml.safe_load(open(cpath, encoding="utf-8"))
-    ssot_d = yaml.safe_load(open(ssot, encoding="utf-8-sig")) or {}
-    svc_meta = ssot_d.get("service", {})
-    host = svc_meta.get("hostname") or svc_meta.get("name", "app")
+    text = open(cpath, encoding="utf-8").read()
+    env = {}
+    env.update(_read_envfile(os.path.join(d, ".env")))
+    env.update(_read_envfile(os.path.join(d, "stack.env")))
 
-    extra_env = _read_envfile(os.path.join(d, ".env"))
-    extra_env.update(_read_envfile(os.path.join(d, "stack.env")))
+    def sub(m):
+        env[m.group(2)] = "CHANGE_ME"
+        return f'{m.group(1)}{m.group(2)}: "${{{m.group(2)}:?set {m.group(2)} in .env (see .env.example)}}"'
+    text = re.sub(r'^(\s+)([A-Za-z_][A-Za-z0-9_]*): "CHANGE_ME"\s*$', sub, text, flags=re.M)
+    text = re.sub(r"^\s+- stack\.env\s*\n", "", text, flags=re.M)
+    open(cpath, "w", encoding="utf-8").write(text)
 
-    env_example = {}   # KEY -> (default, kind, comment)
-    seen = {}
-
-    def register(k, v):
-        """Return the compose value for env var k with default v, recording it for .env.example."""
-        v = "" if v is None else str(v)
-        is_secret = (SECRET_RE.search(k) and v and v.lower() not in ("true", "false") and not v.isdigit()
-                     and not k.startswith("NEXT_PUBLIC_"))
-        if v == "CHANGE_ME" or is_secret:
-            if k not in seen:
-                kind = "secret" if (SECRET_RE.search(k) and not k.startswith("NEXT_PUBLIC_")) else "required"
-                note = ("SECRET - set a strong value" if kind == "secret" else "REQUIRED - set for your environment")
-                if "DATABASE" in k.upper() or k.upper().endswith("DSN"):
-                    note += " (must match the POSTGRES_* values / db service name)"
-                env_example[k] = ("CHANGE_ME", note)
-                seen[k] = "CHANGE_ME"
-            if seen[k] == "CHANGE_ME":
-                return f"${{{k}:?set {k} in .env (see .env.example)}}"
-            return v
-        if k in seen and seen[k] != v:
-            return v                                   # collision with different default: keep literal
-        if k not in seen:
-            env_example[k] = (v, f"default: {v}" if v else "optional")
-            seen[k] = v
-        return f"${{{k}:-{_dollar(v)}}}"
-
-    traefik_services = {}
-    for name, svc in comp.get("services", {}).items():
-        svc.pop("container_name", None)
-        labels = svc.pop("labels", None) or {}
-        if isinstance(labels, list):
-            labels = dict(x.split("=", 1) for x in labels if "=" in x)
-        if str(labels.get("traefik.enable", "")).lower() == "true":
-            port = labels.get(f"traefik.http.services.{name}.loadbalancer.server.port")
-            scheme = labels.get(f"traefik.http.services.{name}.loadbalancer.server.scheme", "http")
-            traefik_services[name] = (port, scheme)
-        # networks: one local bridge only
-        svc["networks"] = ["internal"]
-        # volumes: platform host path -> relative
-        vols = []
-        for v in svc.get("volumes", []) or []:
-            m = re.match(r"^/export/docker/[^/]+/(.+?):(.*)$", str(v))
-            vols.append(f"./{m.group(1)}:{m.group(2)}" if m else v)
-        if vols:
-            svc["volumes"] = vols
-        # ports: host port overridable
-        ports = []
-        for p in svc.get("ports", []) or []:
-            m = re.match(r"^(\d+):(\d+)(/\w+)?$", str(p))
-            if m:
-                k = f"HOST_PORT_{m.group(2)}"
-                if k not in env_example:
-                    env_example[k] = (m.group(1), f"host port for container port {m.group(2)}")
-                    seen[k] = m.group(1)
-                ports.append(f"${{{k}:-{m.group(1)}}}:{m.group(2)}{m.group(3) or ''}")
-            else:
-                ports.append(p)
-        if ports:
-            svc["ports"] = ports
-        # environment
-        env = svc.get("environment")
-        if isinstance(env, dict):
-            new = {}
-            for k, v in env.items():
-                if k in PLATFORM_VARS:
-                    continue
-                new[k] = register(k, v)
-            svc["environment"] = new
-        elif env is not None:
-            pass
-        # env_file (sidecars): platform split .env/stack.env -> single .env, values from rendered files
-        if svc.get("env_file"):
-            svc["env_file"] = [".env"]
-            for k, v in extra_env.items():
-                if k not in PLATFORM_VARS:
-                    register(k, v)
-
-    comp["networks"] = {"internal": {"driver": "bridge"}}
-    header = ("# Standalone docker compose deployment (generated from service.yml by aac-template-engine).\n"
-              "# Usage: cp .env.example .env  # edit the CHANGE_ME values\n"
-              "#        docker compose up -d\n"
-              "# Optional Traefik: docker compose -f docker-compose.yml -f docker-compose.traefik.yml up -d\n")
-    with open(cpath, "w", encoding="utf-8") as f:
-        f.write(header + yaml.safe_dump(comp, sort_keys=False, width=200))
-
-    # .env.example (secrets/required first)
-    lines = ["# Copy to .env and adapt:  cp .env.example .env", ""]
-    for k, (v, note) in sorted(env_example.items(), key=lambda kv: (kv[1][0] != "CHANGE_ME", kv[0])):
-        lines += [f"# {note}", f"{k}={v}", ""]
-    if traefik_services:
-        lines += ["# --- optional Traefik override (docker-compose.traefik.yml) ---",
-                  "# public hostname", f"#DOMAIN={host}.example.com",
-                  "# Traefik entrypoint / certificate resolver / external Traefik docker network",
-                  "#TRAEFIK_ENTRYPOINT=websecure", "#TRAEFIK_CERTRESOLVER=letsencrypt", "#TRAEFIK_NETWORK=traefik", ""]
-    with open(os.path.join(d, ".env.example"), "w", encoding="utf-8") as f:
-        f.write("\n".join(lines))
+    lines = ["# Copy to .env and set every CHANGE_ME:  cp .env.example .env", ""]
+    for k in sorted(env, key=lambda k: (env[k] != "CHANGE_ME", k)):
+        v = env[k]
+        if v == "CHANGE_ME" and not SECRET_RE.search(k):
+            lines += ["# REQUIRED - set for your environment", f"{k}=CHANGE_ME", ""]
+        elif v == "CHANGE_ME" or SECRET_RE.search(k) and v:
+            lines += [f"# SECRET - set a strong value" + (" (must match the POSTGRES_* values)" if re.search("DATABASE|DSN", k, re.I) else ""),
+                      f"{k}=CHANGE_ME", ""]
+        else:
+            lines += [f"# default: {v}", f"{k}={v}", ""]
+    if env:
+        open(os.path.join(d, ".env.example"), "w", encoding="utf-8").write("\n".join(lines))
     for fn in (".env", "stack.env"):
         try:
             os.remove(os.path.join(d, fn))
         except OSError:
             pass
-
-    if traefik_services:
-        ov = {"services": {}, "networks": {"traefik": {"name": "${TRAEFIK_NETWORK:-traefik}", "external": True}}}
-        for name, (port, scheme) in traefik_services.items():
-            labels = {
-                "traefik.enable": "true",
-                f"traefik.http.routers.{name}.rule": "Host(`${DOMAIN:-" + host + ".example.com}`)",
-                f"traefik.http.routers.{name}.entrypoints": "${TRAEFIK_ENTRYPOINT:-websecure}",
-                f"traefik.http.routers.{name}.tls": "true",
-                f"traefik.http.routers.{name}.tls.certresolver": "${TRAEFIK_CERTRESOLVER:-letsencrypt}",
-                "traefik.docker.network": "${TRAEFIK_NETWORK:-traefik}",
-            }
-            if port:
-                labels[f"traefik.http.services.{name}.loadbalancer.server.port"] = str(port)
-                labels[f"traefik.http.services.{name}.loadbalancer.server.scheme"] = scheme
-            ov["services"][name] = {"labels": labels, "networks": ["internal", "traefik"]}
-        with open(os.path.join(d, "docker-compose.traefik.yml"), "w", encoding="utf-8") as f:
-            f.write("# Optional Traefik override. Requires an existing Traefik instance on the external network $TRAEFIK_NETWORK.\n"
-                    "# docker compose -f docker-compose.yml -f docker-compose.traefik.yml up -d\n"
-                    + yaml.safe_dump(ov, sort_keys=False, width=200))
-    print(f"standalone: {len(env_example)} variable(s) in .env.example, traefik override: {bool(traefik_services)}")
+    print(f"finalize: {len(env)} variable(s) in .env.example")
 
 
 def cmd_readme(tree, ssot):
@@ -224,18 +153,19 @@ def cmd_readme(tree, ssot):
     name = svc.get("name", os.path.basename(os.path.abspath(tree)))
     desc = (svc.get("description") or "").strip()
     image = f"{svc.get('image_repo', '')}:{svc.get('image_tag', 'latest')}".strip(":")
-    has_tr = os.path.exists(os.path.join(tree, "deployments/docker_compose/docker-compose.traefik.yml"))
+    nets = _external_networks(os.path.join(tree, "deployments/docker_compose/docker-compose.yml"))
+    has_env = os.path.exists(os.path.join(tree, "deployments/docker_compose/.env.example"))
     qs = ["## Quick start (docker compose)", "",
           "```bash",
           "cd deployments/docker_compose",
-          "cp .env.example .env      # set every CHANGE_ME (secrets) and adjust defaults",
-          "docker compose up -d", "```", "",
-          "Data is stored next to the compose file in relative folders (e.g. `./data`)."]
-    if has_tr:
-        qs += ["", "Behind Traefik (existing Traefik instance on an external docker network):", "",
-               "```bash", "# set DOMAIN, TRAEFIK_NETWORK, TRAEFIK_CERTRESOLVER in .env, then:",
-               "docker compose -f docker-compose.yml -f docker-compose.traefik.yml up -d", "```"]
-    qs = "\n".join(qs) + "\n"
+          *(["cp .env.example .env      # set every CHANGE_ME"] if has_env else []),
+          "docker compose up -d", "```", ""]
+    if nets:
+        qs += ["The compose file expects these external Docker networks (create them once, or adapt `networks:`):", "",
+               "```bash", *[f"docker network create {n}" for n in nets], "```", ""]
+    qs += ["Data is stored under `/export/docker/<service>/` on the host (see `volumes:`). Hostnames use `example.com`;",
+           "the Traefik/auto-dns/homepage labels target the platform this was generated for - adjust or remove them.", ""]
+    qs = "\n".join(qs)
 
     path = os.path.join(tree, "README.md")
     existing = ""
@@ -284,4 +214,4 @@ def cmd_notes(changelog, tag):
 
 if __name__ == "__main__":
     c, a = sys.argv[1], sys.argv[2:]
-    {"sanitize": cmd_sanitize, "standalone": cmd_standalone, "readme": cmd_readme, "notes": cmd_notes}[c](*a)
+    {"sanitize": cmd_sanitize, "finalize": cmd_finalize, "readme": cmd_readme, "notes": cmd_notes}[c](*a)

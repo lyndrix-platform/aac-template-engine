@@ -72,22 +72,20 @@ rm -rf "$TREE/deployments"
     --ssot-json service.yml --template-path "$PR_ENGINE_PATH" --deployment-type docker_compose --stage "$PR_STAGE" ) \
     > "$REPORT/render.log" 2>&1 || { tail -20 "$REPORT/render.log"; die "render failed"; }
 rm -f "$TREE/deployments/ansible_context.json"
-# platform-rendered compose -> standalone (no external networks/labels, relative volumes, .env.example, traefik override)
-"$PR_PYTHON" "$PR_HELPER" standalone "$TREE" "$TREE/service.yml"
 # neutral placeholders for anything internal that slipped into the rendered files
 find "$TREE/deployments" -type f -print0 | xargs -0 sed -i -E \
   -e 's/[A-Za-z0-9.-]*fam-feser\.de/example.com/g' \
-  -e 's/(^|[^0-9.])10\.[0-9]+\.[0-9]+\.[0-9]+/\1192.0.2.1/g'
+  -e 's/(^|[^0-9.])10\.[0-9]+\.[0-9]+\.[0-9]+/\1192.0.2.1/g' \
+  -e 's/ - Ci Validation Host"/"/'
+# keep the compose as rendered; only secrets -> ${KEY:?} and one .env.example
+"$PR_PYTHON" "$PR_HELPER" finalize "$TREE"
 COMPOSE="$TREE/deployments/docker_compose/docker-compose.yml"
 [ -s "$COMPOSE" ] || die "no docker-compose.yml rendered"
 DC="$TREE/deployments/docker_compose"
-cp "$DC/.env.example" "$DC/.env"      # temp: sidecars use env_file: .env (removed again below)
+[ -f "$DC/.env.example" ] && cp "$DC/.env.example" "$DC/.env"      # temp: sidecars use env_file: .env (removed again below)
 docker compose -f "$COMPOSE" config -q || die "docker compose config invalid"
-if [ -f "$DC/docker-compose.traefik.yml" ]; then
-  docker compose -f "$COMPOSE" -f "$DC/docker-compose.traefik.yml" config -q || die "traefik override invalid"
-fi
 rm -f "$DC/.env"
-log "compose valid (standalone$([ -f "$DC/docker-compose.traefik.yml" ] && echo ' + traefik override'))"
+log "compose valid"
 "$PR_PYTHON" "$PR_HELPER" readme "$TREE" "$TREE/service.yml"
 
 # ---------------------------------------------------------------- 4. secret gates (fail => nothing pushed)
