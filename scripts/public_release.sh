@@ -9,7 +9,9 @@
 #
 # Modes: PR_MODE=publish (CI)  |  PR_MODE=simulate (local, no network, no push)
 # Config (env): see defaults below. PUBLIC_INTERNAL_DOMAINS (required) lists internal domains. Secrets are read from env only and never printed.
-set -euo pipefail
+set -Eeuo pipefail
+# Never die silently: log the failing line/command (BASH_COMMAND shows variable NAMES, not values -> no secrets).
+trap 'rc=$?; echo "[public-release] ERROR (rc=$rc) at line $LINENO: $BASH_COMMAND" >&2' ERR
 
 PR_MODE="${PR_MODE:-publish}"
 PR_SRC="${PR_SRC:-$PWD}"
@@ -111,7 +113,7 @@ tail -5 "$REPORT/gitleaks.txt" | sed 's/^/    /'
 log "gate 2/2: grep"
 PATTERNS=(-e "$DOM_RE" -e '(^|[^0-9.])10\.[0-9]+\.[0-9]+\.[0-9]+' -e 'glpat-' -e 'ghp_' -e 'hvs\.' -e 'lyk__' -e 'PRIVATE KEY')
 if grep -rInE "${PATTERNS[@]}" "$TREE" | cut -d: -f1,2 > "$REPORT/grep-gate.txt" && [ -s "$REPORT/grep-gate.txt" ]; then
-  sed "s#$TREE/##" "$REPORT/grep-gate.txt" | head -20 | sed 's/^/    hit: /'
+  sed "s#$TREE/##" "$REPORT/grep-gate.txt" | awk 'NR<=20 {print "    hit: " $0}'
   die "grep gate hit (file:line above, content withheld); nothing pushed"
 fi
 log "gates passed"
@@ -189,7 +191,7 @@ R="$(gh_api GET "/repos/$PR_ORG/$PR_REPO")"
 case "$(echo "$R" | code_of)" in
   200) log "GitHub repo exists";;
   404) DESC="$("$PR_PYTHON" -c 'import yaml,sys;d=yaml.safe_load(open(sys.argv[1]));print((d.get("service",{}).get("description") or "")[:300].replace("\n"," "))' "$TREE/service.yml")"
-       echo "$DESC" | grep -qiE "$DOM_RE|glpat-|ghp_|hvs\.|lyk__|(^|[^0-9.])10\.[0-9]+\." && DESC="AaC service definition and ready-to-use docker compose deployment"
+       grep -qiE "$DOM_RE|glpat-|ghp_|hvs\.|lyk__|(^|[^0-9.])10\.[0-9]+\." <<< "$DESC" && DESC="AaC service definition and ready-to-use docker compose deployment"
        BODY="$(jq -nc --arg n "$PR_REPO" --arg d "$DESC" '{name:$n,description:$d,private:false,has_issues:true,has_wiki:false}')"
        C="$(gh_api POST "/orgs/$PR_ORG/repos" "$BODY")"
        [ "$(echo "$C" | code_of)" = "201" ] || die "repo create failed (HTTP $(echo "$C" | code_of)); token needs Administration:write on org"
@@ -228,12 +230,12 @@ if [ "$(echo "$R" | code_of)" = "200" ]; then
 else
   NOTES="$("$PR_PYTHON" "$PR_HELPER" notes "$TREE/CHANGELOG.md" "$PR_TAG" 2>/dev/null || true)"
   if [ -z "$NOTES" ]; then
-    PT="$(git -C "$PR_SRC" tag --list '[0-9]*.[0-9]*.[0-9]*' --merged "$PR_REF" --sort=-v:refname | grep -vx "$PR_TAG" | head -1 || true)"
+    PT="$(git -C "$PR_SRC" tag --list '[0-9]*.[0-9]*.[0-9]*' --merged "$PR_REF" --sort=-v:refname | grep -vx "$PR_TAG" | awk 'NR==1 {p=$0} END {print p}' || true)"
     RANGE="${PT:+$PT..}$PR_REF"
-    NOTES="$(git -C "$PR_SRC" log --no-merges --format='- %s' "$RANGE" | head -50)"
+    NOTES="$(git -C "$PR_SRC" log --no-merges -n 50 --format='- %s' "$RANGE")"
   fi
   # notes come from internal history: apply the same grep gate, else fall back to a neutral text
-  if [ -z "$NOTES" ] || printf '%s' "$NOTES" | grep -qE "$DOM_RE|(^|[^0-9.])10\.[0-9]+\.[0-9]+\.[0-9]+|glpat-|ghp_|hvs\.|lyk__|PRIVATE KEY"; then
+  if [ -z "$NOTES" ] || grep -qE "$DOM_RE|(^|[^0-9.])10\.[0-9]+\.[0-9]+\.[0-9]+|glpat-|ghp_|hvs\.|lyk__|PRIVATE KEY" <<< "$NOTES"; then
     NOTES="Release $PR_TAG"
   fi
   BODY="$(jq -nc --arg t "$PR_TAG" --arg n "$NOTES" --arg c "$RELEASE_SHA" '{tag_name:$t,target_commitish:$c,name:$t,body:$n}')"
