@@ -101,6 +101,11 @@ log "compose valid"
 
 # ---------------------------------------------------------------- 4. secret gates (fail => nothing pushed)
 log "gate 1/2: gitleaks ($GITLEAKS_IMAGE)"
+# private-registry gitleaks mirror (Docker Hub rate limits): log in with the job token if available
+if [ -n "${CI_REGISTRY:-}" ] && [ -n "${CI_JOB_TOKEN:-}" ] && [ "${GITLEAKS_IMAGE#"$CI_REGISTRY"/}" != "$GITLEAKS_IMAGE" ]; then
+  printf '%s' "$CI_JOB_TOKEN" | docker login -u gitlab-ci-token --password-stdin "$CI_REGISTRY" >/dev/null 2>&1 \
+    || log "registry login failed (job token allowlist?) - trying anonymous pull"
+fi
 set +e
 tar -C "$TREE" -cf - . | docker run -i --rm --entrypoint sh "$GITLEAKS_IMAGE" -c \
   'mkdir /scan && tar -x -C /scan && gitleaks detect --no-git --source /scan --redact --no-banner' \
