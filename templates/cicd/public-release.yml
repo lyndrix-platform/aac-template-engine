@@ -18,6 +18,9 @@
 #                             so the protected variable is available.
 #   CI_GITLAB_TOKEN_GLOBAL_FESER (existing) or PUBLIC_GITLAB_PUSH_TOKEN:
 #                             token that may push branch `public` of the repo.
+#   PUBLIC_INTERNAL_DOMAINS   REQUIRED (group-level). Space/comma separated internal domains,
+#                             e.g. "internal.example.org example.org". They are replaced by
+#                             example.com and feed the grep gate. Empty => job fails (fail closed).
 #   PUBLIC_RELEASE=false      per-repo opt-out.
 #   PUBLIC_FORCE_PUSH=true    one-time: replace unrelated pre-existing GitHub history.
 # The repo aac-hermes-agent is hard-denied inside the script.

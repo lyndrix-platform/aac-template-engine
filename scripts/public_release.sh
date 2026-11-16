@@ -8,7 +8,7 @@
 # public tree only and only that repo is pushed to GitHub.
 #
 # Modes: PR_MODE=publish (CI)  |  PR_MODE=simulate (local, no network, no push)
-# Config (env): see defaults below. Secrets are read from env only and never printed.
+# Config (env): see defaults below. PUBLIC_INTERNAL_DOMAINS (required) lists internal domains. Secrets are read from env only and never printed.
 set -euo pipefail
 
 PR_MODE="${PR_MODE:-publish}"
@@ -49,6 +49,15 @@ if [ "$PR_MODE" = "publish" ]; then
   git -C "$PR_SRC" fetch --quiet origin "+refs/heads/$DEF:refs/remotes/origin/$DEF" || die "cannot fetch $DEF"
   git -C "$PR_SRC" merge-base --is-ancestor "$PR_REF" "origin/$DEF" || { log "SKIP: tag $PR_TAG is not on $DEF."; exit 0; }
 fi
+# Internal domains come from CI (never hard-coded here): space/comma separated, e.g. "internal.example.org example.org".
+# Used for BOTH the replacement -> example.com and the grep gate. Empty => fail closed.
+DOMS=()
+for d in $(echo "${PUBLIC_INTERNAL_DOMAINS:-}" | tr ',' ' '); do
+  [[ "$d" =~ ^[A-Za-z0-9.-]+$ ]] || die "invalid entry in PUBLIC_INTERNAL_DOMAINS"
+  DOMS+=("${d//./\\.}")
+done
+[ "${#DOMS[@]}" -gt 0 ] || die "PUBLIC_INTERNAL_DOMAINS is empty - refusing to publish without the internal domain list (fail closed)"
+DOM_RE="$(IFS='|'; echo "${DOMS[*]}")"
 git -C "$PR_SRC" rev-parse --verify -q "$PR_REF^{commit}" >/dev/null || die "ref $PR_REF not found"
 
 TREE="$PR_OUT/tree"; REPORT="$PR_OUT/report"; PUBGIT="$PR_OUT/.public-git"; SRCX="$PR_OUT/.src-export"
@@ -74,7 +83,7 @@ rm -rf "$TREE/deployments"
 rm -f "$TREE/deployments/ansible_context.json"
 # neutral placeholders for anything internal that slipped into the rendered files
 find "$TREE/deployments" -type f -print0 | xargs -0 sed -i -E \
-  -e 's/[A-Za-z0-9.-]*fam-feser\.de/example.com/g' \
+  -e "s/[A-Za-z0-9.-]*($DOM_RE)/example.com/g" \
   -e 's/(^|[^0-9.])10\.[0-9]+\.[0-9]+\.[0-9]+/\1192.0.2.1/g' \
   -e 's/ - Ci Validation Host"/"/'
 # keep the compose as rendered; only secrets -> ${KEY:?} and one .env.example
@@ -100,7 +109,7 @@ tail -5 "$REPORT/gitleaks.txt" | sed 's/^/    /'
 [ "$GL_RC" -eq 0 ] || die "gitleaks found leaks (rc=$GL_RC) - see report; nothing pushed"
 
 log "gate 2/2: grep"
-PATTERNS=(-e 'fam-feser\.de' -e '(^|[^0-9.])10\.[0-9]+\.[0-9]+\.[0-9]+' -e 'glpat-' -e 'ghp_' -e 'hvs\.' -e 'lyk__' -e 'PRIVATE KEY')
+PATTERNS=(-e "$DOM_RE" -e '(^|[^0-9.])10\.[0-9]+\.[0-9]+\.[0-9]+' -e 'glpat-' -e 'ghp_' -e 'hvs\.' -e 'lyk__' -e 'PRIVATE KEY')
 if grep -rInE "${PATTERNS[@]}" "$TREE" | cut -d: -f1,2 > "$REPORT/grep-gate.txt" && [ -s "$REPORT/grep-gate.txt" ]; then
   sed "s#$TREE/##" "$REPORT/grep-gate.txt" | head -20 | sed 's/^/    hit: /'
   die "grep gate hit (file:line above, content withheld); nothing pushed"
@@ -180,7 +189,7 @@ R="$(gh_api GET "/repos/$PR_ORG/$PR_REPO")"
 case "$(echo "$R" | code_of)" in
   200) log "GitHub repo exists";;
   404) DESC="$("$PR_PYTHON" -c 'import yaml,sys;d=yaml.safe_load(open(sys.argv[1]));print((d.get("service",{}).get("description") or "")[:300].replace("\n"," "))' "$TREE/service.yml")"
-       echo "$DESC" | grep -qiE 'fam-feser|glpat-|ghp_|hvs\.|lyk__|(^|[^0-9.])10\.[0-9]+\.' && DESC="AaC service definition and ready-to-use docker compose deployment"
+       echo "$DESC" | grep -qiE "$DOM_RE|glpat-|ghp_|hvs\.|lyk__|(^|[^0-9.])10\.[0-9]+\." && DESC="AaC service definition and ready-to-use docker compose deployment"
        BODY="$(jq -nc --arg n "$PR_REPO" --arg d "$DESC" '{name:$n,description:$d,private:false,has_issues:true,has_wiki:false}')"
        C="$(gh_api POST "/orgs/$PR_ORG/repos" "$BODY")"
        [ "$(echo "$C" | code_of)" = "201" ] || die "repo create failed (HTTP $(echo "$C" | code_of)); token needs Administration:write on org"
@@ -224,7 +233,7 @@ else
     NOTES="$(git -C "$PR_SRC" log --no-merges --format='- %s' "$RANGE" | head -50)"
   fi
   # notes come from internal history: apply the same grep gate, else fall back to a neutral text
-  if [ -z "$NOTES" ] || printf '%s' "$NOTES" | grep -qE 'fam-feser\.de|(^|[^0-9.])10\.[0-9]+\.[0-9]+\.[0-9]+|glpat-|ghp_|hvs\.|lyk__|PRIVATE KEY'; then
+  if [ -z "$NOTES" ] || printf '%s' "$NOTES" | grep -qE "$DOM_RE|(^|[^0-9.])10\.[0-9]+\.[0-9]+\.[0-9]+|glpat-|ghp_|hvs\.|lyk__|PRIVATE KEY"; then
     NOTES="Release $PR_TAG"
   fi
   BODY="$(jq -nc --arg t "$PR_TAG" --arg n "$NOTES" --arg c "$RELEASE_SHA" '{tag_name:$t,target_commitish:$c,name:$t,body:$n}')"
