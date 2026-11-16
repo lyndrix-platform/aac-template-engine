@@ -1,0 +1,66 @@
+# ==========================================================================
+# PUBLIC RELEASE SYNC  (tag X.Y.Z on main  ->  github.com/app-as-code/<repo>)
+# ==========================================================================
+# Included from service-pipeline.yml. Runs ONLY for pipelines of a tag X.Y.Z
+# (no leading "v", no branch pipelines). All logic lives in
+# scripts/public_release.sh (same script is used for the local simulation).
+#
+# What it does: allowlisted tree from the tag -> deployments/docker_compose
+# rendered with the template engine (placeholders only, secrets = CHANGE_ME)
+# -> gates (gitleaks docker --redact + grep) -> orphan branch `public`
+# (one commit "release X.Y.Z") -> GitHub main + tags X.Y.Z and vX.Y.Z +
+# GitHub release. Internal history/tags are never pushed.
+#
+# CI variables:
+#   APP_AS_CODE_GITHUB_TOKEN  group-level, masked + protected (GitHub token for
+#                             org app-as-code: Contents RW + Administration RW
+#                             for repo creation). Tags X.Y.Z must be protected
+#                             so the protected variable is available.
+#   CI_GITLAB_TOKEN_GLOBAL_FESER (existing) or PUBLIC_GITLAB_PUSH_TOKEN:
+#                             token that may push branch `public` of the repo.
+#   PUBLIC_INTERNAL_DOMAINS   REQUIRED (group-level). Space/comma separated internal domains,
+#                             e.g. "internal.example.org example.org". They are replaced by
+#                             example.com and feed the grep gate. Empty => job fails (fail closed).
+#   PUBLIC_RELEASE=false      per-repo opt-out.
+#   PUBLIC_FORCE_PUSH=true    one-time: replace unrelated pre-existing GitHub history.
+# The repo aac-hermes-agent is hard-denied inside the script.
+
+variables:
+  PUBLIC_GH_ORG: "app-as-code"
+  PUBLIC_INCLUDE_PATHS: "service.yml README.md LICENSE LICENSE.md CHANGELOG.md custom_templates"
+  PUBLIC_RELEASE_SCRIPT_REF: "main"
+  PUBLIC_RELEASE_ENGINE_PROJECT_ID: "7"
+
+public-release:
+  stage: documentation
+  image:
+    name: $TEMPLATE_ENGINE_IMAGE
+    pull_policy: always
+  services: [docker:29.5.3-dind]
+  variables:
+    DOCKER_HOST: "tcp://docker:2375"
+    DOCKER_TLS_CERTDIR: ""
+    GIT_DEPTH: "0"
+    GIT_STRATEGY: clone
+  resource_group: public_release_$CI_PROJECT_NAME
+  before_script:
+    - apk add --no-cache bash git curl jq docker-cli docker-cli-compose
+  script:
+    - |
+      # Use the CURRENT script from the engine repo (like publish_docs); baked copy = fallback.
+      SCRIPT="$TEMPLATE_PATH/scripts/public_release.sh"; HELPER="$TEMPLATE_PATH/scripts/public_release_prepare.py"
+      mkdir -p /tmp/pr
+      for f in public_release.sh public_release_prepare.py; do
+        curl -sf --max-time 20 --header "JOB-TOKEN: $CI_JOB_TOKEN" \
+          "$CI_API_V4_URL/projects/$PUBLIC_RELEASE_ENGINE_PROJECT_ID/repository/files/scripts%2F$f/raw?ref=$PUBLIC_RELEASE_SCRIPT_REF" -o "/tmp/pr/$f" && [ -s "/tmp/pr/$f" ] || { rm -f /tmp/pr/*; break; }
+      done
+      if [ -s /tmp/pr/public_release.sh ]; then SCRIPT=/tmp/pr/public_release.sh; HELPER=/tmp/pr/public_release_prepare.py; fi
+      PR_MODE=publish PR_HELPER="$HELPER" PR_SRC="$CI_PROJECT_DIR" PR_OUT="$CI_PROJECT_DIR/pr-out" bash "$SCRIPT"
+  artifacts:
+    when: always
+    paths: [pr-out/report/]
+    expire_in: 1 week
+  rules:
+    - if: '$PUBLIC_RELEASE == "false"'
+      when: never
+    - if: '$CI_COMMIT_TAG =~ /^[0-9]+\.[0-9]+\.[0-9]+$/'
