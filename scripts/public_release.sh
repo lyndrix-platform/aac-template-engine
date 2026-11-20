@@ -49,7 +49,14 @@ if [ "$PR_MODE" = "publish" ]; then
   # tag must be on the default branch (main)
   DEF="${CI_DEFAULT_BRANCH:-main}"
   git -C "$PR_SRC" fetch --quiet origin "+refs/heads/$DEF:refs/remotes/origin/$DEF" || die "cannot fetch $DEF"
-  git -C "$PR_SRC" merge-base --is-ancestor "$PR_REF" "origin/$DEF" || { log "SKIP: tag $PR_TAG is not on $DEF."; exit 0; }
+  # optional sanitized source branch (documented in PUBLIC_RELEASE.md on main), e.g. public-source
+  SRCB="${PUBLIC_SOURCE_BRANCH:-}"
+  if [ -n "$SRCB" ]; then
+    git -C "$PR_SRC" fetch --quiet origin "+refs/heads/$SRCB:refs/remotes/origin/$SRCB" || die "cannot fetch $SRCB"
+    git -C "$PR_SRC" merge-base --is-ancestor "$PR_REF" "origin/$SRCB" || { log "SKIP: tag $PR_TAG is not on $SRCB."; exit 0; }
+  else
+    git -C "$PR_SRC" merge-base --is-ancestor "$PR_REF" "origin/$DEF" || { log "SKIP: tag $PR_TAG is not on $DEF."; exit 0; }
+  fi
 fi
 # Internal domains come from CI (never hard-coded here): space/comma separated, e.g. "internal.example.org example.org".
 # Used for BOTH the replacement -> example.com and the grep gate. Empty => fail closed.
@@ -117,7 +124,10 @@ tail -5 "$REPORT/gitleaks.txt" | sed 's/^/    /'
 
 log "gate 2/2: grep"
 PATTERNS=(-e "$DOM_RE" -e '(^|[^0-9.])10\.[0-9]+\.[0-9]+\.[0-9]+' -e 'glpat-' -e 'ghp_' -e 'hvs\.' -e 'lyk__' -e 'PRIVATE KEY')
-if grep -rInE "${PATTERNS[@]}" "$TREE" | cut -d: -f1,2 > "$REPORT/grep-gate.txt" && [ -s "$REPORT/grep-gate.txt" ]; then
+# SVG path data ("10.5.6.6") false-positives the IPv4 rule -> SVGs get every rule except the IP one
+SVG_PATTERNS=(-e "$DOM_RE" -e 'glpat-' -e 'ghp_' -e 'hvs\.' -e 'lyk__' -e 'PRIVATE KEY')
+{ grep -rInE --exclude='*.svg' "${PATTERNS[@]}" "$TREE"; grep -rInE --include='*.svg' "${SVG_PATTERNS[@]}" "$TREE"; } | cut -d: -f1,2 > "$REPORT/grep-gate.txt" || true
+if [ -s "$REPORT/grep-gate.txt" ]; then
   sed "s#$TREE/##" "$REPORT/grep-gate.txt" | awk 'NR<=20 {print "    hit: " $0}'
   die "grep gate hit (file:line above, content withheld); nothing pushed"
 fi
