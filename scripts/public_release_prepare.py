@@ -43,8 +43,10 @@ def cmd_sanitize(path):
                 changed += 1
 
     # neutral, non-secret defaults for platform-injected metadata (stay real values, not CHANGE_ME)
-    svc = data.get("service", {}) or {}
-    cfg = data.setdefault("config", {}) or {}
+    svc = data.get("service") if isinstance(data.get("service"), dict) else {}
+    if not isinstance(data.get("config"), dict):
+        data["config"] = {}
+    cfg = data["config"]
     host = svc.get("hostname") or svc.get("name", "app")
     defaults = {"SERVICE_IMAGE_TAG": svc.get("image_tag"), "SERVICE_IMAGE_NAME": svc.get("image_repo"),
                 "SERVICE_ICON": svc.get("icon"), "SERVICE_DOMAIN_NAME": "example.com"}
@@ -62,7 +64,10 @@ def cmd_sanitize(path):
                 blk[k] = (f"https://{host}.example.com" if re.search(r"URL|AUTHORITY|ISSUER", ku) else f"{host}.example.com")
                 changed += 1
     # hostnames: <hostname>.example.com (no <stage>.<service>.<host>.<domain> construct), neutral domain
-    for c in [cfg] + [(o or {}).get("config") or {} for o in (data.get("stage_overrides") or {}).values()]:
+    so = data.get("stage_overrides") if isinstance(data.get("stage_overrides"), dict) else {}
+    # tolerate odd shapes (e.g. a stage mapped to a bool / config set to null)
+    cfgs = [cfg] + [o["config"] for o in so.values() if isinstance(o, dict) and isinstance(o.get("config"), dict)]
+    for c in cfgs:
         if "generate_hostname" in c:
             c["generate_hostname"] = False; changed += 1
         for dk in ("domain_name", "public_domain_name"):
@@ -136,7 +141,8 @@ def cmd_finalize(tree):
                       f"{k}=CHANGE_ME", ""]
         else:
             lines += [f"# default: {v}", f"{k}={v}", ""]
-    if env:
+    # also needed when sidecars reference env_file: .env but no variable exists (else `compose config` fails)
+    if env or re.search(r"^\s+env_file:", text, re.M):
         open(os.path.join(d, ".env.example"), "w", encoding="utf-8").write("\n".join(lines))
     for fn in (".env", "stack.env"):
         try:
